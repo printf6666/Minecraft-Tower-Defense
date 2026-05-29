@@ -1,0 +1,72 @@
+import random
+from config import EnemyType
+
+
+class WaveManager:
+    def __init__(self):
+        self.current_wave = 0
+        self.total_waves = 40
+        self.enemies_spawned = 0
+        self.enemies_to_spawn = 0
+        self.spawn_timer = 0
+        self.spawn_delay = 40
+        self.wave_preparation_time = 300
+        self.wave_timer = 0
+        self.elite_wave_interval = 5
+        self.boss_wave_interval = 10
+
+    def start_new_wave(self):
+        self.current_wave += 1
+        self.enemies_spawned = 0
+        self.enemies_to_spawn = self.calculate_enemies_to_spawn()
+        self.spawn_timer = 0
+        self.wave_timer = self.wave_preparation_time
+
+    def calculate_enemies_to_spawn(self):
+        base_enemies = 5 + self.current_wave * 2
+        if self.is_elite_wave():
+            base_enemies += 5
+        elif self.is_boss_wave():
+            base_enemies += 10
+        return base_enemies
+
+    def is_elite_wave(self):
+        return self.current_wave % self.elite_wave_interval == 0 and self.current_wave > 0
+
+    def is_boss_wave(self):
+        return self.current_wave % self.boss_wave_interval == 0 and self.current_wave > 0
+
+    def update(self):
+        if self.wave_timer > 0:
+            self.wave_timer -= 1
+            return None
+
+        if self.enemies_spawned < self.enemies_to_spawn:
+            self.spawn_timer += 1
+            if self.spawn_timer >= self.spawn_delay:
+                self.spawn_timer = 0
+                self.enemies_spawned += 1
+                return self.select_enemy_type()
+        return None
+
+    def select_enemy_type(self):
+        rand = random.random()
+        if self.is_boss_wave() and self.enemies_spawned == self.enemies_to_spawn:
+            return EnemyType.BOSS
+        elif self.is_elite_wave() and rand < 0.3:
+            return EnemyType.ELITE
+        elif self.current_wave > 10 and rand < 0.2:
+            return EnemyType.TANK
+        elif self.current_wave > 5 and rand < 0.3:
+            return EnemyType.FAST
+        else:
+            return EnemyType.NORMAL
+
+    def is_wave_complete(self, enemies):
+        return self.enemies_spawned >= self.enemies_to_spawn and len(enemies) == 0
+
+    def is_preparation_complete(self):
+        return self.wave_timer <= 0
+
+    def is_game_complete(self, enemies):
+        return self.current_wave >= self.total_waves and self.is_wave_complete(enemies)

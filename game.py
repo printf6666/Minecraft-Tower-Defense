@@ -1,0 +1,672 @@
+import pygame
+import random
+import assets
+from config import *
+from enemy import Enemy, DamageText
+from tower import Tower, Bullet, DragonBreathPool, LightningEffect
+from wave_manager import WaveManager
+
+
+class Game:
+    def __init__(self, screen, clock):
+        self.state = GameState.MENU
+        self.screen = screen
+        self.clock = clock
+        self.fps = 60
+        self.enemies = pygame.sprite.Group()
+        self.towers = pygame.sprite.Group()
+        self.bullets = pygame.sprite.Group()
+        self.damage_texts = pygame.sprite.Group()
+        self.coins = 2500
+        self.lives = 20
+        self.wave_manager = WaveManager()
+        self.selected_tower_type = None
+        self.selected_tower = None
+        self.show_range = False
+        self.score = 0
+        self.enemies_killed = 0
+        self.game_time = 0
+        self.gold_per_second = 0
+        self.gold_per_wave = 0
+        self.gold_profit_per_wave = 0
+        self.last_global_production_time = pygame.time.get_ticks()
+        self.temperature = 30
+        self.weather = Weather.SUNNY
+        self.weather_particles = []
+        self.weather_banner_timer = 0
+        self.weather_banner_text = ""
+
+        self.dragon_breath_pools = []
+        self.lightning_effects = []
+        self.thunderstorm_timer = 0
+
+        self.path = random.choice(PATH_LIST)
+        self.start_point = self.path[0]
+        self.end_point = self.path[-1]
+
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                import sys
+                sys.exit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    mouse_x, mouse_y = pygame.mouse.get_pos()
+
+                    if (RESTART_BTN_X <= mouse_x <= RESTART_BTN_X + RESTART_BTN_WIDTH and
+                            RESTART_BTN_Y <= mouse_y <= RESTART_BTN_Y + RESTART_BTN_HEIGHT):
+                        self.reset_game()
+                        return
+
+                    if (EXIT_BTN_X <= mouse_x <= EXIT_BTN_X + EXIT_BTN_WIDTH and
+                            EXIT_BTN_Y <= mouse_y <= EXIT_BTN_Y + EXIT_BTN_HEIGHT):
+                        pygame.quit()
+                        import sys
+                        sys.exit()
+
+                    grid_x = mouse_x // TILE_SIZE
+                    grid_y = mouse_y // TILE_SIZE
+
+                    if self.state == GameState.MENU:
+                        if 900 <= mouse_x <= 1660 and 900 <= mouse_y <= 980:
+                            self.start_game()
+                        elif 900 <= mouse_x <= 1660 and 1020 <= mouse_y <= 1100:
+                            pygame.quit()
+                            import sys
+                            sys.exit()
+
+                    elif self.state == GameState.PLAYING:
+                        clicked_tower = self.get_tower_at(grid_x, grid_y)
+                        if clicked_tower:
+                            self.selected_tower = clicked_tower
+                            self.selected_tower_type = None
+                            self.show_range = True
+                        else:
+                            self.selected_tower = None
+                            self.show_range = False
+                            if self.selected_tower_type and self.can_build_tower(grid_x, grid_y):
+                                self.build_tower(grid_x, grid_y, self.selected_tower_type)
+
+                    elif self.state in (GameState.GAME_OVER, GameState.VICTORY):
+                        if 900 <= mouse_x <= 1660 and 850 <= mouse_y <= 930:
+                            self.reset_game()
+
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    self.selected_tower_type = TowerType.PHYSICAL
+                elif event.key == pygame.K_2:
+                    self.selected_tower_type = TowerType.PRODUCTION
+                elif event.key == pygame.K_3:
+                    self.selected_tower_type = TowerType.ICE
+                elif event.key == pygame.K_4:
+                    self.selected_tower_type = TowerType.TELEPORT
+                elif event.key == pygame.K_5:
+                    self.selected_tower_type = TowerType.FLAME
+                elif event.key == pygame.K_6:
+                    self.selected_tower_type = TowerType.TRIDENT
+                elif event.key == pygame.K_u and self.selected_tower:
+                    if self.selected_tower.level < 15 and self.coins >= self.selected_tower.upgrade_cost:
+                        self.coins -= self.selected_tower.upgrade_cost
+                        self.selected_tower.upgrade()
+                        if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT):
+                            self.temperature += 1
+
+                elif event.key == pygame.K_s and self.selected_tower:
+                    base_cost_map = {
+                        TowerType.PHYSICAL: 100,
+                        TowerType.PRODUCTION: 50,
+                        TowerType.ICE: 150,
+                        TowerType.TELEPORT: 300,
+                        TowerType.FLAME: 200,
+                        TowerType.TRIDENT: 400
+                    }
+                    sell_price = base_cost_map[self.selected_tower.type] * self.selected_tower.level
+                    self.coins += sell_price
+
+                    if self.selected_tower.type == TowerType.PRODUCTION:
+                        level = self.selected_tower.level
+                        self.gold_per_second -= level
+                        if level >= 6:
+                            self.gold_per_wave -= 1
+                        if level >= 11:
+                            self.gold_profit_per_wave -= 0.01
+
+                    if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT):
+                        self.temperature -= self.selected_tower.level
+
+                    self.selected_tower.kill()
+                    self.selected_tower = None
+                elif event.key == pygame.K_ESCAPE:
+                    self.selected_tower = None
+                    self.selected_tower_type = None
+                    self.show_range = False
+                elif event.key == pygame.K_F11:
+                    pygame.display.toggle_fullscreen()
+
+    def global_production(self):
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_global_production_time >= 1000:
+            self.coins += self.gold_per_second
+            self.last_global_production_time = current_time
+
+    def spawn_damage_text(self, value, pos, color=RED, scale=1.0):
+        if value <= 0:
+            return
+        if value >= 100:
+            scale = max(scale, 1.2)
+        text = DamageText(value, pos[0], pos[1], color=color, scale=scale)
+        self.damage_texts.add(text)
+
+    def add_dragon_breath(self, x, y, temperature, tower_level):
+        pool = DragonBreathPool(x, y, temperature, tower_level)
+        self.dragon_breath_pools.append(pool)
+
+    def add_lightning(self, x, y, is_golden):
+        effect = LightningEffect(x, y, is_golden)
+        self.lightning_effects.append(effect)
+
+    def apply_production_bonus(self):
+        self.coins += 100 * self.gold_per_wave
+        self.coins += int(self.coins * self.gold_profit_per_wave)
+
+    def update(self):
+        if self.state == GameState.PLAYING:
+            self.game_time += 1
+            self.global_production()
+
+            for enemy in self.enemies:
+                reached_end = enemy.update()
+                if reached_end:
+                    self.lives -= 1
+                    enemy.kill()
+                    if self.lives <= 0:
+                        self.state = GameState.GAME_OVER
+
+            for tower in self.towers:
+                if tower.type != TowerType.PRODUCTION:
+                    bullets = tower.attack(self.game_time)
+                    for bullet in bullets:
+                        self.bullets.add(bullet)
+
+            self.bullets.update()
+            self.damage_texts.update()
+
+            self.update_weather_particles()
+            if self.weather_banner_timer > 0:
+                self.weather_banner_timer -= 1
+
+            if not pygame.mixer.music.get_busy():
+                self.play_random_bgm()
+
+            for pool in self.dragon_breath_pools[:]:
+                if pool.update(self.game_time):
+                    pool.deal_damage(self.enemies, self, self.game_time)
+                else:
+                    self.dragon_breath_pools.remove(pool)
+
+            for effect in self.lightning_effects[:]:
+                effect.update()
+                if effect.done:
+                    self.lightning_effects.remove(effect)
+
+            for tower in self.towers:
+                if tower.type == TowerType.FLAME and tower.level >= 11:
+                    if tower.dragon_breath_cooldown > 0:
+                        tower.dragon_breath_cooldown -= 1
+
+            if self.weather == Weather.THUNDERSTORM:
+                self.thunderstorm_timer += 1
+                if self.thunderstorm_timer >= 180:
+                    self.thunderstorm_timer = 0
+                    col = random.randint(0, GRID_WIDTH - 1)
+                    hit_enemy = None
+                    for enemy in self.enemies:
+                        if enemy.health > 0 and enemy.rect.centerx // TILE_SIZE == col:
+                            hit_enemy = enemy
+                            break
+                    if hit_enemy:
+                        for enemy in self.enemies:
+                            e_col = enemy.rect.centerx // TILE_SIZE
+                            if e_col == col and enemy.health > 0:
+                                reward = enemy.take_damage(50, color=GOLD)
+                                self.coins += reward
+                                self.score += reward
+                                enemy.apply_burn(self.temperature, 240)
+                        self.add_lightning((col + 0.5) * TILE_SIZE, 800, False)
+
+            for enemy in list(self.enemies):
+                if enemy.health <= 0:
+                    self.enemies_killed += 1
+                    enemy.kill()
+
+            if self.wave_manager.is_wave_complete(self.enemies):
+                self.apply_production_bonus()
+                if self.wave_manager.is_game_complete(self.enemies):
+                    self.state = GameState.VICTORY
+                else:
+                    self.state = GameState.WAVE_PREPARATION
+                    self.wave_manager.start_new_wave()
+            else:
+                enemy_type = self.wave_manager.update()
+                if enemy_type:
+                    enemy = Enemy(self.path, enemy_type, self)
+                    self.enemies.add(enemy)
+
+        elif self.state == GameState.WAVE_PREPARATION:
+            self.game_time += 1
+            self.wave_manager.update()
+            if self.wave_manager.is_preparation_complete():
+                self.state = GameState.PLAYING
+                self.select_weather()
+                self.weather_banner_timer = 180
+                if not pygame.mixer.music.get_busy():
+                    self.play_random_bgm()
+
+    def select_weather(self):
+        weights = [0.08, 0.2, 0.18, 0.15, 0.1, 0.14, 0.15]
+        self.weather = random.choices(
+            [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
+             Weather.THUNDERSTORM, Weather.ACID_RAIN],
+            weights=weights, k=1)[0]
+        base_temp = WEATHER_CONFIG[self.weather]["temp"]
+        self.temperature = base_temp
+        for t in self.towers:
+            if t.type in (TowerType.FLAME, TowerType.TRIDENT):
+                self.temperature += t.level
+        self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
+        if self.weather == Weather.ACID_RAIN:
+            for t in self.towers:
+                if t.level > 1:
+                    t.level -= 1
+                    t.upgrade_cost = int(t.upgrade_cost / 1.5)
+                    if t.type == TowerType.PRODUCTION:
+                        self.gold_per_second -= 1
+                        if t.level + 1 >= 6: self.gold_per_wave -= 1
+                        if t.level + 1 >= 11: self.gold_profit_per_wave -= 0.01
+                    if t.type in (TowerType.FLAME, TowerType.TRIDENT):
+                        self.temperature -= 1
+                    t.update_sprite()
+
+    def play_random_bgm(self):
+        if not assets.bgm_files:
+            return
+        if len(assets.bgm_files) == 1:
+            idx = 0
+        else:
+            available = [i for i in range(len(assets.bgm_files)) if i != assets.bgm_index]
+            idx = random.choice(available)
+        assets.bgm_index = idx
+        pygame.mixer.music.load(assets.resource_path(assets.bgm_files[idx]))
+        pygame.mixer.music.play()
+
+    def update_weather_particles(self):
+        if self.weather in (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN):
+            if random.random() < 0.4:
+                x = random.randint(0, SCREEN_WIDTH)
+                y = random.randint(-20, 0)
+                speed = random.randint(12, 18)
+                length = random.randint(8, 15)
+                tag = "acid_rain" if self.weather == Weather.ACID_RAIN else "rain"
+                self.weather_particles.append([x, y, speed, length, tag])
+        elif self.weather == Weather.SNOWY:
+            if random.random() < 0.3:
+                x = random.randint(0, SCREEN_WIDTH)
+                y = random.randint(-20, 0)
+                speed = random.uniform(1, 3)
+                drift = random.uniform(-0.5, 0.5)
+                size = random.randint(2, 5)
+                self.weather_particles.append([x, y, speed, drift, size, "snow"])
+
+        for p in self.weather_particles[:]:
+            if p[-1] in ("rain", "acid_rain"):
+                p[1] += p[2]
+                if p[1] > SCREEN_HEIGHT:
+                    self.weather_particles.remove(p)
+            elif p[-1] == "snow":
+                p[1] += p[2]
+                p[0] += p[3]
+                if p[1] > SCREEN_HEIGHT or p[0] < 0 or p[0] > SCREEN_WIDTH:
+                    self.weather_particles.remove(p)
+
+    def draw(self):
+        self.screen.fill(BLACK)
+        if self.state == GameState.MENU:
+            self.draw_menu()
+        elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION):
+            self.draw_game()
+        elif self.state == GameState.GAME_OVER:
+            self.draw_game_over()
+        elif self.state == GameState.VICTORY:
+            self.draw_victory()
+        pygame.display.flip()
+
+    def draw_menu(self):
+        title = assets.font_large.render("像素防线 · 晶域守卫", True, WHITE)
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 300))
+        pygame.draw.rect(self.screen, GREEN, (900, 900, 760, 80))
+        start_text = assets.font_medium.render("开始游戏", True, WHITE)
+        self.screen.blit(start_text, (1200, 915))
+        pygame.draw.rect(self.screen, RED, (900, 1020, 760, 80))
+        exit_text = assets.font_medium.render("退出游戏", True, WHITE)
+        self.screen.blit(exit_text, (1200, 1035))
+        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6键选择炮塔", "3. U升级 S出售",
+                        "4. 6级/11级自动进化"]
+        for i, text in enumerate(instructions):
+            text_surface = assets.font_small.render(text, True, WHITE)
+            self.screen.blit(text_surface, (900, 1200 + i * 50))
+
+    def draw_game(self):
+        for x in range(GRID_WIDTH):
+            for y in range(1, GRID_HEIGHT + 1):
+                pygame.draw.rect(self.screen, GRAY, (x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE), 2)
+        for x, y in self.path:
+            pygame.draw.rect(self.screen, BROWN, (x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE))
+        sx, sy = self.start_point
+        ex, ey = self.end_point
+        pygame.draw.rect(self.screen, GREEN, (sx * TILE_SIZE, sy * TILE_SIZE, TILE_SIZE, TILE_SIZE))
+        pygame.draw.rect(self.screen, RED, (ex * TILE_SIZE, ey * TILE_SIZE, TILE_SIZE, TILE_SIZE))
+        self.screen.blit(assets.font_small.render("起点", True, WHITE), (sx * TILE_SIZE + 10, sy * TILE_SIZE + 10))
+        self.screen.blit(assets.font_small.render("终点", True, WHITE), (ex * TILE_SIZE + 10, ey * TILE_SIZE + 10))
+
+        self.towers.draw(self.screen)
+        self.enemies.draw(self.screen)
+        self.bullets.draw(self.screen)
+        self.damage_texts.draw(self.screen)
+        for tower in self.towers:
+            self.screen.blit(assets.font_tower_level.render(f"Lv{tower.level}", True, YELLOW),
+                             (tower.x * TILE_SIZE + 70, tower.y * TILE_SIZE + 90))
+        for enemy in self.enemies:
+            enemy.draw_health_bar(self.screen)
+
+        if self.show_range and self.selected_tower:
+            self.selected_tower.draw_range(self.screen)
+
+        self.draw_weather_particles()
+        self.draw_weather_banner()
+
+        for pool in self.dragon_breath_pools:
+            pool.draw(self.screen)
+        for effect in self.lightning_effects:
+            effect.draw(self.screen)
+
+        self.draw_ui()
+        if self.state == GameState.WAVE_PREPARATION:
+            self.draw_wave_preparation()
+
+    def draw_ui(self):
+        pygame.draw.rect(self.screen, BLACK, (0, 0, SCREEN_WIDTH, 80))
+        pygame.draw.line(self.screen, WHITE, (0, 80), (SCREEN_WIDTH, 80), 4)
+        self.screen.blit(assets.font_medium.render(f"金币: {self.coins}", True, GOLD), (30, 15))
+        self.screen.blit(assets.font_medium.render(f"生命: {self.lives}", True, RED), (360, 15))
+        self.screen.blit(
+            assets.font_medium.render(f"波次: {self.wave_manager.current_wave}/{self.wave_manager.total_waves}", True, WHITE),
+            (720, 15))
+        self.screen.blit(assets.font_medium.render(f"得分: {self.score}", True, WHITE), (1200, 15))
+        weather_name = WEATHER_CONFIG[self.weather]["name"]
+        weather_color = WEATHER_CONFIG[self.weather]["color"]
+        self.screen.blit(assets.font_medium.render(f"天气:{weather_name} 温度:{self.temperature}", True, weather_color), (1520, 15))
+
+        pygame.draw.rect(self.screen, BLACK, (0, SCREEN_HEIGHT - 120, SCREEN_WIDTH, 120))
+        pygame.draw.line(self.screen, WHITE, (0, SCREEN_HEIGHT - 120), (SCREEN_WIDTH, SCREEN_HEIGHT - 120), 4)
+        self.screen.blit(assets.icon1, (40, SCREEN_HEIGHT - 100))
+        self.screen.blit(assets.icon2, (360, SCREEN_HEIGHT - 100))
+        self.screen.blit(assets.icon3, (680, SCREEN_HEIGHT - 100))
+        self.screen.blit(assets.icon4, (1000, SCREEN_HEIGHT - 100))
+        self.screen.blit(assets.icon5, (1320, SCREEN_HEIGHT - 100))
+        self.screen.blit(assets.icon6, (1640, SCREEN_HEIGHT - 100))
+
+        self.screen.blit(assets.font_small.render("(1):100", True, WHITE), (140, SCREEN_HEIGHT - 85))
+        self.screen.blit(assets.font_small.render("(2):50", True, WHITE), (460, SCREEN_HEIGHT - 85))
+        self.screen.blit(assets.font_small.render("(3):150", True, WHITE), (780, SCREEN_HEIGHT - 85))
+        self.screen.blit(assets.font_small.render("(4):300", True, WHITE), (1100, SCREEN_HEIGHT - 85))
+        self.screen.blit(assets.font_small.render("(5):200", True, WHITE), (1420, SCREEN_HEIGHT - 85))
+        self.screen.blit(assets.font_small.render("(6):400", True, WHITE), (1740, SCREEN_HEIGHT - 85))
+
+        positions = {
+            TowerType.PHYSICAL: (40, SCREEN_HEIGHT - 100),
+            TowerType.PRODUCTION: (360, SCREEN_HEIGHT - 100),
+            TowerType.ICE: (680, SCREEN_HEIGHT - 100),
+            TowerType.TELEPORT: (1000, SCREEN_HEIGHT - 100),
+            TowerType.FLAME: (1320, SCREEN_HEIGHT - 100),
+            TowerType.TRIDENT: (1640, SCREEN_HEIGHT - 100)
+        }
+        if self.selected_tower_type in positions:
+            x, y = positions[self.selected_tower_type]
+            pygame.draw.rect(self.screen, WHITE, (x, y, 80, 80), 4)
+
+        pygame.draw.rect(self.screen, INFO_BORDER_COLOR,
+                         (INFO_BORDER_X, INFO_BORDER_Y, INFO_BORDER_SIZE, INFO_BORDER_SIZE), INFO_BORDER_WIDTH)
+        if self.selected_tower:
+            infos = self.get_tower_info(self.selected_tower)
+            for i, info in enumerate(infos):
+                self.screen.blit(assets.font_small.render(info, True, WHITE),
+                                 (INFO_BORDER_X + 20, INFO_BORDER_Y + 20 + i * 32))
+        pygame.draw.rect(self.screen, RESTART_BTN_COLOR,
+                         (RESTART_BTN_X, RESTART_BTN_Y, RESTART_BTN_WIDTH, RESTART_BTN_HEIGHT))
+        restart_text = assets.font_small.render("重新开始", True, WHITE)
+        self.screen.blit(restart_text, (RESTART_BTN_X + 40, RESTART_BTN_Y + 10))
+
+        pygame.draw.rect(self.screen, EXIT_BTN_COLOR,
+                         (EXIT_BTN_X, EXIT_BTN_Y, EXIT_BTN_WIDTH, EXIT_BTN_HEIGHT))
+        exit_text = assets.font_small.render("退出游戏", True, WHITE)
+        self.screen.blit(exit_text, (EXIT_BTN_X + EXIT_BTN_WIDTH // 2 - exit_text.get_width() // 2, EXIT_BTN_Y + 10))
+
+    def draw_wave_preparation(self):
+        s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        s.fill((0, 0, 0, 160))
+        self.screen.blit(s, (0, 0))
+        self.screen.blit(assets.font_large.render(f"第 {self.wave_manager.current_wave} 波", True, WHITE),
+                         (SCREEN_WIDTH // 2 - 200, 500))
+        self.screen.blit(assets.font_medium.render(f"准备: {self.wave_manager.wave_timer // 60}s", True, WHITE),
+                         (SCREEN_WIDTH // 2 - 150, 620))
+
+    def draw_weather_particles(self):
+        for p in self.weather_particles:
+            if p[-1] == "rain":
+                x, y, _, length = p[0], p[1], p[2], p[3]
+                color = (100, 150, 255, 180)
+                s = pygame.Surface((2, length), pygame.SRCALPHA)
+                s.fill(color)
+                self.screen.blit(s, (int(x), int(y)))
+            elif p[-1] == "acid_rain":
+                x, y, _, length = p[0], p[1], p[2], p[3]
+                color = (0, 200, 0, 180)
+                s = pygame.Surface((2, length), pygame.SRCALPHA)
+                s.fill(color)
+                self.screen.blit(s, (int(x), int(y)))
+            elif p[-1] == "snow":
+                x, y, _, _, size = p[0], p[1], p[2], p[3], p[4]
+                color = (255, 255, 255, 200)
+                s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+                pygame.draw.circle(s, color, (size, size), size)
+                self.screen.blit(s, (int(x) - size, int(y) - size))
+
+    def draw_weather_banner(self):
+        if self.weather_banner_timer <= 0:
+            return
+        alpha = min(255, self.weather_banner_timer * 2)
+        banner_w = 900
+        banner_h = 60
+        banner_x = SCREEN_WIDTH // 2 - banner_w // 2
+        banner_y = 200
+        s = pygame.Surface((banner_w, banner_h), pygame.SRCALPHA)
+        s.fill((0, 0, 0, min(180, alpha)))
+        self.screen.blit(s, (banner_x, banner_y))
+        text = assets.font_medium.render(self.weather_banner_text, True, WHITE)
+        text.set_alpha(alpha)
+        self.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, banner_y + 10))
+
+    def draw_game_over(self):
+        self.screen.fill(BLACK)
+        text1 = assets.font_large.render("游戏结束!", True, RED)
+        text2 = assets.font_medium.render(f"最终得分: {self.score}", True, WHITE)
+        self.screen.blit(text1, (SCREEN_WIDTH // 2 - text1.get_width() // 2, 400))
+        self.screen.blit(text2, (SCREEN_WIDTH // 2 - text2.get_width() // 2, 550))
+        pygame.draw.rect(self.screen, GREEN, (900, 850, 760, 80))
+        restart_text = assets.font_medium.render("重新开始", True, WHITE)
+        self.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
+
+    def draw_victory(self):
+        self.screen.fill(BLACK)
+        text1 = assets.font_large.render("胜利!", True, GREEN)
+        text2 = assets.font_medium.render(f"最终得分: {self.score}", True, WHITE)
+        self.screen.blit(text1, (SCREEN_WIDTH // 2 - text1.get_width() // 2, 400))
+        self.screen.blit(text2, (SCREEN_WIDTH // 2 - text2.get_width() // 2, 550))
+        pygame.draw.rect(self.screen, GREEN, (900, 850, 760, 80))
+        restart_text = assets.font_medium.render("重新开始", True, WHITE)
+        self.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
+
+    def get_tower_info(self, tower):
+        base_cost_map = {
+            TowerType.PHYSICAL: 100,
+            TowerType.PRODUCTION: 50,
+            TowerType.ICE: 150,
+            TowerType.TELEPORT: 300,
+            TowerType.FLAME: 200,
+            TowerType.TRIDENT: 400
+        }
+        info = []
+        if tower.type == TowerType.PHYSICAL:
+            if tower.level >= 11:
+                info = [f"时空撕裂箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s",
+                        f"将当前金币的1%作为伤害加成", f"破甲:受伤永久增加20%"]
+            elif tower.level >= 6:
+                info = [f"黄金箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"将当前金币的1%作为伤害加成"]
+            else:
+                info = [f"箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
+        elif tower.type == TowerType.PRODUCTION:
+            if tower.level >= 11:
+                info = [f"无尽矿 Lv{tower.level}", f"全局产量:{self.gold_per_second}/s",
+                        f"全局每波产出:{100 * self.gold_per_wave}", f"全局每波利息:{int(100 * self.gold_profit_per_wave)}%"]
+            elif tower.level >= 6:
+                info = [f"下界金矿 Lv{tower.level}", f"全局每波产出:{100 * self.gold_per_wave}",
+                        f"全局产量:{self.gold_per_second}/s"]
+            else:
+                info = [f"金矿 Lv{tower.level}", f"全局产量:{self.gold_per_second}/s"]
+        elif tower.type == TowerType.ICE:
+            if tower.level >= 11:
+                bonus = 300 + 150 * (tower.level - 11)
+                info = [f"冰霜炸弹塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
+                        f"对冻结+{bonus}伤害", f"攻击间隔:0.5s"]
+            elif tower.level >= 6:
+                info = [f"冰球塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
+                        f"攻击间隔:0.5s"]
+            else:
+                info = [f"寒冰塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
+        elif tower.type == TowerType.TELEPORT:
+            if tower.level >= 11:
+                info = [f"终望珍珠塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
+                        f"瞬移概率:{int(tower.teleport_chance * 100)}%", f"斩杀线:{tower.execute_threshold}%",
+                        f"范围伤害:{tower.damage}", f"攻击间隔:0.5s"]
+            elif tower.level >= 6:
+                info = [f"末影之眼塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
+                        f"瞬移概率:{int(tower.teleport_chance * 100)}%", f"伤害:{tower.damage}", f"攻击间隔:0.5s"]
+            else:
+                info = [f"末影珍珠塔 Lv{tower.level}", f"瞬移概率:{int(tower.teleport_chance * 100)}%",
+                        f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
+        elif tower.type == TowerType.FLAME:
+            if tower.level >= 11:
+                dmg_mult = 500 + (tower.level - 11) * 100
+                info = [f"龙息塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{self.temperature}/s,持续4s",
+                        f"龙息:{dmg_mult}%温度/s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
+            elif tower.level >= 6:
+                info = [f"火球塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{self.temperature}/s,持续4s",
+                        f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
+            else:
+                info = [f"火焰塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{self.temperature}/s,持续4s",
+                        f"攻击间隔:{tower.fire_rate / 60}s"]
+        elif tower.type == TowerType.TRIDENT:
+            if tower.level >= 11:
+                mults = {11: 2, 12: 3, 13: 5, 14: 8, 15: 10}
+                mult = mults.get(tower.level, 1)
+                info = [f"海神三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
+                        f"将当前金币的1%作为伤害加成", f"雨天/雷暴/酸雨:{mult}倍伤", f"攻击间隔:0.5s"]
+            elif tower.level >= 6:
+                info = [f"黄金三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
+                        f"将当前金币的1%作为伤害加成", f"攻击间隔:0.5s"]
+            else:
+                info = [f"三叉戟塔 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
+                        f"攻击间隔:{tower.fire_rate / 60}s"]
+        upgrade_str = "MAX" if tower.level >= 15 else str(tower.upgrade_cost)
+        info.extend(
+            [f"射程:{round(tower.range / TILE_SIZE, 1)}", f"升级:{upgrade_str}"])
+        sell_price = base_cost_map[tower.type] * tower.level
+        info.append(f"出售:{sell_price}")
+
+        return info
+
+    def get_tower_at(self, x, y):
+        for t in self.towers:
+            if t.x == x and t.y == y:
+                return t
+        return None
+
+    def can_build_tower(self, x, y):
+        if x < 0 or x >= GRID_WIDTH or y < 1 or y > GRID_HEIGHT:
+            return False
+        if (x, y) in self.path:
+            return False
+        if self.get_tower_at(x, y):
+            return False
+        costs = {TowerType.PHYSICAL: 100, TowerType.PRODUCTION: 50, TowerType.ICE: 150, TowerType.TELEPORT: 300,
+                 TowerType.FLAME: 200, TowerType.TRIDENT: 400}
+        return self.coins >= costs.get(self.selected_tower_type, 9999)
+
+    def build_tower(self, x, y, tower_type):
+        costs = {TowerType.PHYSICAL: 100, TowerType.PRODUCTION: 50, TowerType.ICE: 150, TowerType.TELEPORT: 300,
+                 TowerType.FLAME: 200, TowerType.TRIDENT: 400}
+        cost = costs[tower_type]
+        if self.coins >= cost:
+            self.coins -= cost
+            t = Tower(tower_type, x, y, self)
+            self.towers.add(t)
+            if tower_type == TowerType.PRODUCTION:
+                self.gold_per_second += 1
+            if tower_type in (TowerType.FLAME, TowerType.TRIDENT):
+                self.temperature += 1
+
+    def start_game(self):
+        self.state = GameState.PLAYING
+        self.wave_manager.start_new_wave()
+        self.state = GameState.WAVE_PREPARATION
+
+    def reset_game(self):
+        self.path = random.choice(PATH_LIST)
+        self.start_point = self.path[0]
+        self.end_point = self.path[-1]
+        self.enemies.empty()
+        self.towers.empty()
+        self.bullets.empty()
+        self.damage_texts.empty()
+
+        self.coins = 2500
+        self.lives = 20
+        self.wave_manager = WaveManager()
+        self.selected_tower_type = None
+        self.selected_tower = None
+        self.show_range = False
+        self.score = 0
+        self.enemies_killed = 0
+        self.game_time = 0
+        self.gold_per_second = 0
+        self.gold_per_wave = 0
+        self.gold_profit_per_wave = 0
+        self.last_global_production_time = pygame.time.get_ticks()
+        self.temperature = 30
+        self.weather = Weather.SUNNY
+        self.weather_particles = []
+        self.weather_banner_timer = 0
+        self.weather_banner_text = ""
+        self.dragon_breath_pools = []
+        self.lightning_effects = []
+        self.thunderstorm_timer = 0
+        self.start_game()
+
+    def run(self):
+        while True:
+            self.handle_events()
+            self.update()
+            self.draw()
+            self.clock.tick(self.fps)
