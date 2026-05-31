@@ -34,6 +34,7 @@ icon3 = None
 icon4 = None
 icon5 = None
 icon6 = None
+icon7 = None
 
 BUFF_SIZE = 32
 buff_icons = {}
@@ -47,7 +48,7 @@ bgm_index = -1
 
 def init_assets():
     global font_large, font_medium, font_small, font_tower_level
-    global icon1, icon2, icon3, icon4, icon5, icon6, buff_icons
+    global icon1, icon2, icon3, icon4, icon5, icon6, icon7, buff_icons
     global white_lightning_frames, golden_lightning_frames
 
     try:
@@ -68,6 +69,7 @@ def init_assets():
     icon4 = load_image("tower/4.png", (icon_size, icon_size))
     icon5 = load_image("tower/5.png", (icon_size, icon_size))
     icon6 = load_image("tower/6.png", (icon_size, icon_size))
+    icon7 = load_image("tower/7.png", (icon_size, icon_size))
 
     buff_icons["burn"] = load_image("debuff/burn.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["freeze"] = load_image("debuff/freeze.png", (BUFF_SIZE, BUFF_SIZE))
@@ -75,6 +77,8 @@ def init_assets():
     buff_icons["broken"] = load_image("debuff/broken.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["stun"] = load_image("debuff/stun.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["poison"] = load_image("debuff/poison.png", (BUFF_SIZE, BUFF_SIZE))
+    buff_icons["wind"] = load_image("debuff/wind.png", (BUFF_SIZE, BUFF_SIZE))
+    buff_icons["speed"] = load_image("debuff/speed.png", (BUFF_SIZE, BUFF_SIZE))
 
     try:
         sheet = load_image("tower/white_lightning.png")

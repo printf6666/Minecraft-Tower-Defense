@@ -38,6 +38,7 @@ BROWN = (139, 69, 19)
 GOLD = (255, 215, 0)
 PURPLE = (128, 0, 128)
 TELEPORT_PURPLE = (138, 43, 226)
+MINT = (152, 255, 152)
 
 
 class GameState(Enum):
@@ -55,6 +56,7 @@ class TowerType(Enum):
     TELEPORT = 3
     FLAME = 4
     TRIDENT = 5
+    WIND = 6
 
 
 class EnemyType(Enum):
@@ -73,6 +75,7 @@ class Weather(Enum):
     SNOWY = 4
     THUNDERSTORM = 5
     ACID_RAIN = 6
+    TAILWIND = 7
 
 
 WEATHER_CONFIG = {
@@ -83,6 +86,7 @@ WEATHER_CONFIG = {
     Weather.SNOWY: {"name": "雪天", "temp": 0, "desc": "雪天：温度骤降，敌人冻结时间延长", "color": (150, 200, 255)},
     Weather.THUNDERSTORM: {"name": "雷暴", "temp": 15, "desc": "雷暴：温度较低，闪电将会劈下", "color": (255, 215, 0)},
     Weather.ACID_RAIN: {"name": "酸雨", "temp": 5, "desc": "酸雨：敌人永久中毒减速，炮塔等级-1", "color": (0, 255, 0)},
+    Weather.TAILWIND: {"name": "顺风", "temp": 25, "desc": "顺风：敌人移速增加50%，炮塔射程+1格", "color": (152, 255, 152)},
 }
 
 # 地图路径

@@ -28,6 +28,7 @@ class Tower(pygame.sprite.Sprite):
 
         self.lightning_damage = 0
         self.execute_threshold = 0
+        self.wind_knockback = 0
 
         self.dragon_breath_cooldown = 0
 
@@ -76,6 +77,13 @@ class Tower(pygame.sprite.Sprite):
             self.cost = 400
             self.upgrade_cost = 600
             self.lightning_damage = 100
+        elif self.type == TowerType.WIND:
+            self.range = int(TILE_SIZE * 1.5)
+            self.damage = 5
+            self.fire_rate = 60
+            self.cost = 250
+            self.upgrade_cost = 375
+            self.wind_knockback = 12
 
     def upgrade(self):
         if self.level >= 15:
@@ -113,6 +121,15 @@ class Tower(pygame.sprite.Sprite):
             self.range += TILE_SIZE // 2
             self.fire_rate = max(30, self.fire_rate - 6)
             self.lightning_damage += 50
+        elif self.type == TowerType.WIND:
+            self.wind_knockback += 12
+            self.fire_rate = max(30, self.fire_rate - 6)
+            if self.level >= 6:
+                self.damage += 20
+                self.range += TILE_SIZE // 2
+            else:
+                self.damage += 5
+                self.range += TILE_SIZE // 4
 
         self.update_sprite()
 
@@ -132,6 +149,12 @@ class Tower(pygame.sprite.Sprite):
     def can_attack(self, current_time):
         return current_time - self.last_shot >= self.fire_rate
 
+    def get_effective_range(self):
+        r = self.range
+        if self.game.weather == Weather.TAILWIND:
+            r += TILE_SIZE
+        return r
+
     def attack(self, current_time):
         if not self.can_attack(current_time):
             return []
@@ -142,7 +165,7 @@ class Tower(pygame.sprite.Sprite):
         for dx, dy in directions:
             bullet = Bullet(
                 self.rect.centerx, self.rect.centery,
-                dx, dy, self.range,
+                dx, dy, self.get_effective_range(),
                 self.damage, self.type, self.game,
                 self.teleport_chance, self.penetrate,
                 self.freeze_time, self.oneshot_chance, self.stun_time,
@@ -155,7 +178,7 @@ class Tower(pygame.sprite.Sprite):
 
     def draw_range(self, surface):
         if self.type != TowerType.PRODUCTION:
-            pygame.draw.circle(surface, (255, 255, 255, 50), self.rect.center, self.range, 2)
+            pygame.draw.circle(surface, (255, 255, 255, 50), self.rect.center, self.get_effective_range(), 2)
 
 
 class Bullet(pygame.sprite.Sprite):
@@ -225,6 +248,11 @@ class Bullet(pygame.sprite.Sprite):
                     mults = {11: 2, 12: 3, 13: 5, 14: 8, 15: 10}
                     dmg *= mults.get(self.tower_level, 1)
 
+        if self.tower_type == TowerType.WIND:
+            if self.tower_level >= 11:
+                per_px = {11: 8, 12: 10, 13: 12, 14: 14, 15: 16}
+                dmg = int(self.traveled * per_px.get(self.tower_level, 8))
+
         return int(dmg)
 
     def calculate_lightning_damage(self):
@@ -266,6 +294,8 @@ class Bullet(pygame.sprite.Sprite):
             return YELLOW
         elif self.tower_type == TowerType.TRIDENT:
             return GOLD
+        elif self.tower_type == TowerType.WIND:
+            return MINT
         return RED
 
     def on_hit(self, enemy):
@@ -338,6 +368,39 @@ class Bullet(pygame.sprite.Sprite):
                 w = self.game.weather
                 is_golden = (w == Weather.SUNNY or w == Weather.EXTREME_HEAT)
             self.game.add_lightning(enemy.rect.centerx, 800, is_golden)
+        if self.tower_type == TowerType.WIND:
+            if self.source_tower:
+                enemy.apply_knockback(self.source_tower.wind_knockback)
+                if self.tower_level >= 6:
+                    enemy.wind_mark_tower = self.source_tower
+
+
+class WindExplosion:
+    def __init__(self, x, y, damage, knockback, game):
+        self.x = x
+        self.y = y
+        self.duration = 6
+        self.radius = 128
+        for enemy in game.enemies:
+            if enemy.health <= 0:
+                continue
+            dx = enemy.rect.centerx - x
+            dy = enemy.rect.centery - y
+            if (dx * dx + dy * dy) <= self.radius * self.radius:
+                reward = enemy.take_damage(damage, color=MINT, scale=0.8)
+                game.coins += reward
+                game.score += reward
+                enemy.apply_knockback(knockback)
+
+    def update(self):
+        self.duration -= 1
+        return self.duration > 0
+
+    def draw(self, screen):
+        alpha = int(80 * self.duration / 6)
+        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, (152, 255, 152, alpha), (self.radius, self.radius), self.radius)
+        screen.blit(s, (self.x - self.radius, self.y - self.radius))
 
 
 class DragonBreathPool:

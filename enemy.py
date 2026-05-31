@@ -26,6 +26,13 @@ class Enemy(pygame.sprite.Sprite):
             self.base_speed = self.speed
             self.weather_slowed = True
 
+        if game.weather == Weather.TAILWIND:
+            self.speed *= 1.5
+            self.base_speed = self.speed
+            self.tailwind_boosted = True
+        else:
+            self.tailwind_boosted = False
+
         self.poisoned = (game.weather == Weather.ACID_RAIN)
         self.poison_timer = 0
 
@@ -35,6 +42,7 @@ class Enemy(pygame.sprite.Sprite):
         self.burn_time = 0
         self.burn_damage = 0
         self.broken = False
+        self.wind_mark_tower = None
 
         self.image = assets.load_image(f"enemy/{config['image']}")
 
@@ -142,6 +150,10 @@ class Enemy(pygame.sprite.Sprite):
             buff_list.append("burn")
         if self.poisoned:
             buff_list.append("poison")
+        if self.wind_mark_tower is not None:
+            buff_list.append("wind")
+        if self.tailwind_boosted:
+            buff_list.append("speed")
         return buff_list
 
     def teleport_to_start(self):
@@ -149,6 +161,36 @@ class Enemy(pygame.sprite.Sprite):
         start_x, start_y = self.path[self.path_index]
         self.pos_x = start_x * TILE_SIZE + TILE_SIZE // 2
         self.pos_y = start_y * TILE_SIZE + TILE_SIZE // 2
+        self.rect.center = (self.pos_x, self.pos_y)
+
+    def apply_knockback(self, distance):
+        if self.path_index <= 0:
+            return
+        remaining = distance
+        while remaining > 0:
+            tx = self.path[self.path_index][0] * TILE_SIZE + TILE_SIZE // 2
+            ty = self.path[self.path_index][1] * TILE_SIZE + TILE_SIZE // 2
+            dx = tx - self.pos_x
+            dy = ty - self.pos_y
+            dist_to_target = (dx * dx + dy * dy) ** 0.5
+            if dist_to_target <= 0:
+                if self.path_index > 0:
+                    self.path_index -= 1
+                else:
+                    break
+                continue
+            if remaining < dist_to_target:
+                self.pos_x += (dx / dist_to_target) * remaining
+                self.pos_y += (dy / dist_to_target) * remaining
+                remaining = 0
+            else:
+                self.pos_x = tx
+                self.pos_y = ty
+                remaining -= dist_to_target
+                if self.path_index > 0:
+                    self.path_index -= 1
+                else:
+                    break
         self.rect.center = (self.pos_x, self.pos_y)
 
     def take_damage(self, damage, color=RED, scale=1.0):

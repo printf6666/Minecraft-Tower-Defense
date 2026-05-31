@@ -3,7 +3,7 @@ import random
 import assets
 from config import *
 from enemy import Enemy, DamageText
-from tower import Tower, Bullet, DragonBreathPool, LightningEffect
+from tower import Tower, Bullet, DragonBreathPool, LightningEffect, WindExplosion
 from wave_manager import WaveManager
 
 
@@ -17,7 +17,7 @@ class Game:
         self.towers = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
         self.damage_texts = pygame.sprite.Group()
-        self.coins = 2500
+        self.coins = 2500000
         self.lives = 20
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
@@ -38,6 +38,7 @@ class Game:
 
         self.dragon_breath_pools = []
         self.lightning_effects = []
+        self.wind_explosions = []
         self.thunderstorm_timer = 0
 
         self.path = random.choice(PATH_LIST)
@@ -106,6 +107,8 @@ class Game:
                     self.selected_tower_type = TowerType.FLAME
                 elif event.key == pygame.K_6:
                     self.selected_tower_type = TowerType.TRIDENT
+                elif event.key == pygame.K_7:
+                    self.selected_tower_type = TowerType.WIND
                 elif event.key == pygame.K_u and self.selected_tower:
                     if self.selected_tower.level < 15 and self.coins >= self.selected_tower.upgrade_cost:
                         self.coins -= self.selected_tower.upgrade_cost
@@ -120,7 +123,8 @@ class Game:
                         TowerType.ICE: 150,
                         TowerType.TELEPORT: 300,
                         TowerType.FLAME: 200,
-                        TowerType.TRIDENT: 400
+                        TowerType.TRIDENT: 400,
+                        TowerType.WIND: 250
                     }
                     sell_price = base_cost_map[self.selected_tower.type] * self.selected_tower.level
                     self.coins += sell_price
@@ -211,6 +215,10 @@ class Game:
                 if effect.done:
                     self.lightning_effects.remove(effect)
 
+            for explosion in self.wind_explosions[:]:
+                if not explosion.update():
+                    self.wind_explosions.remove(explosion)
+
             for tower in self.towers:
                 if tower.type == TowerType.FLAME and tower.level >= 11:
                     if tower.dragon_breath_cooldown > 0:
@@ -238,6 +246,11 @@ class Game:
 
             for enemy in list(self.enemies):
                 if enemy.health <= 0:
+                    if enemy.wind_mark_tower is not None:
+                        t = enemy.wind_mark_tower
+                        exp = WindExplosion(enemy.rect.centerx, enemy.rect.centery,
+                                           t.damage, t.wind_knockback, self)
+                        self.wind_explosions.append(exp)
                     self.enemies_killed += 1
                     enemy.kill()
 
@@ -265,10 +278,10 @@ class Game:
                     self.play_random_bgm()
 
     def select_weather(self):
-        weights = [0.08, 0.2, 0.18, 0.15, 0.1, 0.14, 0.15]
+        weights = [0.08, 0.18, 0.16, 0.13, 0.09, 0.12, 0.13, 0.11]
         self.weather = random.choices(
             [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
-             Weather.THUNDERSTORM, Weather.ACID_RAIN],
+             Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.TAILWIND],
             weights=weights, k=1)[0]
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
@@ -287,6 +300,20 @@ class Game:
                         if t.level + 1 >= 11: self.gold_profit_per_wave -= 0.01
                     if t.type in (TowerType.FLAME, TowerType.TRIDENT):
                         self.temperature -= 1
+                    if t.type == TowerType.WIND:
+                        t.wind_knockback -= 12
+                        old_level = t.level + 1
+                        if old_level >= 7:
+                            t.damage -= 20
+                            t.range -= TILE_SIZE // 2
+                        elif old_level == 6:
+                            t.damage -= 20
+                            t.range -= TILE_SIZE // 2
+                            t.fire_rate = min(60, t.fire_rate + 6)
+                        else:
+                            t.damage -= 5
+                            t.range -= TILE_SIZE // 4
+                            t.fire_rate = min(60, t.fire_rate + 6)
                     t.update_sprite()
 
     def play_random_bgm(self):
@@ -351,7 +378,7 @@ class Game:
         pygame.draw.rect(self.screen, RED, (900, 1020, 760, 80))
         exit_text = assets.font_medium.render("退出游戏", True, WHITE)
         self.screen.blit(exit_text, (1200, 1035))
-        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6键选择炮塔", "3. U升级 S出售",
+        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6/7键选择炮塔", "3. U升级 S出售",
                         "4. 6级/11级自动进化"]
         for i, text in enumerate(instructions):
             text_surface = assets.font_small.render(text, True, WHITE)
@@ -390,6 +417,8 @@ class Game:
             pool.draw(self.screen)
         for effect in self.lightning_effects:
             effect.draw(self.screen)
+        for explosion in self.wind_explosions:
+            explosion.draw(self.screen)
 
         self.draw_ui()
         if self.state == GameState.WAVE_PREPARATION:
@@ -416,6 +445,7 @@ class Game:
         self.screen.blit(assets.icon4, (1000, SCREEN_HEIGHT - 100))
         self.screen.blit(assets.icon5, (1320, SCREEN_HEIGHT - 100))
         self.screen.blit(assets.icon6, (1640, SCREEN_HEIGHT - 100))
+        self.screen.blit(assets.icon7, (1960, SCREEN_HEIGHT - 100))
 
         self.screen.blit(assets.font_small.render("(1):100", True, WHITE), (140, SCREEN_HEIGHT - 85))
         self.screen.blit(assets.font_small.render("(2):50", True, WHITE), (460, SCREEN_HEIGHT - 85))
@@ -423,6 +453,7 @@ class Game:
         self.screen.blit(assets.font_small.render("(4):300", True, WHITE), (1100, SCREEN_HEIGHT - 85))
         self.screen.blit(assets.font_small.render("(5):200", True, WHITE), (1420, SCREEN_HEIGHT - 85))
         self.screen.blit(assets.font_small.render("(6):400", True, WHITE), (1740, SCREEN_HEIGHT - 85))
+        self.screen.blit(assets.font_small.render("(7):250", True, WHITE), (2060, SCREEN_HEIGHT - 85))
 
         positions = {
             TowerType.PHYSICAL: (40, SCREEN_HEIGHT - 100),
@@ -430,7 +461,8 @@ class Game:
             TowerType.ICE: (680, SCREEN_HEIGHT - 100),
             TowerType.TELEPORT: (1000, SCREEN_HEIGHT - 100),
             TowerType.FLAME: (1320, SCREEN_HEIGHT - 100),
-            TowerType.TRIDENT: (1640, SCREEN_HEIGHT - 100)
+            TowerType.TRIDENT: (1640, SCREEN_HEIGHT - 100),
+            TowerType.WIND: (1960, SCREEN_HEIGHT - 100)
         }
         if self.selected_tower_type in positions:
             x, y = positions[self.selected_tower_type]
@@ -525,7 +557,8 @@ class Game:
             TowerType.ICE: 150,
             TowerType.TELEPORT: 300,
             TowerType.FLAME: 200,
-            TowerType.TRIDENT: 400
+            TowerType.TRIDENT: 400,
+            TowerType.WIND: 250
         }
         info = []
         if tower.type == TowerType.PHYSICAL:
@@ -589,9 +622,20 @@ class Game:
             else:
                 info = [f"三叉戟塔 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
                         f"攻击间隔:{tower.fire_rate / 60}s"]
+        elif tower.type == TowerType.WIND:
+            if tower.level >= 11:
+                per_px = {11: 8, 12: 10, 13: 12, 14: 14, 15: 16}
+                info = [f"重锤塔 Lv{tower.level}", f"伤害:{tower.damage}+{per_px.get(tower.level,8)}/px",
+                        f"击退:{tower.wind_knockback}px", f"攻击间隔:0.5s"]
+            elif tower.level >= 6:
+                info = [f"蓄风箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"击退:{tower.wind_knockback}px",
+                        f"蓄风印记", f"攻击间隔:0.5s"]
+            else:
+                info = [f"风弹塔 Lv{tower.level}", f"伤害:{tower.damage}", f"击退:{tower.wind_knockback}px",
+                        f"攻击间隔:{tower.fire_rate / 60}s"]
         upgrade_str = "MAX" if tower.level >= 15 else str(tower.upgrade_cost)
         info.extend(
-            [f"射程:{round(tower.range / TILE_SIZE, 1)}", f"升级:{upgrade_str}"])
+            [f"射程:{round(tower.get_effective_range() / TILE_SIZE, 1)}", f"升级:{upgrade_str}"])
         sell_price = base_cost_map[tower.type] * tower.level
         info.append(f"出售:{sell_price}")
 
@@ -611,12 +655,12 @@ class Game:
         if self.get_tower_at(x, y):
             return False
         costs = {TowerType.PHYSICAL: 100, TowerType.PRODUCTION: 50, TowerType.ICE: 150, TowerType.TELEPORT: 300,
-                 TowerType.FLAME: 200, TowerType.TRIDENT: 400}
+                 TowerType.FLAME: 200, TowerType.TRIDENT: 400, TowerType.WIND: 250}
         return self.coins >= costs.get(self.selected_tower_type, 9999)
 
     def build_tower(self, x, y, tower_type):
         costs = {TowerType.PHYSICAL: 100, TowerType.PRODUCTION: 50, TowerType.ICE: 150, TowerType.TELEPORT: 300,
-                 TowerType.FLAME: 200, TowerType.TRIDENT: 400}
+                 TowerType.FLAME: 200, TowerType.TRIDENT: 400, TowerType.WIND: 250}
         cost = costs[tower_type]
         if self.coins >= cost:
             self.coins -= cost
@@ -661,6 +705,7 @@ class Game:
         self.weather_banner_text = ""
         self.dragon_breath_pools = []
         self.lightning_effects = []
+        self.wind_explosions = []
         self.thunderstorm_timer = 0
         self.start_game()
 
