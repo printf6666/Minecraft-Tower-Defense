@@ -45,11 +45,18 @@ golden_lightning_frames = []
 bgm_files = []
 bgm_index = -1
 
+stone_img = None
+dirt_img = None
+start_img = None
+house_img = None
+
 
 def init_assets():
     global font_large, font_medium, font_small, font_tower_level
     global icon1, icon2, icon3, icon4, icon5, icon6, icon7, buff_icons
     global white_lightning_frames, golden_lightning_frames
+    global bgm_files, bgm_index
+    global stone_img, dirt_img, start_img, house_img
 
     try:
         font_large = pygame.font.SysFont('simhei', 60)
@@ -111,3 +118,9 @@ def init_assets():
             if f.lower().endswith(('.mp3', '.ogg', '.wav')):
                 bgm_files.append(f"bgm/{f}")
     bgm_index = -1
+
+    ts = (128, 128)
+    stone_img = load_image("tower/stone.png", ts)
+    dirt_img = load_image("tower/dirt.png", ts)
+    start_img = load_image("tower/start.png", ts)
+    house_img = load_image("tower/house.png", ts)

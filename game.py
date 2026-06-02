@@ -3,7 +3,7 @@ import random
 import assets
 from config import *
 from enemy import Enemy, DamageText
-from tower import Tower, Bullet, DragonBreathPool, LightningEffect, WindExplosion
+from tower import Tower, Bullet, DragonBreathPool, LightningEffect, WindExplosion, IceExplosion
 from wave_manager import WaveManager
 
 
@@ -39,7 +39,12 @@ class Game:
         self.dragon_breath_pools = []
         self.lightning_effects = []
         self.wind_explosions = []
+        self.ice_explosions = []
         self.thunderstorm_timer = 0
+
+        self.fog_timer = 0
+        self.fog_visible = False
+        self.fog_type = 1
 
         self.path = random.choice(PATH_LIST)
         self.start_point = self.path[0]
@@ -163,8 +168,8 @@ class Game:
         text = DamageText(value, pos[0], pos[1], color=color, scale=scale)
         self.damage_texts.add(text)
 
-    def add_dragon_breath(self, x, y, temperature, tower_level):
-        pool = DragonBreathPool(x, y, temperature, tower_level)
+    def add_dragon_breath(self, x, y, temperature, tower_level, stun_time):
+        pool = DragonBreathPool(x, y, temperature, tower_level, stun_time, self)
         self.dragon_breath_pools.append(pool)
 
     def add_lightning(self, x, y, is_golden):
@@ -205,9 +210,7 @@ class Game:
                 self.play_random_bgm()
 
             for pool in self.dragon_breath_pools[:]:
-                if pool.update(self.game_time):
-                    pool.deal_damage(self.enemies, self, self.game_time)
-                else:
+                if not pool.update(self.game_time):
                     self.dragon_breath_pools.remove(pool)
 
             for effect in self.lightning_effects[:]:
@@ -219,10 +222,9 @@ class Game:
                 if not explosion.update():
                     self.wind_explosions.remove(explosion)
 
-            for tower in self.towers:
-                if tower.type == TowerType.FLAME and tower.level >= 11:
-                    if tower.dragon_breath_cooldown > 0:
-                        tower.dragon_breath_cooldown -= 1
+            for exp in self.ice_explosions[:]:
+                if not exp.update():
+                    self.ice_explosions.remove(exp)
 
             if self.weather == Weather.THUNDERSTORM:
                 self.thunderstorm_timer += 1
@@ -246,11 +248,6 @@ class Game:
 
             for enemy in list(self.enemies):
                 if enemy.health <= 0:
-                    if enemy.wind_mark_tower is not None:
-                        t = enemy.wind_mark_tower
-                        exp = WindExplosion(enemy.rect.centerx, enemy.rect.centery,
-                                           t.damage, t.wind_knockback, self)
-                        self.wind_explosions.append(exp)
                     self.enemies_killed += 1
                     enemy.kill()
 
@@ -278,11 +275,10 @@ class Game:
                     self.play_random_bgm()
 
     def select_weather(self):
-        weights = [0.08, 0.18, 0.16, 0.13, 0.09, 0.12, 0.13, 0.11]
-        self.weather = random.choices(
-            [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
-             Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.TAILWIND],
-            weights=weights, k=1)[0]
+        weathers = [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
+                    Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.TAILWIND, Weather.HEADWIND,
+                    Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD]
+        self.weather = random.choice(weathers)
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
         for t in self.towers:
@@ -315,6 +311,12 @@ class Game:
                             t.range -= TILE_SIZE // 4
                             t.fire_rate = min(60, t.fire_rate + 6)
                     t.update_sprite()
+        if self.weather == Weather.SCORCHING_SUN:
+            for enemy in self.enemies:
+                enemy.burn_damage = max(enemy.burn_damage, self.temperature)
+                enemy.burn_time = max(enemy.burn_time, 999999)
+        if self.weather == Weather.FOG:
+            self.fog_type = random.randint(1, 5)
 
     def play_random_bgm(self):
         if not assets.bgm_files:
@@ -385,17 +387,17 @@ class Game:
             self.screen.blit(text_surface, (900, 1200 + i * 50))
 
     def draw_game(self):
+        path_set = set(self.path)
         for x in range(GRID_WIDTH):
             for y in range(1, GRID_HEIGHT + 1):
-                pygame.draw.rect(self.screen, GRAY, (x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE), 2)
-        for x, y in self.path:
-            pygame.draw.rect(self.screen, BROWN, (x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE))
+                if (x, y) in path_set:
+                    self.screen.blit(assets.dirt_img, (x * TILE_SIZE, y * TILE_SIZE))
+                else:
+                    self.screen.blit(assets.stone_img, (x * TILE_SIZE, y * TILE_SIZE))
         sx, sy = self.start_point
         ex, ey = self.end_point
-        pygame.draw.rect(self.screen, GREEN, (sx * TILE_SIZE, sy * TILE_SIZE, TILE_SIZE, TILE_SIZE))
-        pygame.draw.rect(self.screen, RED, (ex * TILE_SIZE, ey * TILE_SIZE, TILE_SIZE, TILE_SIZE))
-        self.screen.blit(assets.font_small.render("起点", True, WHITE), (sx * TILE_SIZE + 10, sy * TILE_SIZE + 10))
-        self.screen.blit(assets.font_small.render("终点", True, WHITE), (ex * TILE_SIZE + 10, ey * TILE_SIZE + 10))
+        self.screen.blit(assets.start_img, (sx * TILE_SIZE, sy * TILE_SIZE))
+        self.screen.blit(assets.house_img, (ex * TILE_SIZE, ey * TILE_SIZE))
 
         self.towers.draw(self.screen)
         self.enemies.draw(self.screen)
@@ -413,12 +415,32 @@ class Game:
         self.draw_weather_particles()
         self.draw_weather_banner()
 
+        if self.weather == Weather.FOG:
+            gw = GRID_WIDTH * TILE_SIZE
+            gh = GRID_HEIGHT * TILE_SIZE
+            s = pygame.Surface((gw, gh), pygame.SRCALPHA)
+
+            if self.fog_type == 1:
+                s.fill((230, 230, 230, 255), (0, 0, gw, 5 * TILE_SIZE))
+            elif self.fog_type == 2:
+                s.fill((230, 230, 230, 255), (0, 5 * TILE_SIZE, gw, 5 * TILE_SIZE))
+            elif self.fog_type == 3:
+                s.fill((230, 230, 230, 255), (0, 0, 8 * TILE_SIZE, gh))
+            elif self.fog_type == 4:
+                s.fill((230, 230, 230, 255), (8 * TILE_SIZE, 0, 8 * TILE_SIZE, gh))
+            elif self.fog_type == 5:
+                s.fill((230, 230, 230, 255))
+
+            self.screen.blit(s, (0, TILE_SIZE))
+
         for pool in self.dragon_breath_pools:
             pool.draw(self.screen)
         for effect in self.lightning_effects:
             effect.draw(self.screen)
         for explosion in self.wind_explosions:
             explosion.draw(self.screen)
+        for exp in self.ice_explosions:
+            exp.draw(self.screen)
 
         self.draw_ui()
         if self.state == GameState.WAVE_PREPARATION:
@@ -601,9 +623,9 @@ class Game:
                         f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.FLAME:
             if tower.level >= 11:
-                dmg_mult = 500 + (tower.level - 11) * 100
+                dmg_mult = (tower.level - 10) ** 2
                 info = [f"龙息塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{self.temperature}/s,持续4s",
-                        f"龙息:{dmg_mult}%温度/s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
+                        f"龙息:{dmg_mult}倍温度/s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
             elif tower.level >= 6:
                 info = [f"火球塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{self.temperature}/s,持续4s",
                         f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
@@ -625,8 +647,9 @@ class Game:
         elif tower.type == TowerType.WIND:
             if tower.level >= 11:
                 per_px = {11: 8, 12: 10, 13: 12, 14: 14, 15: 16}
+                stun_s = {11: 0.1, 12: 0.2, 13: 0.3, 14: 0.4, 15: 0.5}
                 info = [f"重锤塔 Lv{tower.level}", f"伤害:{tower.damage}+{per_px.get(tower.level,8)}/px",
-                        f"击退:{tower.wind_knockback}px", f"攻击间隔:0.5s"]
+                        f"击退:{tower.wind_knockback}px", f"击晕:{stun_s.get(tower.level,0.1)}s", f"攻击间隔:0.5s"]
             elif tower.level >= 6:
                 info = [f"蓄风箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"击退:{tower.wind_knockback}px",
                         f"蓄风印记", f"攻击间隔:0.5s"]
@@ -706,7 +729,11 @@ class Game:
         self.dragon_breath_pools = []
         self.lightning_effects = []
         self.wind_explosions = []
+        self.ice_explosions = []
         self.thunderstorm_timer = 0
+        self.fog_timer = 0
+        self.fog_visible = False
+        self.fog_type = 1
         self.start_game()
 
     def run(self):

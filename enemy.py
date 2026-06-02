@@ -1,6 +1,7 @@
 import pygame
 import assets
 from config import *
+from tower import WindExplosion
 
 
 class Enemy(pygame.sprite.Sprite):
@@ -19,6 +20,14 @@ class Enemy(pygame.sprite.Sprite):
         self.reward = config["reward"]
         self.base_speed = self.speed
 
+        self.stun_time = 0
+        self.freeze_time = 0
+        self.slow_time = 0
+        self.burn_time = 0
+        self.burn_damage = 0
+        self.broken = False
+        self.wind_mark_tower = None
+
         self.weather_slowed = False
         rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN)
         if game.weather in rain_weathers:
@@ -33,16 +42,17 @@ class Enemy(pygame.sprite.Sprite):
         else:
             self.tailwind_boosted = False
 
+        if game.weather == Weather.HEADWIND or game.weather == Weather.EXTREME_COLD:
+            self.speed *= 0.5
+            self.base_speed = self.speed
+            self.weather_slowed = True
+
+        if game.weather == Weather.SCORCHING_SUN:
+            self.burn_damage = max(self.burn_damage, game.temperature)
+            self.burn_time = max(self.burn_time, 999999)
+
         self.poisoned = (game.weather == Weather.ACID_RAIN)
         self.poison_timer = 0
-
-        self.stun_time = 0
-        self.freeze_time = 0
-        self.slow_time = 0
-        self.burn_time = 0
-        self.burn_damage = 0
-        self.broken = False
-        self.wind_mark_tower = None
 
         self.image = assets.load_image(f"enemy/{config['image']}")
 
@@ -60,14 +70,14 @@ class Enemy(pygame.sprite.Sprite):
         self.rect.center = (self.pos_x, self.pos_y)
 
     def apply_slow(self, slow_factor, duration):
-        rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN)
+        rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
         if self.game.weather in rain_weathers:
             return
         self.speed = self.base_speed * slow_factor
         self.slow_time = duration
 
     def apply_burn(self, damage, duration):
-        rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN)
+        rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
         if self.game.weather in rain_weathers:
             return
         self.burn_damage = damage
@@ -208,6 +218,12 @@ class Enemy(pygame.sprite.Sprite):
             self.game.spawn_damage_text(int(final_dmg), self.rect.center, color=color, scale=scale)
 
         if self.health <= 0:
+            if self.wind_mark_tower is not None:
+                t = self.wind_mark_tower
+                exp = WindExplosion(self.rect.centerx, self.rect.centery,
+                                   t.damage, t.wind_knockback, self.game)
+                self.game.wind_explosions.append(exp)
+                self.wind_mark_tower = None
             self.kill()
             return self.reward
         return 0

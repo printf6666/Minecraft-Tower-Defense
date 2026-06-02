@@ -15,7 +15,7 @@ INFO_PADDING = 20
 
 RESTART_BTN_X = INFO_BORDER_X
 RESTART_BTN_Y = INFO_BORDER_Y + INFO_BORDER_SIZE + 20
-RESTART_BTN_WIDTH = 200
+RESTART_BTN_WIDTH = 256
 RESTART_BTN_HEIGHT = 60
 RESTART_BTN_COLOR = (80, 80, 80)
 
@@ -76,6 +76,10 @@ class Weather(Enum):
     THUNDERSTORM = 5
     ACID_RAIN = 6
     TAILWIND = 7
+    HEADWIND = 8
+    SCORCHING_SUN = 9
+    FOG = 10
+    EXTREME_COLD = 11
 
 
 WEATHER_CONFIG = {
@@ -86,7 +90,11 @@ WEATHER_CONFIG = {
     Weather.SNOWY: {"name": "雪天", "temp": 0, "desc": "雪天：温度骤降，敌人冻结时间延长", "color": (150, 200, 255)},
     Weather.THUNDERSTORM: {"name": "雷暴", "temp": 15, "desc": "雷暴：温度较低，闪电将会劈下", "color": (255, 215, 0)},
     Weather.ACID_RAIN: {"name": "酸雨", "temp": 5, "desc": "酸雨：敌人永久中毒减速，炮塔等级-1", "color": (0, 255, 0)},
-    Weather.TAILWIND: {"name": "顺风", "temp": 25, "desc": "顺风：敌人移速增加50%，炮塔射程+1格", "color": (152, 255, 152)},
+    Weather.TAILWIND: {"name": "顺风", "temp": 25, "desc": "顺风：敌人移速+50%，炮塔射程+50%", "color": (152, 255, 152)},
+    Weather.HEADWIND: {"name": "逆风", "temp": 25, "desc": "逆风：敌人移速-50%，炮塔射程-50%", "color": (100, 200, 255)},
+    Weather.SCORCHING_SUN: {"name": "烈日", "temp": 50, "desc": "烈日：温度极高，敌人全体永久燃烧", "color": (255, 200, 0)},
+    Weather.FOG: {"name": "迷雾", "temp": 15, "desc": "迷雾：视野周期性受阻", "color": (180, 180, 180)},
+    Weather.EXTREME_COLD: {"name": "极寒", "temp": -20, "desc": "极寒：冻结时间翻倍，敌人移速-50%", "color": (100, 200, 255)},
 }
 
 # 地图路径

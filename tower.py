@@ -152,7 +152,9 @@ class Tower(pygame.sprite.Sprite):
     def get_effective_range(self):
         r = self.range
         if self.game.weather == Weather.TAILWIND:
-            r += TILE_SIZE
+            r += int(self.range * 0.5)
+        if self.game.weather == Weather.HEADWIND:
+            r -= int(self.range * 0.5)
         return r
 
     def attack(self, current_time):
@@ -323,13 +325,21 @@ class Bullet(pygame.sprite.Sprite):
 
     def apply_effects(self, enemy):
         if self.tower_type == TowerType.ICE:
-            rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN)
+            rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
             if self.game.weather not in rain_weathers:
                 enemy.apply_slow(0.5, 60)
             freeze_frames = int(self.freeze_time * 60)
             if self.game.weather == Weather.SNOWY:
-                freeze_frames += 12
+                freeze_frames = int(freeze_frames * 1.5)
+            if self.game.weather == Weather.EXTREME_COLD:
+                freeze_frames = int(freeze_frames * 2)
             enemy.apply_freeze(freeze_frames)
+            if self.tower_level >= 11:
+                freeze_frames_for_exp = freeze_frames
+                if self.freeze_time <= 0:
+                    freeze_frames_for_exp = 60
+                exp = IceExplosion(enemy.rect.centerx, enemy.rect.centery, freeze_frames_for_exp, self.game)
+                self.game.ice_explosions.append(exp)
         if self.tower_type == TowerType.TELEPORT:
             if random.random() < self.teleport_chance:
                 enemy.teleport_to_start()
@@ -342,12 +352,10 @@ class Bullet(pygame.sprite.Sprite):
             enemy.apply_burn(burn_dmg, 240)
             if self.tower_level >= 6:
                 enemy.apply_stun(int(self.stun_time * 60))
-            if self.tower_level >= 11 and self.source_tower:
-                if self.source_tower.dragon_breath_cooldown <= 0:
-                    self.game.add_dragon_breath(
-                        enemy.rect.centerx, enemy.rect.centery,
-                        self.game.temperature, self.tower_level)
-                    self.source_tower.dragon_breath_cooldown = 420
+            if self.tower_level >= 11:
+                self.game.add_dragon_breath(
+                    enemy.rect.centerx, enemy.rect.centery,
+                    self.game.temperature, self.tower_level, self.stun_time)
         if self.tower_type == TowerType.PHYSICAL:
             if self.tower_level >= 11 and not enemy.broken:
                 enemy.broken = True
@@ -373,6 +381,9 @@ class Bullet(pygame.sprite.Sprite):
                 enemy.apply_knockback(self.source_tower.wind_knockback)
                 if self.tower_level >= 6:
                     enemy.wind_mark_tower = self.source_tower
+                if self.tower_level >= 11:
+                    stun_frames = {11: 6, 12: 12, 13: 18, 14: 24, 15: 30}
+                    enemy.apply_stun(stun_frames.get(self.tower_level, 6))
 
 
 class WindExplosion:
@@ -403,36 +414,57 @@ class WindExplosion:
         screen.blit(s, (self.x - self.radius, self.y - self.radius))
 
 
-class DragonBreathPool:
-    def __init__(self, x, y, temperature, tower_level):
+class IceExplosion:
+    def __init__(self, x, y, freeze_time, game):
         self.x = x
         self.y = y
+        self.duration = 6
         self.radius = 128
-        self.duration = 300
-        dmg_mult = 5 + (tower_level - 11)
-        self.dps = int(temperature * dmg_mult)
-        self.last_tick = 0
+        for enemy in game.enemies:
+            if enemy.health <= 0:
+                continue
+            dx = enemy.rect.centerx - x
+            dy = enemy.rect.centery - y
+            if (dx * dx + dy * dy) <= self.radius * self.radius:
+                enemy.apply_freeze(freeze_time)
 
-    def update(self, game_time):
+    def update(self):
         self.duration -= 1
         return self.duration > 0
 
-    def deal_damage(self, enemies, game, game_time):
-        if game_time - self.last_tick < 60:
-            return
-        self.last_tick = game_time
-        for enemy in enemies:
+    def draw(self, screen):
+        alpha = int(80 * self.duration / 6)
+        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, (100, 150, 255, alpha), (self.radius, self.radius), self.radius)
+        screen.blit(s, (self.x - self.radius, self.y - self.radius))
+
+
+class DragonBreathPool:
+    def __init__(self, x, y, temperature, tower_level, stun_time, game):
+        self.x = x
+        self.y = y
+        self.radius = 128
+        self.duration = 10
+        dmg_mult = (tower_level - 10) ** 2
+        dmg = int(temperature * dmg_mult)
+        for enemy in game.enemies:
             if enemy.health <= 0:
                 continue
             dx = enemy.rect.centerx - self.x
             dy = enemy.rect.centery - self.y
             if (dx * dx + dy * dy) <= self.radius * self.radius:
-                reward = enemy.take_damage(self.dps, color=PURPLE, scale=0.7)
+                reward = enemy.take_damage(dmg, color=PURPLE, scale=0.7)
                 game.coins += reward
                 game.score += reward
+                if stun_time > 0:
+                    enemy.apply_stun(int(stun_time * 60))
+
+    def update(self, game_time):
+        self.duration -= 1
+        return self.duration > 0
 
     def draw(self, screen):
-        alpha = min(80, int(80 * self.duration / 300))
+        alpha = min(80, int(80 * self.duration / 10))
         s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
         pygame.draw.circle(s, (128, 0, 128, alpha), (self.radius, self.radius), self.radius)
         screen.blit(s, (self.x - self.radius, self.y - self.radius))
