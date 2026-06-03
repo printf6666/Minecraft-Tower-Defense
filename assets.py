@@ -71,7 +71,7 @@ def init_assets():
         font_tower_level = pygame.font.SysFont('arial', 28)
 
     try:
-        font_damage = pygame.font.Font(resource_path("number_font.ttf"), 36)
+        font_damage = pygame.font.Font(resource_path("font/number_font.ttf"), 36)
     except:
         font_damage = font_small
 
