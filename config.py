@@ -91,9 +91,9 @@ WEATHER_CONFIG = {
     Weather.THUNDERSTORM: {"name": "雷暴", "temp": 15, "desc": "雷暴：温度较低，闪电将会劈下", "color": (255, 215, 0)},
     Weather.ACID_RAIN: {"name": "酸雨", "temp": 5, "desc": "酸雨：敌人永久中毒减速，炮塔等级-1", "color": (0, 255, 0)},
     Weather.TAILWIND: {"name": "顺风", "temp": 25, "desc": "顺风：敌人移速+50%，炮塔射程+50%", "color": (152, 255, 152)},
-    Weather.HEADWIND: {"name": "逆风", "temp": 25, "desc": "逆风：敌人移速-50%，炮塔射程-50%", "color": (100, 200, 255)},
+    Weather.HEADWIND: {"name": "逆风", "temp": 25, "desc": "逆风：敌人移速-50%，炮塔射程-50%", "color": (152, 255, 152)},
     Weather.SCORCHING_SUN: {"name": "烈日", "temp": 50, "desc": "烈日：温度极高，敌人全体永久燃烧", "color": (255, 200, 0)},
-    Weather.FOG: {"name": "迷雾", "temp": 15, "desc": "迷雾：视野周期性受阻", "color": (180, 180, 180)},
+    Weather.FOG: {"name": "迷雾", "temp": 15, "desc": "迷雾：视野遮挡", "color": (180, 180, 180)},
     Weather.EXTREME_COLD: {"name": "极寒", "temp": -20, "desc": "极寒：冻结时间翻倍，敌人移速-50%", "color": (100, 200, 255)},
 }
 

@@ -106,7 +106,7 @@ class Enemy(pygame.sprite.Sprite):
         if self.burn_time > 0:
             self.burn_time -= 1
             if self.burn_time % 30 == 0:
-                reward = self.take_damage(self.burn_damage, color=YELLOW, scale=0.9)
+                reward = self.take_damage(self.burn_damage, color=YELLOW, scale=1.4)
                 self.game.coins += reward
                 self.game.score += reward
 
@@ -114,7 +114,7 @@ class Enemy(pygame.sprite.Sprite):
             self.poison_timer += 1
             if self.poison_timer >= 75:
                 self.poison_timer = 0
-                reward = self.take_damage(30, color=GREEN, scale=0.7)
+                reward = self.take_damage(10 * game.wave_manager.current_wave, color=GREEN, scale=1.4)
                 self.game.coins += reward
                 self.game.score += reward
 
@@ -203,7 +203,7 @@ class Enemy(pygame.sprite.Sprite):
                     break
         self.rect.center = (self.pos_x, self.pos_y)
 
-    def take_damage(self, damage, color=RED, scale=1.0):
+    def take_damage(self, damage, color=RED, scale=1.4):
         if self.health <= 0:
             return 0
 
@@ -251,7 +251,7 @@ class Enemy(pygame.sprite.Sprite):
 
 
 class DamageText(pygame.sprite.Sprite):
-    def __init__(self, text, x, y, color=RED, duration=45, speed_y=-2, scale=1.0):
+    def __init__(self, text, x, y, color=RED, duration=45, speed_y=-2, scale=1.4):
         super().__init__()
         self.text = str(text)
         self.color = color
@@ -262,11 +262,9 @@ class DamageText(pygame.sprite.Sprite):
         self.pos_y = float(y)
 
         self.base_image = assets.font_damage.render(self.text, True, self.color)
-
-        if scale != 1.0:
-            new_w = max(1, int(self.base_image.get_width() * scale))
-            new_h = max(1, int(self.base_image.get_height() * scale))
-            self.base_image = pygame.transform.smoothscale(self.base_image, (new_w, new_h))
+        new_w = int(self.base_image.get_width() * scale)
+        new_h = int(self.base_image.get_height() * scale)
+        self.base_image = pygame.transform.smoothscale(self.base_image, (new_w, new_h))
 
         self.image = self.base_image.copy()
         self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))

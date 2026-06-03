@@ -17,7 +17,7 @@ class Game:
         self.towers = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
         self.damage_texts = pygame.sprite.Group()
-        self.coins = 2500000
+        self.coins = 2500
         self.lives = 20
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
@@ -160,11 +160,7 @@ class Game:
             self.coins += self.gold_per_second
             self.last_global_production_time = current_time
 
-    def spawn_damage_text(self, value, pos, color=RED, scale=1.0):
-        if value <= 0:
-            return
-        if value >= 100:
-            scale = max(scale, 1.2)
+    def spawn_damage_text(self, value, pos, color=RED, scale=1.4):
         text = DamageText(value, pos[0], pos[1], color=color, scale=scale)
         self.damage_texts.add(text)
 
