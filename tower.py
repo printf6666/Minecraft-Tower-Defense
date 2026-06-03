@@ -338,7 +338,7 @@ class Bullet(pygame.sprite.Sprite):
                 freeze_frames_for_exp = freeze_frames
                 if self.freeze_time <= 0:
                     freeze_frames_for_exp = 60
-                exp = IceExplosion(enemy.rect.centerx, enemy.rect.centery, freeze_frames_for_exp, self.game)
+                exp = IceExplosion(enemy.rect.centerx, enemy.rect.centery, self.damage, freeze_frames_for_exp, self.game)
                 self.game.ice_explosions.append(exp)
         if self.tower_type == TowerType.TELEPORT:
             if random.random() < self.teleport_chance:
@@ -415,7 +415,7 @@ class WindExplosion:
 
 
 class IceExplosion:
-    def __init__(self, x, y, freeze_time, game):
+    def __init__(self, x, y, damage, freeze_time, game):
         self.x = x
         self.y = y
         self.duration = 6
@@ -426,6 +426,9 @@ class IceExplosion:
             dx = enemy.rect.centerx - x
             dy = enemy.rect.centery - y
             if (dx * dx + dy * dy) <= self.radius * self.radius:
+                reward = enemy.take_damage(damage, color=ICE_BLUE, scale=0.8)
+                game.coins += reward
+                game.score += reward
                 enemy.apply_freeze(freeze_time)
 
     def update(self):

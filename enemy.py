@@ -261,7 +261,7 @@ class DamageText(pygame.sprite.Sprite):
         self.pos_x = float(x)
         self.pos_y = float(y)
 
-        self.base_image = assets.font_small.render(self.text, True, self.color)
+        self.base_image = assets.font_damage.render(self.text, True, self.color)
 
         if scale != 1.0:
             new_w = max(1, int(self.base_image.get_width() * scale))

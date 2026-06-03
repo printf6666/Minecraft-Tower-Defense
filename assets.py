@@ -27,6 +27,7 @@ font_large = None
 font_medium = None
 font_small = None
 font_tower_level = None
+font_damage = None
 
 icon1 = None
 icon2 = None
@@ -52,7 +53,7 @@ house_img = None
 
 
 def init_assets():
-    global font_large, font_medium, font_small, font_tower_level
+    global font_large, font_medium, font_small, font_tower_level, font_damage
     global icon1, icon2, icon3, icon4, icon5, icon6, icon7, buff_icons
     global white_lightning_frames, golden_lightning_frames
     global bgm_files, bgm_index
@@ -68,6 +69,11 @@ def init_assets():
         font_medium = pygame.font.SysFont('arial', 48)
         font_small = pygame.font.SysFont('arial', 36)
         font_tower_level = pygame.font.SysFont('arial', 28)
+
+    try:
+        font_damage = pygame.font.Font(resource_path("number_font.ttf"), 36)
+    except:
+        font_damage = font_small
 
     icon_size = 80
     icon1 = load_image("tower/1.png", (icon_size, icon_size))
