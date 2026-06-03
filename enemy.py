@@ -114,7 +114,7 @@ class Enemy(pygame.sprite.Sprite):
             self.poison_timer += 1
             if self.poison_timer >= 75:
                 self.poison_timer = 0
-                reward = self.take_damage(10 * game.wave_manager.current_wave, color=GREEN, scale=1.4)
+                reward = self.take_damage(10 * self.game.wave_manager.current_wave, color=GREEN, scale=1.4)
                 self.game.coins += reward
                 self.game.score += reward
 
