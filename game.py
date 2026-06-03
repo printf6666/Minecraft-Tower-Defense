@@ -445,8 +445,10 @@ class Game:
     def draw_ui(self):
         pygame.draw.rect(self.screen, BLACK, (0, 0, SCREEN_WIDTH, 80))
         pygame.draw.line(self.screen, WHITE, (0, 80), (SCREEN_WIDTH, 80), 4)
-        self.screen.blit(assets.font_medium.render(f"金币: {self.coins}", True, GOLD), (30, 15))
-        self.screen.blit(assets.font_medium.render(f"生命: {self.lives}", True, RED), (360, 15))
+        self.screen.blit(assets.gold_img, (30, 16))
+        self.screen.blit(assets.font_medium.render(str(self.coins), True, GOLD), (85, 15))
+        self.screen.blit(assets.heart_img, (360, 16))
+        self.screen.blit(assets.font_medium.render(str(self.lives), True, RED), (415, 15))
         self.screen.blit(
             assets.font_medium.render(f"波次: {self.wave_manager.current_wave}/{self.wave_manager.total_waves}", True, WHITE),
             (720, 15))

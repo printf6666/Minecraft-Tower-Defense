@@ -37,6 +37,9 @@ icon5 = None
 icon6 = None
 icon7 = None
 
+gold_img = None
+heart_img = None
+
 BUFF_SIZE = 32
 buff_icons = {}
 
@@ -55,6 +58,7 @@ house_img = None
 def init_assets():
     global font_large, font_medium, font_small, font_tower_level, font_damage
     global icon1, icon2, icon3, icon4, icon5, icon6, icon7, buff_icons
+    global gold_img, heart_img
     global white_lightning_frames, golden_lightning_frames
     global bgm_files, bgm_index
     global stone_img, dirt_img, start_img, house_img
@@ -83,6 +87,9 @@ def init_assets():
     icon5 = load_image("tower/5.png", (icon_size, icon_size))
     icon6 = load_image("tower/6.png", (icon_size, icon_size))
     icon7 = load_image("tower/7.png", (icon_size, icon_size))
+
+    gold_img = load_image("tower/gold.png", (48, 48))
+    heart_img = load_image("tower/heart.png", (48, 48))
 
     buff_icons["burn"] = load_image("debuff/burn.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["freeze"] = load_image("debuff/freeze.png", (BUFF_SIZE, BUFF_SIZE))
