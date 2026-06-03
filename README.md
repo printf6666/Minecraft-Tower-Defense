@@ -64,20 +64,3 @@
 pyinstaller --onefile --noconsole --add-data "tower;tower" --add-data "debuff;debuff" --add-data "enemy;enemy" --add-data "bgm;bgm" --name "MCTD" main.py
 ```
 
-## 目录结构
-
-```
-MCTD/
-├── main.py            # 入口
-├── config.py          # 常量、枚举、地图数据
-├── assets.py          # 资源加载（图片、字体、BGM）
-├── enemy.py           # 敌人、伤害文字
-├── tower.py           # 炮塔、子弹、龙息池、闪电动画
-├── wave_manager.py    # 波次管理
-├── game.py            # 游戏主逻辑
-├── tower/             # 炮塔图片 + 闪电帧序图
-├── enemy/             # 敌人图片
-├── debuff/            # 状态图标
-├── bgm/               # 背景音乐
-└── dist/              # 打包输出
-```
