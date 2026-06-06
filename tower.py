@@ -307,6 +307,17 @@ class Bullet(pygame.sprite.Sprite):
             bonus = 300 + 150 * (self.tower_level - 11)
             final_dmg += bonus
 
+        if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11:
+            hp_ratios = {11: 0.01, 12: 0.0125, 13: 0.015, 14: 0.0175, 15: 0.02}
+            hp_bonus = int(enemy.max_health * hp_ratios.get(self.tower_level, 0))
+            final_dmg += hp_bonus
+
+        if self.tower_type == TowerType.PHYSICAL and self.tower_level >= 11 and enemy.enemy_type == EnemyType.BOSS:
+            if self.tower_level >= 15:
+                final_dmg *= 3
+            else:
+                final_dmg *= 2
+
         if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11 and self.execute_threshold > 0:
             threshold_ratio = self.execute_threshold / 100.0
             if enemy.health <= enemy.max_health * threshold_ratio:

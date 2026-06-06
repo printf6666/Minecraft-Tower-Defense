@@ -11,6 +11,7 @@ class Enemy(pygame.sprite.Sprite):
         self.path_index = 0
         self.game = game
 
+        self.enemy_type = enemy_type
         enemy_key = enemy_type.name
         config = ENEMY_TYPES[enemy_key]
 

@@ -47,6 +47,7 @@ class GameState(Enum):
     WAVE_PREPARATION = 2
     GAME_OVER = 3
     VICTORY = 4
+    PAUSED = 5
 
 
 class TowerType(Enum):

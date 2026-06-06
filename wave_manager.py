@@ -5,7 +5,7 @@ from config import EnemyType
 class WaveManager:
     def __init__(self):
         self.current_wave = 0
-        self.total_waves = 40
+        self.total_waves = 50
         self.enemies_spawned = 0
         self.enemies_to_spawn = 0
         self.spawn_timer = 0

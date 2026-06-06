@@ -10,6 +10,7 @@ from wave_manager import WaveManager
 class Game:
     def __init__(self, screen, clock):
         self.state = GameState.MENU
+        self.pre_pause_state = None
         self.screen = screen
         self.clock = clock
         self.fps = 60
@@ -153,6 +154,13 @@ class Game:
                     self.show_range = False
                 elif event.key == pygame.K_F11:
                     pygame.display.toggle_fullscreen()
+                elif event.key == pygame.K_p:
+                    if self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION):
+                        self.pre_pause_state = self.state
+                        self.state = GameState.PAUSED
+                    elif self.state == GameState.PAUSED:
+                        self.state = self.pre_pause_state
+                        self.pre_pause_state = None
 
     def global_production(self):
         current_time = pygame.time.get_ticks()
@@ -177,6 +185,8 @@ class Game:
         self.coins += int(self.coins * self.gold_profit_per_wave)
 
     def update(self):
+        if self.state == GameState.PAUSED:
+            return
         if self.state == GameState.PLAYING:
             self.game_time += 1
             self.global_production()
@@ -359,7 +369,7 @@ class Game:
         self.screen.fill(BLACK)
         if self.state == GameState.MENU:
             self.draw_menu()
-        elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION):
+        elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION, GameState.PAUSED):
             self.draw_game()
         elif self.state == GameState.GAME_OVER:
             self.draw_game_over()
@@ -441,6 +451,8 @@ class Game:
         self.draw_ui()
         if self.state == GameState.WAVE_PREPARATION:
             self.draw_wave_preparation()
+        if self.state == GameState.PAUSED:
+            self.draw_pause_overlay()
 
     def draw_ui(self):
         pygame.draw.rect(self.screen, BLACK, (0, 0, SCREEN_WIDTH, 80))
@@ -549,6 +561,15 @@ class Game:
         text = assets.font_medium.render(self.weather_banner_text, True, WHITE)
         text.set_alpha(alpha)
         self.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, banner_y + 10))
+
+    def draw_pause_overlay(self):
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 128))
+        self.screen.blit(overlay, (0, 0))
+        pause_text = assets.font_large.render("已暂停", True, WHITE)
+        continue_text = assets.font_small.render("按 P 继续", True, WHITE)
+        self.screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
+        self.screen.blit(continue_text, (SCREEN_WIDTH // 2 - continue_text.get_width() // 2, SCREEN_HEIGHT // 2 + 20))
 
     def draw_game_over(self):
         self.screen.fill(BLACK)
