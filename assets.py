@@ -46,6 +46,9 @@ buff_icons = {}
 white_lightning_frames = []
 golden_lightning_frames = []
 
+white_lightning_h_frames = []
+golden_lightning_h_frames = []
+
 bgm_files = []
 bgm_index = -1
 
@@ -60,6 +63,7 @@ def init_assets():
     global icon1, icon2, icon3, icon4, icon5, icon6, icon7, buff_icons
     global gold_img, heart_img
     global white_lightning_frames, golden_lightning_frames
+    global white_lightning_h_frames, golden_lightning_h_frames
     global bgm_files, bgm_index
     global stone_img, dirt_img, start_img, house_img
 
@@ -111,6 +115,11 @@ def init_assets():
             frame = sheet.subsurface((i * frame_w, 0, frame_w, frame_h))
             frame = pygame.transform.smoothscale(frame, (128, 1280))
             white_lightning_frames.append(frame)
+        for i in range(5):
+            raw = sheet.subsurface((i * frame_w, 0, frame_w, frame_h))
+            h_raw = pygame.transform.rotate(raw, -90)
+            h_frame = pygame.transform.smoothscale(h_raw, (2048, 128))
+            white_lightning_h_frames.append(h_frame)
 
     try:
         sheet = load_image("tower/golden_lightning.png")
@@ -123,6 +132,11 @@ def init_assets():
             frame = sheet.subsurface((i * frame_w, 0, frame_w, frame_h))
             frame = pygame.transform.smoothscale(frame, (128, 1280))
             golden_lightning_frames.append(frame)
+        for i in range(5):
+            raw = sheet.subsurface((i * frame_w, 0, frame_w, frame_h))
+            h_raw = pygame.transform.rotate(raw, -90)
+            h_frame = pygame.transform.smoothscale(h_raw, (2048, 128))
+            golden_lightning_h_frames.append(h_frame)
 
     global bgm_files, bgm_index
     bgm_dir = resource_path("bgm")

@@ -244,11 +244,6 @@ class Bullet(pygame.sprite.Sprite):
             if self.tower_level >= 6:
                 gold_bonus = int(self.game.coins * 0.01)
                 dmg += gold_bonus
-            if self.tower_level >= 11:
-                w = self.game.weather
-                if w in (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN):
-                    mults = {11: 2, 12: 3, 13: 5, 14: 8, 15: 10}
-                    dmg *= mults.get(self.tower_level, 1)
 
         if self.tower_type == TowerType.WIND:
             if self.tower_level >= 11:
@@ -263,11 +258,6 @@ class Bullet(pygame.sprite.Sprite):
             if self.tower_level >= 6:
                 gold_bonus = int(self.game.coins * 0.01)
                 ldmg += gold_bonus
-            if self.tower_level >= 11:
-                w = self.game.weather
-                if w in (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN):
-                    mults = {11: 2, 12: 3, 13: 5, 14: 8, 15: 10}
-                    ldmg *= mults.get(self.tower_level, 1)
         return int(ldmg)
 
     def update(self):
@@ -313,6 +303,12 @@ class Bullet(pygame.sprite.Sprite):
             final_dmg += hp_bonus
 
         if self.tower_type == TowerType.PHYSICAL and self.tower_level >= 11 and enemy.enemy_type == EnemyType.BOSS:
+            if self.tower_level >= 15:
+                final_dmg *= 3
+            else:
+                final_dmg *= 2
+
+        if self.tower_type == TowerType.TRIDENT and self.tower_level >= 11:
             if self.tower_level >= 15:
                 final_dmg *= 3
             else:
@@ -380,13 +376,18 @@ class Bullet(pygame.sprite.Sprite):
                     self.game.coins += reward
                     self.game.score += reward
                     e.apply_burn(self.game.temperature, 240)
-            is_golden = False
-            if self.tower_level >= 6:
-                is_golden = True
-            if self.tower_level >= 11:
-                w = self.game.weather
-                is_golden = (w == Weather.SUNNY or w == Weather.EXTREME_HEAT)
+            is_golden = self.tower_level >= 6
             self.game.add_lightning(enemy.rect.centerx, 800, is_golden)
+            row = enemy.rect.centery // TILE_SIZE
+            h_lightning_dmg = self.calculate_lightning_damage()
+            for e in self.game.enemies:
+                e_row = e.rect.centery // TILE_SIZE
+                if e_row == row and e.health > 0:
+                    reward = e.take_damage(h_lightning_dmg, color=GOLD)
+                    self.game.coins += reward
+                    self.game.score += reward
+            h_effect = HorizontalLightningEffect(1024, row * TILE_SIZE + TILE_SIZE // 2, not is_golden)
+            self.game.horizontal_lightning_effects.append(h_effect)
         if self.tower_type == TowerType.WIND:
             if self.source_tower:
                 enemy.apply_knockback(self.source_tower.wind_knockback)
@@ -509,6 +510,37 @@ class LightningEffect:
         if self.done:
             return
         frames = assets.golden_lightning_frames if self.is_golden else assets.white_lightning_frames
+        if frames and self.frame < len(frames):
+            img = frames[self.frame]
+            rect = img.get_rect(center=(self.x, self.y))
+            screen.blit(img, rect)
+
+
+class HorizontalLightningEffect:
+    def __init__(self, x, y, is_golden):
+        self.x = x
+        self.y = y
+        self.frame = 0
+        self.frame_timer = 0
+        self.frame_duration = 4
+        self.max_frames = 5
+        self.is_golden = is_golden
+        self.done = False
+
+    def update(self):
+        if self.done:
+            return
+        self.frame_timer += 1
+        if self.frame_timer >= self.frame_duration:
+            self.frame_timer = 0
+            self.frame += 1
+            if self.frame >= self.max_frames:
+                self.done = True
+
+    def draw(self, screen):
+        if self.done:
+            return
+        frames = assets.golden_lightning_h_frames if self.is_golden else assets.white_lightning_h_frames
         if frames and self.frame < len(frames):
             img = frames[self.frame]
             rect = img.get_rect(center=(self.x, self.y))

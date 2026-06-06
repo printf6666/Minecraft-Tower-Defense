@@ -3,7 +3,7 @@ import random
 import assets
 from config import *
 from enemy import Enemy, DamageText
-from tower import Tower, Bullet, DragonBreathPool, LightningEffect, WindExplosion, IceExplosion
+from tower import Tower, Bullet, DragonBreathPool, LightningEffect, WindExplosion, IceExplosion, HorizontalLightningEffect
 from wave_manager import WaveManager
 
 
@@ -41,6 +41,7 @@ class Game:
         self.lightning_effects = []
         self.wind_explosions = []
         self.ice_explosions = []
+        self.horizontal_lightning_effects = []
         self.thunderstorm_timer = 0
 
         self.fog_timer = 0
@@ -231,6 +232,11 @@ class Game:
             for exp in self.ice_explosions[:]:
                 if not exp.update():
                     self.ice_explosions.remove(exp)
+
+            for effect in self.horizontal_lightning_effects[:]:
+                effect.update()
+                if effect.done:
+                    self.horizontal_lightning_effects.remove(effect)
 
             if self.weather == Weather.THUNDERSTORM:
                 self.thunderstorm_timer += 1
@@ -447,6 +453,8 @@ class Game:
             explosion.draw(self.screen)
         for exp in self.ice_explosions:
             exp.draw(self.screen)
+        for effect in self.horizontal_lightning_effects:
+            effect.draw(self.screen)
 
         self.draw_ui()
         if self.state == GameState.WAVE_PREPARATION:
@@ -653,10 +661,10 @@ class Game:
                         f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.TRIDENT:
             if tower.level >= 11:
-                mults = {11: 2, 12: 3, 13: 5, 14: 8, 15: 10}
-                mult = mults.get(tower.level, 1)
+                mult_text = "3倍" if tower.level >= 15 else "2倍"
                 info = [f"海神三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
-                        f"将当前金币的1%作为伤害加成", f"雨天/雷暴/酸雨:{mult}倍伤", f"攻击间隔:0.5s"]
+                        f"将当前金币的1%作为伤害加成", f"伤害倍率:{mult_text}",
+                        f"攻击施放十字闪电", f"攻击间隔:0.5s"]
             elif tower.level >= 6:
                 info = [f"黄金三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
                         f"将当前金币的1%作为伤害加成", f"攻击间隔:0.5s"]
@@ -749,6 +757,7 @@ class Game:
         self.lightning_effects = []
         self.wind_explosions = []
         self.ice_explosions = []
+        self.horizontal_lightning_effects = []
         self.thunderstorm_timer = 0
         self.fog_timer = 0
         self.fog_visible = False
