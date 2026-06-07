@@ -30,6 +30,10 @@ class Enemy(pygame.sprite.Sprite):
         self.wind_mark_tower = None
 
         self.weather_slowed = False
+        self.freeze_resistance = 0.0
+        self.stun_resistance = 0.0
+        self.last_freeze_time = -9999
+        self.last_stun_time = -9999
         rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN)
         if game.weather in rain_weathers:
             self.speed *= 0.5
@@ -52,8 +56,10 @@ class Enemy(pygame.sprite.Sprite):
             self.burn_damage = max(self.burn_damage, game.temperature)
             self.burn_time = max(self.burn_time, 999999)
 
-        self.poisoned = (game.weather == Weather.ACID_RAIN)
+        self.poison_stacks = 0
         self.poison_timer = 0
+        if game.weather == Weather.ACID_RAIN:
+            self.poison_stacks = 10
 
         self.image = assets.load_image(f"enemy/{config['image']}")
 
@@ -85,14 +91,30 @@ class Enemy(pygame.sprite.Sprite):
         self.burn_time = duration
 
     def apply_freeze(self, duration):
-        self.freeze_time = max(self.freeze_time, duration)
+        effective = int(duration * (1.0 - self.freeze_resistance))
+        self.freeze_time = max(self.freeze_time, effective)
+        self.freeze_resistance = min(0.90, self.freeze_resistance + 0.10)
+        self.last_freeze_time = self.game.game_time
 
     def apply_stun(self, duration):
-        self.stun_time = max(self.stun_time, duration)
+        effective = int(duration * (1.0 - self.stun_resistance))
+        self.stun_time = max(self.stun_time, effective)
+        self.stun_resistance = min(0.90, self.stun_resistance + 0.10)
+        self.last_stun_time = self.game.game_time
+
+    def apply_poison(self, stacks):
+        if self.game.weather == Weather.ACID_RAIN:
+            stacks *= 2
+        self.poison_stacks += stacks
 
     def update(self):
         if self.health <= 0:
             return False
+
+        if self.game.game_time - self.last_freeze_time > 600:
+            self.freeze_resistance = 0.0
+        if self.game.game_time - self.last_stun_time > 600:
+            self.stun_resistance = 0.0
 
         if self.stun_time > 0:
             self.stun_time -= 1
@@ -110,11 +132,11 @@ class Enemy(pygame.sprite.Sprite):
                 reward = self.take_damage(self.burn_damage, color=YELLOW, scale=1.0)
                 self.game.coins += reward
 
-        if self.poisoned:
+        if self.poison_stacks > 0:
             self.poison_timer += 1
             if self.poison_timer >= 75:
                 self.poison_timer = 0
-                reward = self.take_damage(10 * self.game.wave_manager.current_wave, color=GREEN, scale=1.0)
+                reward = self.take_damage(self.poison_stacks, color=GREEN, scale=1.0)
                 self.game.coins += reward
 
         if self.health <= 0:
@@ -157,7 +179,7 @@ class Enemy(pygame.sprite.Sprite):
             buff_list.append("slow")
         if self.burn_time > 0:
             buff_list.append("burn")
-        if self.poisoned:
+        if self.poison_stacks > 0:
             buff_list.append("poison")
         if self.wind_mark_tower is not None:
             buff_list.append("wind")

@@ -84,6 +84,12 @@ class Tower(pygame.sprite.Sprite):
             self.cost = 250
             self.upgrade_cost = 375
             self.wind_knockback = 12
+        elif self.type == TowerType.POISON:
+            self.range = TILE_SIZE * 3
+            self.damage = 20
+            self.fire_rate = 60
+            self.cost = 175
+            self.upgrade_cost = int(175 * 1.5)
 
     def upgrade(self):
         if self.level >= 15:
@@ -130,6 +136,10 @@ class Tower(pygame.sprite.Sprite):
             else:
                 self.damage += 5
                 self.range += TILE_SIZE // 4
+        elif self.type == TowerType.POISON:
+            self.damage += 15
+            self.range += TILE_SIZE // 2
+            self.fire_rate = max(30, self.fire_rate - 6)
 
         self.update_sprite()
 
@@ -175,6 +185,11 @@ class Tower(pygame.sprite.Sprite):
             bullet.lightning_damage = self.lightning_damage
             bullet.execute_threshold = self.execute_threshold
             bullet.source_tower = self
+            if self.type == TowerType.POISON:
+                if self.level >= 11:
+                    bullet.poison_stacks = self.level * 4
+                else:
+                    bullet.poison_stacks = self.level
             bullets.append(bullet)
         return bullets
 
@@ -210,6 +225,7 @@ class Bullet(pygame.sprite.Sprite):
         self.lightning_damage = 0
         self.execute_threshold = 0
         self.source_tower = None
+        self.poison_stacks = 0
 
         prefix = str(self.tower_type.value + 1)
         if self.tower_level >= 11:
@@ -288,6 +304,8 @@ class Bullet(pygame.sprite.Sprite):
             return GOLD
         elif self.tower_type == TowerType.WIND:
             return MINT
+        elif self.tower_type == TowerType.POISON:
+            return GREEN
         return RED
 
     def on_hit(self, enemy):
@@ -392,6 +410,11 @@ class Bullet(pygame.sprite.Sprite):
                 if self.tower_level >= 11:
                     stun_frames = {11: 6, 12: 12, 13: 18, 14: 24, 15: 30}
                     enemy.apply_stun(stun_frames.get(self.tower_level, 6))
+        if self.tower_type == TowerType.POISON and self.poison_stacks > 0:
+            enemy.apply_poison(self.poison_stacks)
+            if self.tower_level >= 6:
+                splash = PoisonSplash(enemy.rect.centerx, enemy.rect.centery, self.damage, self.poison_stacks, self.game)
+                self.game.poison_splashes.append(splash)
 
 
 class WindExplosion:
@@ -538,3 +561,30 @@ class HorizontalLightningEffect:
             img = frames[self.frame]
             rect = img.get_rect(center=(self.x, self.y))
             screen.blit(img, rect)
+
+
+class PoisonSplash:
+    def __init__(self, x, y, damage, stacks, game):
+        self.x = x
+        self.y = y
+        self.duration = 6
+        self.radius = 128
+        for enemy in game.enemies:
+            if enemy.health <= 0:
+                continue
+            dx = enemy.rect.centerx - x
+            dy = enemy.rect.centery - y
+            if (dx * dx + dy * dy) <= self.radius * self.radius:
+                reward = enemy.take_damage(damage, color=GREEN, scale=0.8)
+                game.coins += reward
+                enemy.apply_poison(stacks)
+
+    def update(self):
+        self.duration -= 1
+        return self.duration > 0
+
+    def draw(self, screen):
+        alpha = int(80 * self.duration / 6)
+        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, (0, 255, 0, alpha), (self.radius, self.radius), self.radius)
+        screen.blit(s, (self.x - self.radius, self.y - self.radius))

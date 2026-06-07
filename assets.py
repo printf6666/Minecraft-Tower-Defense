@@ -36,6 +36,7 @@ icon4 = None
 icon5 = None
 icon6 = None
 icon7 = None
+icon8 = None
 
 gold_img = None
 heart_img = None
@@ -61,7 +62,7 @@ house_img = None
 
 def init_assets():
     global font_large, font_medium, font_small, font_tower_level, font_damage
-    global icon1, icon2, icon3, icon4, icon5, icon6, icon7, buff_icons
+    global icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, buff_icons
     global gold_img, heart_img, clock_img
     global white_lightning_frames, golden_lightning_frames
     global white_lightning_h_frames, golden_lightning_h_frames
@@ -92,8 +93,9 @@ def init_assets():
     icon5 = load_image("tower/5.png", (icon_size, icon_size))
     icon6 = load_image("tower/6.png", (icon_size, icon_size))
     icon7 = load_image("tower/7.png", (icon_size, icon_size))
+    icon8 = load_image("tower/8.png", (icon_size, icon_size))
 
-    gold_img = load_image("tower/gold.png", (48, 48))
+    gold_img = load_image("tower/gold.png", (64, 64))
     heart_img = load_image("tower/heart.png", (48, 48))
     clock_img = load_image("tower/clock.png", (48, 48))
 
