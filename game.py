@@ -382,7 +382,7 @@ class Game:
         pygame.display.flip()
 
     def draw_menu(self):
-        title = assets.font_large.render("像素防线 · 晶域守卫", True, WHITE)
+        title = assets.font_large.render("像素防线:晶域守卫", True, WHITE)
         self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 300))
         pygame.draw.rect(self.screen, GREEN, (900, 900, 760, 80))
         start_text = assets.font_medium.render("开始游戏", True, WHITE)
@@ -390,8 +390,7 @@ class Game:
         pygame.draw.rect(self.screen, RED, (900, 1020, 760, 80))
         exit_text = assets.font_medium.render("退出游戏", True, WHITE)
         self.screen.blit(exit_text, (1200, 1035))
-        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6/7键选择炮塔", "3. U升级 S出售",
-                        "4. 6级/11级自动进化"]
+        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6/7键选择炮塔", "3. U升级 S出售 P暂停"]
         for i, text in enumerate(instructions):
             text_surface = assets.font_small.render(text, True, WHITE)
             self.screen.blit(text_surface, (900, 1200 + i * 50))

@@ -69,10 +69,10 @@ def init_assets():
     global stone_img, dirt_img, start_img, house_img
 
     try:
-        font_large = pygame.font.SysFont('simhei', 60)
-        font_medium = pygame.font.SysFont('simhei', 48)
-        font_small = pygame.font.SysFont('simhei', 36)
-        font_tower_level = pygame.font.SysFont('simhei', 28)
+        font_large = pygame.font.Font(resource_path("font/Minecraft.ttf"), 60)
+        font_medium = pygame.font.Font(resource_path("font/Minecraft.ttf"), 48)
+        font_small = pygame.font.Font(resource_path("font/Minecraft.ttf"), 36)
+        font_tower_level = pygame.font.Font(resource_path("font/Minecraft.ttf"), 28)
     except:
         font_large = pygame.font.SysFont('arial', 60)
         font_medium = pygame.font.SysFont('arial', 48)
@@ -80,7 +80,7 @@ def init_assets():
         font_tower_level = pygame.font.SysFont('arial', 28)
 
     try:
-        font_damage = pygame.font.Font(resource_path("font/number_font.ttf"), 36)
+        font_damage = pygame.font.Font(resource_path("font/Minecraft.ttf"), 36)
     except:
         font_damage = font_small
 
