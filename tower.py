@@ -319,14 +319,12 @@ class Bullet(pygame.sprite.Sprite):
             if enemy.health <= enemy.max_health * threshold_ratio:
                 reward = enemy.take_damage(9999999, color=RED, scale=1.2)
                 self.game.coins += reward
-                self.game.score += reward
                 self.kill()
                 return
 
         color = self.get_damage_color()
         reward = enemy.take_damage(final_dmg, color=color)
         self.game.coins += reward
-        self.game.score += reward
         self.apply_effects(enemy)
         self.kill()
 
@@ -353,7 +351,6 @@ class Bullet(pygame.sprite.Sprite):
             if random.random() < self.oneshot_chance:
                 reward = enemy.take_damage(9999999, color=RED, scale=1.2)
                 self.game.coins += reward
-                self.game.score += reward
         if self.tower_type == TowerType.FLAME:
             burn_dmg = self.game.temperature
             enemy.apply_burn(burn_dmg, 240)
@@ -374,20 +371,19 @@ class Bullet(pygame.sprite.Sprite):
                 if e_col == col and e.health > 0:
                     reward = e.take_damage(lightning_dmg, color=GOLD)
                     self.game.coins += reward
-                    self.game.score += reward
                     e.apply_burn(self.game.temperature, 240)
             is_golden = self.tower_level >= 6
             self.game.add_lightning(enemy.rect.centerx, 800, is_golden)
-            row = enemy.rect.centery // TILE_SIZE
-            h_lightning_dmg = self.calculate_lightning_damage()
-            for e in self.game.enemies:
-                e_row = e.rect.centery // TILE_SIZE
-                if e_row == row and e.health > 0:
-                    reward = e.take_damage(h_lightning_dmg, color=GOLD)
-                    self.game.coins += reward
-                    self.game.score += reward
-            h_effect = HorizontalLightningEffect(1024, row * TILE_SIZE + TILE_SIZE // 2, not is_golden)
-            self.game.horizontal_lightning_effects.append(h_effect)
+            if self.tower_level >= 11:
+                row = enemy.rect.centery // TILE_SIZE
+                h_lightning_dmg = self.calculate_lightning_damage()
+                for e in self.game.enemies:
+                    e_row = e.rect.centery // TILE_SIZE
+                    if e_row == row and e.health > 0:
+                        reward = e.take_damage(h_lightning_dmg, color=GOLD)
+                        self.game.coins += reward
+                h_effect = HorizontalLightningEffect(1024, row * TILE_SIZE + TILE_SIZE // 2, not is_golden)
+                self.game.horizontal_lightning_effects.append(h_effect)
         if self.tower_type == TowerType.WIND:
             if self.source_tower:
                 enemy.apply_knockback(self.source_tower.wind_knockback)
@@ -412,7 +408,6 @@ class WindExplosion:
             if (dx * dx + dy * dy) <= self.radius * self.radius:
                 reward = enemy.take_damage(damage, color=MINT, scale=0.8)
                 game.coins += reward
-                game.score += reward
                 enemy.apply_knockback(knockback)
 
     def update(self):
@@ -440,7 +435,6 @@ class IceExplosion:
             if (dx * dx + dy * dy) <= self.radius * self.radius:
                 reward = enemy.take_damage(damage, color=ICE_BLUE, scale=0.8)
                 game.coins += reward
-                game.score += reward
                 enemy.apply_freeze(freeze_time)
 
     def update(self):
@@ -470,7 +464,6 @@ class DragonBreathPool:
             if (dx * dx + dy * dy) <= self.radius * self.radius:
                 reward = enemy.take_damage(dmg, color=PURPLE, scale=0.7)
                 game.coins += reward
-                game.score += reward
                 if stun_time > 0:
                     enemy.apply_stun(int(stun_time * 60))
 

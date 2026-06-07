@@ -24,7 +24,6 @@ class Game:
         self.selected_tower_type = None
         self.selected_tower = None
         self.show_range = False
-        self.score = 0
         self.enemies_killed = 0
         self.game_time = 0
         self.gold_per_second = 0
@@ -254,7 +253,6 @@ class Game:
                             if e_col == col and enemy.health > 0:
                                 reward = enemy.take_damage(50, color=GOLD)
                                 self.coins += reward
-                                self.score += reward
                                 enemy.apply_burn(self.temperature, 240)
                         self.add_lightning((col + 0.5) * TILE_SIZE, 800, False)
 
@@ -469,10 +467,10 @@ class Game:
         self.screen.blit(assets.font_medium.render(str(self.coins), True, GOLD), (85, 15))
         self.screen.blit(assets.heart_img, (360, 16))
         self.screen.blit(assets.font_medium.render(str(self.lives), True, RED), (415, 15))
+        self.screen.blit(assets.clock_img, (720, 16))
         self.screen.blit(
-            assets.font_medium.render(f"波次: {self.wave_manager.current_wave}/{self.wave_manager.total_waves}", True, WHITE),
-            (720, 15))
-        self.screen.blit(assets.font_medium.render(f"得分: {self.score}", True, WHITE), (1200, 15))
+            assets.font_medium.render(f"{self.wave_manager.current_wave}/{self.wave_manager.total_waves}", True, WHITE),
+            (775, 15))
         weather_name = WEATHER_CONFIG[self.weather]["name"]
         weather_color = WEATHER_CONFIG[self.weather]["color"]
         self.screen.blit(assets.font_medium.render(f"天气:{weather_name} 温度:{self.temperature}", True, weather_color), (1520, 15))
@@ -582,9 +580,7 @@ class Game:
     def draw_game_over(self):
         self.screen.fill(BLACK)
         text1 = assets.font_large.render("游戏结束!", True, RED)
-        text2 = assets.font_medium.render(f"最终得分: {self.score}", True, WHITE)
         self.screen.blit(text1, (SCREEN_WIDTH // 2 - text1.get_width() // 2, 400))
-        self.screen.blit(text2, (SCREEN_WIDTH // 2 - text2.get_width() // 2, 550))
         pygame.draw.rect(self.screen, GREEN, (900, 850, 760, 80))
         restart_text = assets.font_medium.render("重新开始", True, WHITE)
         self.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
@@ -592,9 +588,7 @@ class Game:
     def draw_victory(self):
         self.screen.fill(BLACK)
         text1 = assets.font_large.render("胜利!", True, GREEN)
-        text2 = assets.font_medium.render(f"最终得分: {self.score}", True, WHITE)
         self.screen.blit(text1, (SCREEN_WIDTH // 2 - text1.get_width() // 2, 400))
-        self.screen.blit(text2, (SCREEN_WIDTH // 2 - text2.get_width() // 2, 550))
         pygame.draw.rect(self.screen, GREEN, (900, 850, 760, 80))
         restart_text = assets.font_medium.render("重新开始", True, WHITE)
         self.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
@@ -741,7 +735,6 @@ class Game:
         self.selected_tower_type = None
         self.selected_tower = None
         self.show_range = False
-        self.score = 0
         self.enemies_killed = 0
         self.game_time = 0
         self.gold_per_second = 0
