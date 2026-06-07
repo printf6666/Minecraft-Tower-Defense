@@ -46,7 +46,6 @@ class Game:
 
         self.fog_timer = 0
         self.fog_visible = False
-        self.fog_type = 1
 
         self.path = random.choice(PATH_LIST)
         self.start_point = self.path[0]
@@ -216,6 +215,12 @@ class Game:
             if self.weather_banner_timer > 0:
                 self.weather_banner_timer -= 1
 
+            if self.weather == Weather.FOG and not self.fog_visible:
+                if self.fog_timer > 0:
+                    self.fog_timer -= 1
+                else:
+                    self.fog_visible = True
+
             if not pygame.mixer.music.get_busy():
                 self.play_random_bgm()
 
@@ -293,6 +298,7 @@ class Game:
                     self.play_random_bgm()
 
     def select_weather(self):
+        self.fog_visible = False
         weathers = [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
                     Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.TAILWIND, Weather.HEADWIND,
                     Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD]
@@ -370,7 +376,8 @@ class Game:
                 enemy.burn_damage = max(enemy.burn_damage, self.temperature)
                 enemy.burn_time = max(enemy.burn_time, 999999)
         if self.weather == Weather.FOG:
-            self.fog_type = random.randint(1, 5)
+            self.fog_visible = False
+            self.fog_timer = 180
 
     def play_random_bgm(self):
         if not assets.bgm_files:
@@ -468,22 +475,11 @@ class Game:
         self.draw_weather_particles()
         self.draw_weather_banner()
 
-        if self.weather == Weather.FOG:
+        if self.fog_visible:
             gw = GRID_WIDTH * TILE_SIZE
             gh = GRID_HEIGHT * TILE_SIZE
             s = pygame.Surface((gw, gh), pygame.SRCALPHA)
-
-            if self.fog_type == 1:
-                s.fill((230, 230, 230, 255), (0, 0, gw, 5 * TILE_SIZE))
-            elif self.fog_type == 2:
-                s.fill((230, 230, 230, 255), (0, 5 * TILE_SIZE, gw, 5 * TILE_SIZE))
-            elif self.fog_type == 3:
-                s.fill((230, 230, 230, 255), (0, 0, 8 * TILE_SIZE, gh))
-            elif self.fog_type == 4:
-                s.fill((230, 230, 230, 255), (8 * TILE_SIZE, 0, 8 * TILE_SIZE, gh))
-            elif self.fog_type == 5:
-                s.fill((230, 230, 230, 255))
-
+            s.fill((230, 230, 230, 255))
             self.screen.blit(s, (0, TILE_SIZE))
 
         for pool in self.dragon_breath_pools:
@@ -815,7 +811,6 @@ class Game:
         self.thunderstorm_timer = 0
         self.fog_timer = 0
         self.fog_visible = False
-        self.fog_type = 1
         self.start_game()
 
     def run(self):
