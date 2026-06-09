@@ -142,9 +142,9 @@ class Game:
                         level = self.selected_tower.level
                         self.gold_per_second -= level
                         if level >= 6:
-                            self.gold_per_wave -= 1
+                            self.gold_per_wave -= (level - 5)
                         if level >= 11:
-                            self.gold_profit_per_wave -= 0.01
+                            self.gold_profit_per_wave -= (level - 10) * 0.01
 
                     if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT):
                         self.temperature -= self.selected_tower.level
