@@ -471,7 +471,7 @@ class DragonBreathPool:
         self.y = y
         self.radius = 128
         self.duration = 10
-        dmg_mult = (tower_level - 10) ** 2
+        dmg_mult = (tower_level - 10) * 10
         dmg = int(temperature * dmg_mult)
         for enemy in game.enemies:
             if enemy.health <= 0:
