@@ -184,7 +184,7 @@ class Game:
         self.lightning_effects.append(effect)
 
     def apply_production_bonus(self):
-        self.coins += 100 * self.gold_per_wave
+        self.coins += 100 * self.gold_per_wave * self.wave_manager.current_wave
         self.coins += int(self.coins * self.gold_profit_per_wave)
 
     def update(self):
