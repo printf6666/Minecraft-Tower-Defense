@@ -320,12 +320,6 @@ class Bullet(pygame.sprite.Sprite):
             hp_bonus = int(enemy.max_health * hp_ratios.get(self.tower_level, 0))
             final_dmg += hp_bonus
 
-        if self.tower_type == TowerType.PHYSICAL and self.tower_level >= 11 and enemy.enemy_type == EnemyType.BOSS:
-            if self.tower_level >= 15:
-                final_dmg *= 3
-            else:
-                final_dmg *= 2
-
         if self.tower_type == TowerType.TRIDENT and self.tower_level >= 11:
             if self.tower_level >= 15:
                 final_dmg *= 3
@@ -405,7 +399,7 @@ class Bullet(pygame.sprite.Sprite):
         if self.tower_type == TowerType.WIND:
             if self.source_tower:
                 enemy.apply_knockback(self.source_tower.wind_knockback)
-                if self.tower_level >= 6:
+                if self.tower_level >= 6 and enemy.enemy_type != EnemyType.ARMORED:
                     enemy.wind_mark_tower = self.source_tower
                 if self.tower_level >= 11:
                     stun_frames = {11: 6, 12: 12, 13: 18, 14: 24, 15: 30}

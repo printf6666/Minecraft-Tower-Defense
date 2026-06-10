@@ -63,7 +63,11 @@ class Enemy(pygame.sprite.Sprite):
 
         self.image = assets.load_image(f"enemy/{config['image']}")
 
-        if enemy_key == "NORMAL" or enemy_key == "FAST":
+        if enemy_key == "ARMORED":
+            self.image = pygame.transform.scale(self.image, (100, 100))
+        elif enemy_key == "SLIMELING":
+            self.image = pygame.transform.scale(self.image, (64, 64))
+        elif enemy_key == "NORMAL" or enemy_key == "FAST":
             original_w = self.image.get_width()
             original_h = self.image.get_height()
             self.image = pygame.transform.scale(self.image, (original_w * 2, original_h * 2))
@@ -195,6 +199,8 @@ class Enemy(pygame.sprite.Sprite):
         self.rect.center = (self.pos_x, self.pos_y)
 
     def apply_knockback(self, distance):
+        if self.enemy_type == EnemyType.ARMORED:
+            return
         if self.path_index <= 0:
             return
         remaining = distance
@@ -228,17 +234,26 @@ class Enemy(pygame.sprite.Sprite):
         if self.health <= 0:
             return 0
 
+        final_dmg = damage
+        if self.enemy_type == EnemyType.ARMORED and not self.broken:
+            final_dmg *= 0.3
         if self.broken:
-            final_dmg = damage * 1.2
-            self.health -= final_dmg
-        else:
-            final_dmg = damage
-            self.health -= final_dmg
+            final_dmg *= 1.2
+        final_dmg = int(final_dmg)
+        self.health -= final_dmg
 
         if self.game:
-            self.game.spawn_damage_text(int(final_dmg), self.rect.center, color=color, scale=scale)
+            self.game.spawn_damage_text(final_dmg, self.rect.center, color=color, scale=scale)
 
         if self.health <= 0:
+            if self.enemy_type == EnemyType.SLIME:
+                for _ in range(3):
+                    child = Enemy(self.path, EnemyType.SLIMELING, self.game)
+                    child.path_index = self.path_index
+                    child.pos_x = self.pos_x
+                    child.pos_y = self.pos_y
+                    child.rect.center = (child.pos_x, child.pos_y)
+                    self.game.enemies.add(child)
             if self.wind_mark_tower is not None:
                 t = self.wind_mark_tower
                 exp = WindExplosion(self.rect.centerx, self.rect.centery,
