@@ -46,6 +46,9 @@ class Game:
 
         self.fog_timer = 0
         self.fog_visible = False
+        self.weather_forecast = []
+        self.forecast_purchased = False
+        self.forecast_weather_idx = -1
 
         self.path = random.choice(PATH_LIST)
         self.start_point = self.path[0]
@@ -99,6 +102,17 @@ class Game:
                     elif self.state in (GameState.GAME_OVER, GameState.VICTORY):
                         if 900 <= mouse_x <= 1660 and 850 <= mouse_y <= 930:
                             self.reset_game()
+
+                    if (FORECAST_BTN_X <= mouse_x <= FORECAST_BTN_X + FORECAST_BTN_WIDTH and
+                            FORECAST_BTN_Y <= mouse_y <= FORECAST_BTN_Y + FORECAST_BTN_HEIGHT):
+                        if self.state == GameState.PLAYING and not self.forecast_purchased and self.coins >= 100 * self.wave_manager.current_wave:
+                            self.coins -= 100 * self.wave_manager.current_wave
+                            self.forecast_purchased = True
+                            self.forecast_weather_idx = self.wave_manager.current_wave
+                            if self.forecast_weather_idx < len(self.weather_forecast):
+                                w = self.weather_forecast[self.forecast_weather_idx]
+                                self.weather_banner_text = f"下波天气: {WEATHER_CONFIG[w]['desc']}"
+                                self.weather_banner_timer = 120
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_1:
@@ -184,7 +198,7 @@ class Game:
         self.lightning_effects.append(effect)
 
     def apply_production_bonus(self):
-        self.coins += 100 * self.gold_per_wave * self.wave_manager.current_wave
+        self.coins += 10 * self.gold_per_wave * self.wave_manager.current_wave
         self.coins += int(self.coins * self.gold_profit_per_wave)
 
     def update(self):
@@ -280,6 +294,7 @@ class Game:
                     self.state = GameState.VICTORY
                 else:
                     self.state = GameState.WAVE_PREPARATION
+                    self.forecast_purchased = False
                     self.wave_manager.start_new_wave()
             else:
                 enemy_type = self.wave_manager.update()
@@ -297,12 +312,19 @@ class Game:
                 if not pygame.mixer.music.get_busy():
                     self.play_random_bgm()
 
-    def select_weather(self):
-        self.fog_visible = False
+    def generate_weather_forecast(self):
         weathers = [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
                     Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.TAILWIND, Weather.HEADWIND,
                     Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD]
-        self.weather = random.choice(weathers)
+        self.weather_forecast = [random.choice(weathers) for _ in range(self.wave_manager.total_waves)]
+
+    def select_weather(self):
+        self.fog_visible = False
+        wave_idx = self.wave_manager.current_wave - 1
+        if 0 <= wave_idx < len(self.weather_forecast):
+            self.weather = self.weather_forecast[wave_idx]
+        else:
+            self.weather = Weather.SUNNY
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
         for t in self.towers:
@@ -310,65 +332,76 @@ class Game:
                 self.temperature += t.level
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         if self.weather == Weather.ACID_RAIN:
+            destroyed = []
             for t in self.towers:
-                if t.level > 1:
+                if t.level >= 1:
                     old_level = t.level
                     t.level -= 1
                     t.upgrade_cost = int(t.upgrade_cost / 1.5)
-                    if t.type == TowerType.PHYSICAL:
-                        t.damage -= 15
-                        t.range -= TILE_SIZE // 2
-                        t.fire_rate = min(60, t.fire_rate + 6)
-                    elif t.type == TowerType.ICE:
-                        t.damage -= 5
-                        t.range -= TILE_SIZE // 4
-                        t.fire_rate = min(60, t.fire_rate + 6)
-                        if old_level >= 6:
-                            t.freeze_time = round(t.freeze_time - 0.1, 1)
-                    elif t.type == TowerType.TELEPORT:
-                        t.damage -= 5
-                        t.teleport_chance = max(0, t.teleport_chance - 0.01)
-                        t.range -= TILE_SIZE // 4
-                        t.fire_rate = min(60, t.fire_rate + 6)
-                        if old_level >= 6:
-                            t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
-                        if old_level >= 11:
-                            t.execute_threshold = 0
-                    elif t.type == TowerType.FLAME:
-                        t.damage -= 15
-                        t.range -= TILE_SIZE // 4
-                        t.fire_rate = min(60, t.fire_rate + 6)
-                        if old_level >= 6:
-                            t.stun_time = round(t.stun_time - 0.1, 1)
-                        self.temperature -= 1
-                    elif t.type == TowerType.TRIDENT:
-                        t.damage -= 25
-                        t.range -= TILE_SIZE // 2
-                        t.fire_rate = min(60, t.fire_rate + 6)
-                        t.lightning_damage -= 50
-                        self.temperature -= 1
-                    elif t.type == TowerType.WIND:
-                        t.wind_knockback -= 12
-                        if old_level >= 7:
-                            t.damage -= 20
-                            t.range -= TILE_SIZE // 2
-                        elif old_level == 6:
-                            t.damage -= 20
+                    if t.type == TowerType.PRODUCTION:
+                        self.gold_per_second -= 1
+                    if old_level > 1:
+                        if t.type == TowerType.PHYSICAL:
+                            t.damage -= 15
                             t.range -= TILE_SIZE // 2
                             t.fire_rate = min(60, t.fire_rate + 6)
-                        else:
+                        elif t.type == TowerType.ICE:
                             t.damage -= 5
                             t.range -= TILE_SIZE // 4
                             t.fire_rate = min(60, t.fire_rate + 6)
-                    elif t.type == TowerType.POISON:
-                        t.damage -= 15
-                        t.range -= TILE_SIZE // 2
-                        t.fire_rate = min(60, t.fire_rate + 6)
-                    if t.type == TowerType.PRODUCTION:
-                        self.gold_per_second -= 1
-                        if old_level >= 6: self.gold_per_wave -= 1
-                        if old_level >= 11: self.gold_profit_per_wave -= 0.01
-                    t.update_sprite()
+                            if old_level >= 6:
+                                t.freeze_time = round(t.freeze_time - 0.1, 1)
+                        elif t.type == TowerType.TELEPORT:
+                            t.damage -= 5
+                            t.teleport_chance = max(0, t.teleport_chance - 0.01)
+                            t.range -= TILE_SIZE // 4
+                            t.fire_rate = min(60, t.fire_rate + 6)
+                            if old_level >= 6:
+                                t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
+                            if old_level >= 11:
+                                t.execute_threshold = 0
+                        elif t.type == TowerType.FLAME:
+                            t.damage -= 15
+                            t.range -= TILE_SIZE // 4
+                            t.fire_rate = min(60, t.fire_rate + 6)
+                            if old_level >= 6:
+                                t.stun_time = round(t.stun_time - 0.1, 1)
+                            self.temperature -= 1
+                        elif t.type == TowerType.TRIDENT:
+                            t.damage -= 25
+                            t.range -= TILE_SIZE // 2
+                            t.fire_rate = min(60, t.fire_rate + 6)
+                            t.lightning_damage -= 50
+                            self.temperature -= 1
+                        elif t.type == TowerType.WIND:
+                            t.wind_knockback -= 12
+                            if old_level >= 7:
+                                t.damage -= 20
+                                t.range -= TILE_SIZE // 2
+                            elif old_level == 6:
+                                t.damage -= 20
+                                t.range -= TILE_SIZE // 2
+                                t.fire_rate = min(60, t.fire_rate + 6)
+                            else:
+                                t.damage -= 5
+                                t.range -= TILE_SIZE // 4
+                                t.fire_rate = min(60, t.fire_rate + 6)
+                        elif t.type == TowerType.POISON:
+                            t.damage -= 15
+                            t.range -= TILE_SIZE // 2
+                            t.fire_rate = min(60, t.fire_rate + 6)
+                        if t.type == TowerType.PRODUCTION:
+                            if old_level >= 6: self.gold_per_wave -= 1
+                            if old_level >= 11: self.gold_profit_per_wave -= 0.01
+                        t.update_sprite()
+                    else:
+                        if t.type in (TowerType.FLAME, TowerType.TRIDENT):
+                            self.temperature -= 1
+                        destroyed.append(t)
+            for t in destroyed:
+                if self.selected_tower is t:
+                    self.selected_tower = None
+                t.kill()
             for enemy in self.enemies:
                 enemy.apply_poison(10)
         if self.weather == Weather.SCORCHING_SUN:
@@ -516,6 +549,20 @@ class Game:
         weather_color = WEATHER_CONFIG[self.weather]["color"]
         self.screen.blit(assets.font_medium.render(f"天气:{weather_name}  温度:{self.temperature}", True, weather_color), (1520, 16))
 
+        can_buy = self.state == GameState.PLAYING and not self.forecast_purchased
+        can_afford = self.coins >= 100 * self.wave_manager.current_wave
+        btn_color = FORECAST_BTN_COLOR if can_buy and can_afford else FORECAST_BTN_COLOR_DISABLED
+        pygame.draw.rect(self.screen, btn_color,
+                         (FORECAST_BTN_X, FORECAST_BTN_Y, FORECAST_BTN_WIDTH, FORECAST_BTN_HEIGHT))
+        if self.forecast_purchased and 0 <= self.forecast_weather_idx < len(self.weather_forecast):
+            w = self.weather_forecast[self.forecast_weather_idx]
+            label = f"天气预报:{WEATHER_CONFIG[w]['name']}"
+        else:
+            label = f"天气预报:花费{100*self.wave_manager.current_wave}金"
+        fc_color = WHITE if can_afford else GRAY
+        fc_text = assets.font_small.render(label, True, fc_color)
+        self.screen.blit(fc_text, (FORECAST_BTN_X + 20, FORECAST_BTN_Y + 10))
+
         pygame.draw.rect(self.screen, BLACK, (0, SCREEN_HEIGHT - 120, SCREEN_WIDTH, 120))
         pygame.draw.line(self.screen, WHITE, (0, SCREEN_HEIGHT - 120), (SCREEN_WIDTH, SCREEN_HEIGHT - 120), 4)
         self.screen.blit(assets.icon1, (40, SCREEN_HEIGHT - 100))
@@ -660,9 +707,9 @@ class Game:
         elif tower.type == TowerType.PRODUCTION:
             if tower.level >= 11:
                 info = [f"无尽矿 Lv{tower.level}", f"全局产量:{self.gold_per_second}/s",
-                        f"全局每波产出:{100 * self.gold_per_wave}", f"全局每波利息:{int(100 * self.gold_profit_per_wave)}%"]
+                        f"全局每波产出:{10 * self.gold_per_wave}*当前波数", f"全局每波利息:{int(100 * self.gold_profit_per_wave)}%"]
             elif tower.level >= 6:
-                info = [f"下界金矿 Lv{tower.level}", f"全局每波产出:{100 * self.gold_per_wave}",
+                info = [f"下界金矿 Lv{tower.level}", f"全局每波产出:{10 * self.gold_per_wave}*当前波数",
                         f"全局产量:{self.gold_per_second}/s"]
             else:
                 info = [f"金矿 Lv{tower.level}", f"全局产量:{self.gold_per_second}/s"]
@@ -675,7 +722,7 @@ class Game:
                 info = [f"冰球塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
                         f"攻击间隔:0.5s"]
             else:
-                info = [f"寒冰塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
+                info = [f"缓慢箭塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.TELEPORT:
             if tower.level >= 11:
                 info = [f"终望珍珠塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
@@ -772,6 +819,7 @@ class Game:
                 self.temperature += 1
 
     def start_game(self):
+        self.generate_weather_forecast()
         self.state = GameState.PLAYING
         self.wave_manager.start_new_wave()
         self.state = GameState.WAVE_PREPARATION
@@ -811,6 +859,9 @@ class Game:
         self.thunderstorm_timer = 0
         self.fog_timer = 0
         self.fog_visible = False
+        self.weather_forecast = []
+        self.forecast_purchased = False
+        self.forecast_weather_idx = -1
         self.start_game()
 
     def run(self):
