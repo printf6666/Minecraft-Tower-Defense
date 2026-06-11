@@ -94,6 +94,7 @@ class Weather(Enum):
     FOG = 10
     EXTREME_COLD = 11
     MAGNETIC_STORM = 12
+    FIRE_RAIN = 13
 
 
 WEATHER_CONFIG = {
@@ -110,6 +111,7 @@ WEATHER_CONFIG = {
     Weather.FOG: {"name": "迷雾", "temp": 15, "desc": "迷雾：视野遮挡", "color": (180, 180, 180)},
     Weather.EXTREME_COLD: {"name": "极寒", "temp": -20, "desc": "极寒：冻结时间翻倍，敌人移速-50%", "color": (100, 200, 255)},
     Weather.MAGNETIC_STORM: {"name": "磁暴", "temp": 20, "desc": "磁暴：闪电伤害翻倍，传送失效，金属敌人破甲", "color": (0, 255, 255)},
+    Weather.FIRE_RAIN: {"name": "火雨", "temp": 100, "desc": "火雨：敌人持续燃烧，无法冻结", "color": (255, 69, 0)},
 }
 
 ENEMY_TYPES = {

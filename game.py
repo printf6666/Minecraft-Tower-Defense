@@ -123,7 +123,7 @@ class Game:
                             self.forecast_weather_idx = self.wave_manager.current_wave
                             if self.forecast_weather_idx < len(self.weather_forecast):
                                 w = self.weather_forecast[self.forecast_weather_idx]
-                                self.weather_banner_text = f"下波天气: {WEATHER_CONFIG[w]['desc']}"
+                                self.weather_banner_text = f"下波天气：{WEATHER_CONFIG[w]['desc']}"
                                 self.weather_banner_timer = 120
 
             elif event.type == pygame.KEYDOWN:
@@ -218,6 +218,10 @@ class Game:
             return
         if self.state == GameState.PLAYING:
             self.game_time += 1
+            if self.pending_first_wave_weather and self.wave_manager.wave_timer <= 0:
+                self.select_weather()
+                self.weather_banner_timer = 180
+                self.pending_first_wave_weather = False
             self.global_production()
 
             for enemy in self.enemies:
@@ -320,7 +324,8 @@ class Game:
     def generate_weather_forecast(self):
         weathers = [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
                     Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.TAILWIND, Weather.HEADWIND,
-                    Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD, Weather.MAGNETIC_STORM]
+                    Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD, Weather.MAGNETIC_STORM,
+                    Weather.FIRE_RAIN]
         self.weather_forecast = [random.choice(weathers) for _ in range(self.wave_manager.total_waves)]
 
     def select_weather(self):
@@ -410,6 +415,10 @@ class Game:
             for enemy in self.enemies:
                 enemy.apply_poison(10)
         if self.weather == Weather.SCORCHING_SUN:
+            for enemy in self.enemies:
+                enemy.burn_damage = max(enemy.burn_damage, self.temperature)
+                enemy.burn_time = max(enemy.burn_time, 999999)
+        if self.weather == Weather.FIRE_RAIN:
             for enemy in self.enemies:
                 enemy.burn_damage = max(enemy.burn_damage, self.temperature)
                 enemy.burn_time = max(enemy.burn_time, 999999)
@@ -646,7 +655,7 @@ class Game:
         if self.weather_banner_timer <= 0:
             return
         alpha = min(255, self.weather_banner_timer * 2)
-        banner_w = 900
+        banner_w = 1200
         banner_h = 60
         banner_x = SCREEN_WIDTH // 2 - banner_w // 2
         banner_y = 200
@@ -820,8 +829,9 @@ class Game:
         self.generate_weather_forecast()
         self.state = GameState.PLAYING
         self.wave_manager.start_new_wave()
-        self.select_weather()
-        self.weather_banner_timer = 180
+        self.pending_first_wave_weather = True
+        self.weather_banner_text = "准备时间"
+        self.weather_banner_timer = 300
 
     def reset_game(self):
         self.path = random.choice(SEED_PATHS)
@@ -861,6 +871,7 @@ class Game:
         self.weather_forecast = []
         self.forecast_purchased = False
         self.forecast_weather_idx = -1
+        self.pending_first_wave_weather = False
         self.start_game()
 
     def run(self):

@@ -55,6 +55,9 @@ class Enemy(pygame.sprite.Sprite):
         if game.weather == Weather.SCORCHING_SUN:
             self.burn_damage = max(self.burn_damage, game.temperature)
             self.burn_time = max(self.burn_time, 999999)
+        if game.weather == Weather.FIRE_RAIN:
+            self.burn_damage = max(self.burn_damage, game.temperature)
+            self.burn_time = max(self.burn_time, 999999)
 
         self.poison_stacks = 0
         self.poison_timer = 0
@@ -98,6 +101,8 @@ class Enemy(pygame.sprite.Sprite):
         self.burn_time = duration
 
     def apply_freeze(self, duration):
+        if self.game.weather == Weather.FIRE_RAIN:
+            return
         effective = int(duration * (1.0 - self.freeze_resistance))
         self.freeze_time = max(self.freeze_time, effective)
         self.freeze_resistance = min(0.90, self.freeze_resistance + 0.10)
