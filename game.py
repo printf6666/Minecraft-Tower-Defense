@@ -1,10 +1,15 @@
 import pygame
 import random
+import json
 import assets
 from config import *
 from enemy import Enemy, DamageText
 from tower import Tower, Bullet, DragonBreathPool, LightningEffect, WindExplosion, IceExplosion, HorizontalLightningEffect, PoisonSplash
 from wave_manager import WaveManager
+
+
+with open("seed.json") as f:
+    SEED_PATHS = [[tuple(cell) for cell in path] for path in json.load(f)["seed_paths"]]
 
 
 class Game:
@@ -50,7 +55,7 @@ class Game:
         self.forecast_purchased = False
         self.forecast_weather_idx = -1
 
-        self.path = random.choice(PATH_LIST)
+        self.path = random.choice(SEED_PATHS)
         self.start_point = self.path[0]
         self.end_point = self.path[-1]
 
@@ -87,7 +92,7 @@ class Game:
                             import sys
                             sys.exit()
 
-                    elif self.state == GameState.PLAYING:
+                    elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION):
                         clicked_tower = self.get_tower_at(grid_x, grid_y)
                         if clicked_tower:
                             self.selected_tower = clicked_tower
@@ -293,25 +298,18 @@ class Game:
                 if self.wave_manager.is_game_complete(self.enemies):
                     self.state = GameState.VICTORY
                 else:
-                    self.state = GameState.WAVE_PREPARATION
                     self.forecast_purchased = False
                     self.wave_manager.start_new_wave()
+                    self.wave_manager.wave_timer = 0
+                    self.select_weather()
+                    self.weather_banner_timer = 180
             else:
                 enemy_type = self.wave_manager.update()
                 if enemy_type:
                     enemy = Enemy(self.path, enemy_type, self)
                     self.enemies.add(enemy)
 
-        elif self.state == GameState.WAVE_PREPARATION:
-            self.game_time += 1
-            self.wave_manager.update()
-            if self.wave_manager.is_preparation_complete():
-                self.state = GameState.PLAYING
-                self.select_weather()
-                self.weather_banner_timer = 180
-                if not pygame.mixer.music.get_busy():
-                    self.play_random_bgm()
-
+ 
     def generate_weather_forecast(self):
         weathers = [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
                     Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.TAILWIND, Weather.HEADWIND,
@@ -533,8 +531,6 @@ class Game:
             effect.draw(self.screen)
 
         self.draw_ui()
-        if self.state == GameState.WAVE_PREPARATION:
-            self.draw_wave_preparation()
         if self.state == GameState.PAUSED:
             self.draw_pause_overlay()
 
@@ -617,15 +613,6 @@ class Game:
                          (EXIT_BTN_X, EXIT_BTN_Y, EXIT_BTN_WIDTH, EXIT_BTN_HEIGHT))
         exit_text = assets.font_small.render("退出游戏", True, WHITE)
         self.screen.blit(exit_text, (EXIT_BTN_X + EXIT_BTN_WIDTH // 2 - exit_text.get_width() // 2, EXIT_BTN_Y + 10))
-
-    def draw_wave_preparation(self):
-        s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        s.fill((0, 0, 0, 160))
-        self.screen.blit(s, (0, 0))
-        self.screen.blit(assets.font_large.render(f"第 {self.wave_manager.current_wave} 波", True, WHITE),
-                         (SCREEN_WIDTH // 2 - 200, 500))
-        self.screen.blit(assets.font_medium.render(f"准备: {self.wave_manager.wave_timer // 60}s", True, WHITE),
-                         (SCREEN_WIDTH // 2 - 150, 620))
 
     def draw_weather_particles(self):
         for p in self.weather_particles:
@@ -826,10 +813,11 @@ class Game:
         self.generate_weather_forecast()
         self.state = GameState.PLAYING
         self.wave_manager.start_new_wave()
-        self.state = GameState.WAVE_PREPARATION
+        self.select_weather()
+        self.weather_banner_timer = 180
 
     def reset_game(self):
-        self.path = random.choice(PATH_LIST)
+        self.path = random.choice(SEED_PATHS)
         self.start_point = self.path[0]
         self.end_point = self.path[-1]
         self.enemies.empty()

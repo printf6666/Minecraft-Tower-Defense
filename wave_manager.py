@@ -10,7 +10,7 @@ class WaveManager:
         self.enemies_to_spawn = 0
         self.spawn_timer = 0
         self.spawn_delay = 40
-        self.wave_preparation_time = 300
+        self.wave_preparation_time = 360
         self.wave_timer = 0
         self.elite_wave_interval = 5
         self.boss_wave_interval = 10
