@@ -77,6 +77,7 @@ class EnemyType(Enum):
     ARMORED = 5
     SLIME = 6
     SLIMELING = 7
+    GOLD_ARMORED = 8
 
 
 class Weather(Enum):
@@ -92,6 +93,7 @@ class Weather(Enum):
     SCORCHING_SUN = 9
     FOG = 10
     EXTREME_COLD = 11
+    MAGNETIC_STORM = 12
 
 
 WEATHER_CONFIG = {
@@ -107,6 +109,7 @@ WEATHER_CONFIG = {
     Weather.SCORCHING_SUN: {"name": "烈日", "temp": 50, "desc": "烈日：温度极高，敌人全体燃烧", "color": (255, 200, 0)},
     Weather.FOG: {"name": "迷雾", "temp": 15, "desc": "迷雾：视野遮挡", "color": (180, 180, 180)},
     Weather.EXTREME_COLD: {"name": "极寒", "temp": -20, "desc": "极寒：冻结时间翻倍，敌人移速-50%", "color": (100, 200, 255)},
+    Weather.MAGNETIC_STORM: {"name": "磁暴", "temp": 20, "desc": "磁暴：闪电伤害翻倍，传送失效，金属敌人破甲", "color": (0, 255, 255)},
 }
 
 # 地图路径
@@ -197,5 +200,6 @@ ENEMY_TYPES = {
     "BOSS": {"image": "boss.png", "speed": 2, "health": 800, "reward": 100},
     "ARMORED": {"image": "armored.png", "speed": 1.2, "health": 250, "reward": 35},
     "SLIME": {"image": "slime.png", "speed": 2.0, "health": 180, "reward": 25},
-    "SLIMELING": {"image": "slime.png", "speed": 3.0, "health": 90, "reward": 10}
+    "SLIMELING": {"image": "slime.png", "speed": 3.0, "health": 90, "reward": 10},
+    "GOLD_ARMORED": {"image": "gold_armored.png", "speed": 1.2, "health": 250, "reward": 35},
 }

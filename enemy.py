@@ -60,10 +60,13 @@ class Enemy(pygame.sprite.Sprite):
         self.poison_timer = 0
         if game.weather == Weather.ACID_RAIN:
             self.poison_stacks = 10
+        if game.weather == Weather.MAGNETIC_STORM:
+            if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED):
+                self.broken = True
 
         self.image = assets.load_image(f"enemy/{config['image']}")
 
-        if enemy_key == "ARMORED":
+        if enemy_key == "ARMORED" or enemy_key == "GOLD_ARMORED":
             self.image = pygame.transform.scale(self.image, (100, 100))
         elif enemy_key == "SLIMELING":
             self.image = pygame.transform.scale(self.image, (64, 64))
@@ -199,7 +202,7 @@ class Enemy(pygame.sprite.Sprite):
         self.rect.center = (self.pos_x, self.pos_y)
 
     def apply_knockback(self, distance):
-        if self.enemy_type == EnemyType.ARMORED:
+        if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED):
             return
         if self.path_index <= 0:
             return
@@ -235,7 +238,7 @@ class Enemy(pygame.sprite.Sprite):
             return 0
 
         final_dmg = damage
-        if self.enemy_type == EnemyType.ARMORED and not self.broken:
+        if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED) and not self.broken:
             final_dmg *= 0.3
         if self.broken:
             final_dmg *= 1.2

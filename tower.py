@@ -274,6 +274,8 @@ class Bullet(pygame.sprite.Sprite):
             if self.tower_level >= 6:
                 gold_bonus = int(self.game.coins * 0.01)
                 ldmg += gold_bonus
+        if self.game.weather == Weather.MAGNETIC_STORM:
+            ldmg *= 2
         return int(ldmg)
 
     def update(self):
@@ -320,11 +322,9 @@ class Bullet(pygame.sprite.Sprite):
             hp_bonus = int(enemy.max_health * hp_ratios.get(self.tower_level, 0))
             final_dmg += hp_bonus
 
-        if self.tower_type == TowerType.TRIDENT and self.tower_level >= 11:
-            if self.tower_level >= 15:
-                final_dmg *= 3
-            else:
-                final_dmg *= 2
+        if enemy.enemy_type == EnemyType.GOLD_ARMORED and self.tower_level >= 6:
+            if self.tower_type in (TowerType.PHYSICAL, TowerType.TRIDENT):
+                final_dmg = self.damage
 
         if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11 and self.execute_threshold > 0:
             threshold_ratio = self.execute_threshold / 100.0
@@ -358,7 +358,7 @@ class Bullet(pygame.sprite.Sprite):
                 exp = IceExplosion(enemy.rect.centerx, enemy.rect.centery, self.damage, freeze_frames_for_exp, self.game)
                 self.game.ice_explosions.append(exp)
         if self.tower_type == TowerType.TELEPORT:
-            if random.random() < self.teleport_chance:
+            if self.game.weather != Weather.MAGNETIC_STORM and random.random() < self.teleport_chance:
                 enemy.teleport_to_start()
             if random.random() < self.oneshot_chance:
                 reward = enemy.take_damage(9999999, color=RED, scale=1.2)
@@ -378,10 +378,14 @@ class Bullet(pygame.sprite.Sprite):
         if self.tower_type == TowerType.TRIDENT:
             col = enemy.rect.centerx // TILE_SIZE
             lightning_dmg = self.calculate_lightning_damage()
+            gold_bonus = int(self.game.coins * 0.01) if self.tower_level >= 6 else 0
             for e in self.game.enemies:
                 e_col = e.rect.centerx // TILE_SIZE
                 if e_col == col and e.health > 0:
-                    reward = e.take_damage(lightning_dmg, color=GOLD)
+                    dmg = lightning_dmg
+                    if e.enemy_type == EnemyType.GOLD_ARMORED:
+                        dmg = self.lightning_damage
+                    reward = e.take_damage(dmg, color=GOLD)
                     self.game.coins += reward
                     e.apply_burn(self.game.temperature, 240)
             is_golden = self.tower_level >= 6
@@ -392,14 +396,17 @@ class Bullet(pygame.sprite.Sprite):
                 for e in self.game.enemies:
                     e_row = e.rect.centery // TILE_SIZE
                     if e_row == row and e.health > 0:
-                        reward = e.take_damage(h_lightning_dmg, color=GOLD)
+                        dmg = h_lightning_dmg
+                        if e.enemy_type == EnemyType.GOLD_ARMORED:
+                            dmg = self.lightning_damage
+                        reward = e.take_damage(dmg, color=GOLD)
                         self.game.coins += reward
                 h_effect = HorizontalLightningEffect(1024, row * TILE_SIZE + TILE_SIZE // 2, not is_golden)
                 self.game.horizontal_lightning_effects.append(h_effect)
         if self.tower_type == TowerType.WIND:
             if self.source_tower:
                 enemy.apply_knockback(self.source_tower.wind_knockback)
-                if self.tower_level >= 6 and enemy.enemy_type != EnemyType.ARMORED:
+                if self.tower_level >= 6 and enemy.enemy_type not in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED):
                     enemy.wind_mark_tower = self.source_tower
                 if self.tower_level >= 11:
                     stun_frames = {11: 6, 12: 12, 13: 18, 14: 24, 15: 30}

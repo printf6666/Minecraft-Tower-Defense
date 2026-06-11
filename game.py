@@ -315,7 +315,7 @@ class Game:
     def generate_weather_forecast(self):
         weathers = [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
                     Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.TAILWIND, Weather.HEADWIND,
-                    Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD]
+                    Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD, Weather.MAGNETIC_STORM]
         self.weather_forecast = [random.choice(weathers) for _ in range(self.wave_manager.total_waves)]
 
     def select_weather(self):
@@ -411,6 +411,10 @@ class Game:
         if self.weather == Weather.FOG:
             self.fog_visible = False
             self.fog_timer = 180
+        if self.weather == Weather.MAGNETIC_STORM:
+            for enemy in self.enemies:
+                if enemy.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED):
+                    enemy.broken = True
 
     def play_random_bgm(self):
         if not assets.bgm_files:
