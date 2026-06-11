@@ -1,6 +1,8 @@
 import pygame
 import random
 import json
+import sys
+import os
 import assets
 from config import *
 from enemy import Enemy, DamageText
@@ -8,7 +10,12 @@ from tower import Tower, Bullet, DragonBreathPool, LightningEffect, WindExplosio
 from wave_manager import WaveManager
 
 
-with open("seed.json") as f:
+def resource_path(relative_path):
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
+
+with open(resource_path("seed.json")) as f:
     SEED_PATHS = [[tuple(cell) for cell in path] for path in json.load(f)["seed_paths"]]
 
 
