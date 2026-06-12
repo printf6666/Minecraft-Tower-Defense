@@ -1,5 +1,6 @@
 import pygame
 import random
+import math
 import json
 import sys
 import os
@@ -478,6 +479,15 @@ class Game:
                 drift = random.uniform(-0.5, 0.5)
                 size = random.randint(2, 5)
                 self.weather_particles.append([x, y, speed, drift, size, "snow"])
+        elif self.weather == Weather.FIRE_RAIN:
+            if random.random() < 0.3:
+                x = random.randint(0, SCREEN_WIDTH)
+                y = random.randint(SCREEN_HEIGHT, SCREEN_HEIGHT + 40)
+                speed = random.uniform(1, 3)
+                drift = random.uniform(-0.3, 0.3)
+                size = random.randint(4, 10)
+                phase = random.uniform(0, 6.28)
+                self.weather_particles.append([x, y, speed, drift, size, phase, "fire"])
 
         for p in self.weather_particles[:]:
             if p[-1] in ("rain", "acid_rain"):
@@ -488,6 +498,12 @@ class Game:
                 p[1] += p[2]
                 p[0] += p[3]
                 if p[1] > SCREEN_HEIGHT or p[0] < 0 or p[0] > SCREEN_WIDTH:
+                    self.weather_particles.remove(p)
+            elif p[-1] == "fire":
+                p[1] -= p[2]
+                p[0] += p[3]
+                p[5] += 0.1
+                if p[1] < -40:
                     self.weather_particles.remove(p)
 
     def draw(self):
@@ -669,6 +685,17 @@ class Game:
                 s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
                 pygame.draw.circle(s, color, (size, size), size)
                 self.screen.blit(s, (int(x) - size, int(y) - size))
+            elif p[-1] == "fire":
+                x, y, _, _, size, phase = p[0], p[1], p[2], p[3], p[4], p[5]
+                flicker = int(30 * (0.5 + 0.5 * math.sin(phase)))
+                r = min(255, 200 + flicker)
+                g = max(0, min(200, 150 - flicker))
+                alpha = min(200, 120 + flicker)
+                color = (r, g, 0, alpha)
+                s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+                pygame.draw.circle(s, color, (size, size), size)
+                pygame.draw.circle(s, (255, 255, 100, alpha // 2), (size, size), size // 2)
+                self.screen.blit(s, (int(x) - size, int(y) - size))
 
     def draw_weather_banner(self):
         if self.weather_banner_timer <= 0:
@@ -762,7 +789,7 @@ class Game:
                         f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.FLAME:
             if tower.level >= 11:
-                dmg_mult = (tower.level - 10) ** 2
+                dmg_mult = (tower.level - 10) * 10
                 info = [f"龙息塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{self.temperature}/s,持续4s",
                         f"龙息:{dmg_mult}倍温度/s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
             elif tower.level >= 6:
@@ -773,10 +800,8 @@ class Game:
                         f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.TRIDENT:
             if tower.level >= 11:
-                mult_text = "3倍" if tower.level >= 15 else "2倍"
                 info = [f"海神三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
-                        f"将当前金币的1%作为伤害加成", f"伤害倍率:{mult_text}",
-                        f"攻击施放十字闪电", f"攻击间隔:0.5s"]
+                        f"将当前金币的1%作为伤害加成", f"攻击施放十字闪电", f"攻击间隔:0.5s"]
             elif tower.level >= 6:
                 info = [f"黄金三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
                         f"将当前金币的1%作为伤害加成", f"攻击间隔:0.5s"]
