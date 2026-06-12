@@ -21,11 +21,11 @@ def grid_to_path(grid):
     if not cells:
         return []
     neigh = {c: [(c[0]+dx, c[1]+dy) for dx, dy in ((1,0),(-1,0),(0,1),(0,-1)) if (c[0]+dx, c[1]+dy) in cells] for c in cells}
-    ends = [c for c, n in neigh.items() if len(n) == 1]
-    start = ends[0] if ends else min(cells)
+    start = (0, 0)
+    end = (15, 9)
     path = [start]
     visited = {start}
-    while True:
+    while path[-1] != end:
         cur = path[-1]
         nxt = [c for c in neigh[cur] if c not in visited]
         if not nxt:
