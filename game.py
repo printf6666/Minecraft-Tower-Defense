@@ -850,7 +850,7 @@ class Game:
         self.wave_manager.start_new_wave()
         self.pending_first_wave_weather = True
         self.weather_banner_text = "准备时间"
-        self.weather_banner_timer = 300
+        self.weather_banner_timer = 240
 
     def reset_game(self):
         self.path = random.choice(SEED_PATHS)
