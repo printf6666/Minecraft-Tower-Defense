@@ -15,8 +15,27 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
+def grid_to_path(grid):
+    cells = {(x, y) for y, row in enumerate(grid) for x, v in enumerate(row) if v}
+    if not cells:
+        return []
+    neigh = {c: [(c[0]+dx, c[1]+dy) for dx, dy in ((1,0),(-1,0),(0,1),(0,-1)) if (c[0]+dx, c[1]+dy) in cells] for c in cells}
+    ends = [c for c, n in neigh.items() if len(n) == 1]
+    start = ends[0] if ends else min(cells)
+    path = [start]
+    visited = {start}
+    while True:
+        cur = path[-1]
+        nxt = [c for c in neigh[cur] if c not in visited]
+        if not nxt:
+            break
+        path.append(nxt[0])
+        visited.add(nxt[0])
+    return [(x, y + 1) for (x, y) in path]
+
+
 with open(resource_path("seed.json")) as f:
-    SEED_PATHS = [[tuple(cell) for cell in path] for path in json.load(f)["seed_paths"]]
+    SEED_PATHS = [grid_to_path(grid) for grid in json.load(f)["seed_paths"]]
 
 
 class Game:
@@ -178,18 +197,18 @@ class Game:
                     self.selected_tower.kill()
                     self.selected_tower = None
                 elif event.key == pygame.K_ESCAPE:
-                    self.selected_tower = None
-                    self.selected_tower_type = None
-                    self.show_range = False
-                elif event.key == pygame.K_F11:
-                    pygame.display.toggle_fullscreen()
-                elif event.key == pygame.K_p:
                     if self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION):
                         self.pre_pause_state = self.state
                         self.state = GameState.PAUSED
                     elif self.state == GameState.PAUSED:
                         self.state = self.pre_pause_state
                         self.pre_pause_state = None
+                    else:
+                        self.selected_tower = None
+                        self.selected_tower_type = None
+                        self.show_range = False
+                elif event.key == pygame.K_F11:
+                    pygame.display.toggle_fullscreen()
 
     def global_production(self):
         current_time = pygame.time.get_ticks()
@@ -492,7 +511,7 @@ class Game:
         pygame.draw.rect(self.screen, RED, (900, 1020, 760, 80))
         exit_text = assets.font_medium.render("退出游戏", True, WHITE)
         self.screen.blit(exit_text, (1200, 1035))
-        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6/7/8键选择炮塔", "3. U升级 S出售 P暂停"]
+        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6/7/8键选择炮塔", "3. U升级 S出售 ESC暂停"]
         for i, text in enumerate(instructions):
             text_surface = assets.font_small.render(text, True, WHITE)
             self.screen.blit(text_surface, (900, 1200 + i * 50))
@@ -671,7 +690,7 @@ class Game:
         overlay.fill((0, 0, 0, 128))
         self.screen.blit(overlay, (0, 0))
         pause_text = assets.font_large.render("已暂停", True, WHITE)
-        continue_text = assets.font_small.render("按 P 继续", True, WHITE)
+        continue_text = assets.font_small.render("按 ESC 继续", True, WHITE)
         self.screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
         self.screen.blit(continue_text, (SCREEN_WIDTH // 2 - continue_text.get_width() // 2, SCREEN_HEIGHT // 2 + 20))
 
