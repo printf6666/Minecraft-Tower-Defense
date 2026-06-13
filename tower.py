@@ -800,7 +800,7 @@ class MushroomExplosion:
         if assets.explode_sound:
             assets.explode_sound.play()
 
-        final_damage = damage * (tower_level - 7)
+        final_damage = (tower_level - 10) * 10000
         for enemy in game.enemies:
             if enemy.health <= 0:
                 continue
