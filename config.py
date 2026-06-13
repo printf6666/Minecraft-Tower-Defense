@@ -66,6 +66,14 @@ class TowerType(Enum):
     TRIDENT = 5
     WIND = 6
     POISON = 7
+    BOMB = 8
+
+
+class BombSubType(Enum):
+    SNOW = 0
+    ICE = 1
+    FLAME = 2
+    POISON = 3
 
 
 class EnemyType(Enum):

@@ -29,6 +29,11 @@ font_small = None
 font_tower_level = None
 font_damage = None
 
+tower_icons = []
+
+tnt_explosion_frames = []
+contaminated_img = None
+
 icon1 = None
 icon2 = None
 icon3 = None
@@ -62,12 +67,13 @@ house_img = None
 
 def init_assets():
     global font_large, font_medium, font_small, font_tower_level, font_damage
-    global icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, buff_icons
+    global icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, tower_icons, buff_icons
     global gold_img, heart_img, clock_img
     global white_lightning_frames, golden_lightning_frames
     global white_lightning_h_frames, golden_lightning_h_frames
     global bgm_files, bgm_index
     global stone_img, dirt_img, start_img, house_img
+    global tnt_explosion_frames, contaminated_img
 
     try:
         font_large = pygame.font.Font(resource_path("font/Minecraft.ttf"), 60)
@@ -85,15 +91,28 @@ def init_assets():
     except:
         font_damage = font_small
 
-    icon_size = 80
-    icon1 = load_image("tower/1.png", (icon_size, icon_size))
-    icon2 = load_image("tower/2.png", (icon_size, icon_size))
-    icon3 = load_image("tower/3.png", (icon_size, icon_size))
-    icon4 = load_image("tower/4.png", (icon_size, icon_size))
-    icon5 = load_image("tower/5.png", (icon_size, icon_size))
-    icon6 = load_image("tower/6.png", (icon_size, icon_size))
-    icon7 = load_image("tower/7.png", (icon_size, icon_size))
-    icon8 = load_image("tower/8.png", (icon_size, icon_size))
+    icon_size = 100
+    tower_icons.clear()
+    for i in range(1, 10):
+        try:
+            tower_icons.append(load_image(f"tower/{i}.png", (icon_size, icon_size)))
+        except:
+            tower_icons.append(pygame.Surface((icon_size, icon_size)))
+    icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9 = tower_icons
+
+    global tnt_explosion_frames
+    tnt_explosion_frames.clear()
+    for i in range(1, 6):
+        try:
+            tnt_explosion_frames.append(load_image(f"tower/tnt{i}.png", (350, 350)))
+        except:
+            tnt_explosion_frames.append(pygame.Surface((350, 350)))
+
+    global contaminated_img
+    try:
+        contaminated_img = load_image("debuff/contaminated.png", (BUFF_SIZE, BUFF_SIZE))
+    except:
+        contaminated_img = pygame.Surface((BUFF_SIZE, BUFF_SIZE))
 
     gold_img = load_image("tower/gold.png", (64, 64))
     heart_img = load_image("tower/heart.png", (48, 48))
@@ -107,6 +126,7 @@ def init_assets():
     buff_icons["poison"] = load_image("debuff/poison.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["wind"] = load_image("debuff/wind.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["speed"] = load_image("debuff/speed.png", (BUFF_SIZE, BUFF_SIZE))
+    buff_icons["contaminated"] = contaminated_img
 
     try:
         sheet = load_image("tower/white_lightning.png")

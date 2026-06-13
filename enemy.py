@@ -28,6 +28,8 @@ class Enemy(pygame.sprite.Sprite):
         self.burn_damage = 0
         self.broken = False
         self.wind_mark_tower = None
+        self.contaminated = False
+        self.contaminated_timer = 0
 
         self.weather_slowed = False
         self.freeze_resistance = 0.0
@@ -119,6 +121,9 @@ class Enemy(pygame.sprite.Sprite):
             stacks *= 2
         self.poison_stacks += stacks
 
+    def apply_contaminate(self):
+        self.contaminated = True
+
     def update(self):
         if self.health <= 0:
             return False
@@ -149,6 +154,14 @@ class Enemy(pygame.sprite.Sprite):
             if self.poison_timer >= 75:
                 self.poison_timer = 0
                 reward = self.take_damage(self.poison_stacks, color=GREEN, scale=1.0)
+                self.game.coins += reward
+
+        if self.contaminated:
+            self.contaminated_timer += 1
+            if self.contaminated_timer >= 120:
+                self.contaminated_timer = 0
+                dmg = int(self.max_health * 0.01)
+                reward = self.take_damage(dmg, color=(0, 255, 100), scale=1.0)
                 self.game.coins += reward
 
         if self.health <= 0:
@@ -197,6 +210,8 @@ class Enemy(pygame.sprite.Sprite):
             buff_list.append("wind")
         if self.tailwind_boosted:
             buff_list.append("speed")
+        if self.contaminated:
+            buff_list.append("contaminated")
         return buff_list
 
     def teleport_to_start(self):

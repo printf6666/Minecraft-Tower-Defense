@@ -90,6 +90,13 @@ class Tower(pygame.sprite.Sprite):
             self.fire_rate = 60
             self.cost = 175
             self.upgrade_cost = int(175 * 1.5)
+        elif self.type == TowerType.BOMB:
+            self.range = TILE_SIZE * 2
+            self.damage = 100
+            self.fire_rate = 120
+            self.cost = 500
+            self.upgrade_cost = 750
+            self.bomb_subtype = BombSubType.SNOW
 
     def upgrade(self):
         if self.level >= 15:
@@ -140,18 +147,29 @@ class Tower(pygame.sprite.Sprite):
             self.damage += 15
             self.range += TILE_SIZE // 2
             self.fire_rate = max(30, self.fire_rate - 6)
+        elif self.type == TowerType.BOMB:
+            self.damage += 100
+            self.fire_rate = 120
 
         self.update_sprite()
 
     def update_sprite(self):
-        prefix = str(self.type.value + 1)
-        if self.level >= 11:
-            img = f"tower/{prefix}{prefix}{prefix}.png"
-        elif self.level >= 6:
-            img = f"tower/{prefix}{prefix}.png"
+        if self.type == TowerType.BOMB:
+            if self.level >= 11:
+                img = "tower/999.png"
+            elif self.level >= 6:
+                sub_map = {BombSubType.SNOW: "91", BombSubType.ICE: "92", BombSubType.FLAME: "93", BombSubType.POISON: "94"}
+                img = f"tower/{sub_map[self.bomb_subtype]}.png"
+            else:
+                img = "tower/9.png"
         else:
-            img = f"tower/{prefix}.png"
-
+            prefix = str(self.type.value + 1)
+            if self.level >= 11:
+                img = f"tower/{prefix}{prefix}{prefix}.png"
+            elif self.level >= 6:
+                img = f"tower/{prefix}{prefix}.png"
+            else:
+                img = f"tower/{prefix}.png"
         self.image = assets.load_image(img, (TILE_SIZE, TILE_SIZE))
         self.rect = self.image.get_rect()
         self.rect.topleft = (self.x * TILE_SIZE, self.y * TILE_SIZE)
@@ -171,6 +189,20 @@ class Tower(pygame.sprite.Sprite):
         if not self.can_attack(current_time):
             return []
         self.last_shot = current_time
+
+        if self.type == TowerType.BOMB:
+            directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            bullets = []
+            for dx, dy in directions:
+                bullet = BombBullet(
+                    self.rect.centerx, self.rect.centery,
+                    dx, dy, self.get_effective_range(),
+                    self.damage, self.level,
+                    self.bomb_subtype if self.level < 11 else None,
+                    self.game)
+                bullets.append(bullet)
+            return bullets
+            return []
 
         directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
         bullets = []
@@ -314,7 +346,7 @@ class Bullet(pygame.sprite.Sprite):
         final_dmg = self.calculate_final_damage()
 
         if self.tower_type == TowerType.ICE and self.tower_level >= 11 and enemy.freeze_time > 0:
-            bonus = 300 + 150 * (self.tower_level - 11)
+            bonus = int(self.game.temperature * 3 * (self.tower_level - 10))
             final_dmg += bonus
 
         if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11:
@@ -589,3 +621,120 @@ class PoisonSplash:
         s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
         pygame.draw.circle(s, (0, 255, 0, alpha), (self.radius, self.radius), self.radius)
         screen.blit(s, (self.x - self.radius, self.y - self.radius))
+
+
+class BombBullet(pygame.sprite.Sprite):
+    def __init__(self, x, y, dx, dy, max_distance, damage, tower_level, bomb_subtype, game):
+        super().__init__()
+        self.x = x
+        self.y = y
+        self.dx = dx
+        self.dy = dy
+        self.speed = 12
+        self.max_distance = max_distance
+        self.traveled = 0
+        self.damage = damage
+        self.tower_level = tower_level
+        self.bomb_subtype = bomb_subtype
+        self.game = game
+        self.enemies = game.enemies
+
+        if tower_level >= 11:
+            img = "tower/999.png"
+        elif tower_level >= 6:
+            sub_map = {BombSubType.SNOW: "91", BombSubType.ICE: "92", BombSubType.FLAME: "93", BombSubType.POISON: "94"}
+            img = f"tower/{sub_map[bomb_subtype]}.png"
+        else:
+            img = "tower/9.png"
+        self.raw_img = assets.load_image(img, (TILE_SIZE // 2, TILE_SIZE // 2))
+
+        if self.dx == 1 and self.dy == 0:
+            rotate_angle = -45
+        elif self.dx == 0 and self.dy == -1:
+            rotate_angle = -315
+        elif self.dx == -1 and self.dy == 0:
+            rotate_angle = -225
+        elif self.dx == 0 and self.dy == 1:
+            rotate_angle = -135
+        else:
+            rotate_angle = 0
+
+        self.image = pygame.transform.rotate(self.raw_img, rotate_angle)
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self):
+        self.x += self.dx * self.speed
+        self.y += self.dy * self.speed
+        self.traveled += self.speed
+        self.rect.center = (self.x, self.y)
+
+        if self.traveled >= self.max_distance:
+            self.kill()
+            return
+
+        for enemy in self.enemies:
+            if self.rect.colliderect(enemy.rect):
+                self.explode()
+                self.kill()
+                return
+
+    def explode(self):
+        explosion = TNTExplosion(self.rect.centerx, self.rect.centery,
+                                 self.damage, self.tower_level, self.bomb_subtype, self.game)
+        self.game.tnt_explosions.append(explosion)
+
+
+class TNTExplosion:
+    def __init__(self, x, y, damage, tower_level, bomb_subtype, game):
+        self.x = x
+        self.y = y
+        self.damage = damage
+        self.tower_level = tower_level
+        self.bomb_subtype = bomb_subtype
+        self.game = game
+        self.frame = 0
+        self.frame_timer = 0
+        self.frame_duration = 6
+        self.max_frames = 5
+        self.done = False
+
+        radius_px = TILE_SIZE * 2
+        for enemy in game.enemies:
+            if enemy.health <= 0:
+                continue
+            dx = enemy.rect.centerx - x
+            dy = enemy.rect.centery - y
+            if (dx * dx + dy * dy) <= radius_px * radius_px:
+                reward = enemy.take_damage(damage, color=RED, scale=1.0)
+                game.coins += reward
+                if tower_level >= 11:
+                    enemy.apply_stun(int({11: 66, 12: 72, 13: 78, 14: 84, 15: 90}.get(tower_level, 66)))
+                    enemy.apply_contaminate()
+                elif bomb_subtype is not None:
+                    if bomb_subtype == BombSubType.SNOW:
+                        enemy.apply_slow(0.5, 720)
+                    elif bomb_subtype == BombSubType.ICE:
+                        freeze_s = {6: 0.6, 7: 0.7, 8: 0.8, 9: 0.9, 10: 1.0}
+                        enemy.apply_freeze(int(freeze_s.get(tower_level, 0.6) * 60))
+                    elif bomb_subtype == BombSubType.FLAME:
+                        enemy.apply_burn(game.temperature, 480)
+                    elif bomb_subtype == BombSubType.POISON:
+                        stacks = {6: 12, 7: 14, 8: 16, 9: 18, 10: 20}
+                        enemy.apply_poison(stacks.get(tower_level, 12))
+
+    def update(self):
+        if self.done:
+            return
+        self.frame_timer += 1
+        if self.frame_timer >= self.frame_duration:
+            self.frame_timer = 0
+            self.frame += 1
+            if self.frame >= self.max_frames:
+                self.done = True
+
+    def draw(self, screen):
+        if self.done or self.frame >= len(assets.tnt_explosion_frames):
+            return
+        img = assets.tnt_explosion_frames[self.frame]
+        rect = img.get_rect(center=(self.x, self.y))
+        screen.blit(img, rect)
