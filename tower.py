@@ -158,7 +158,7 @@ class Tower(pygame.sprite.Sprite):
             if self.level >= 11:
                 self.is_nuclear = True
                 self.range = 0
-                self.fire_rate = 600
+                self.fire_rate = 1200
 
         self.update_sprite()
 
@@ -369,7 +369,7 @@ class Bullet(pygame.sprite.Sprite):
             hp_bonus = int(enemy.max_health * hp_ratios.get(self.tower_level, 0))
             final_dmg += hp_bonus
 
-        if enemy.enemy_type == EnemyType.GOLD_ARMORED and self.tower_level >= 6:
+        if enemy.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.ENDLESS_ARMORED) and self.tower_level >= 6:
             if self.tower_type in (TowerType.PHYSICAL, TowerType.TRIDENT):
                 final_dmg = self.damage
 
@@ -430,7 +430,7 @@ class Bullet(pygame.sprite.Sprite):
                 e_col = e.rect.centerx // TILE_SIZE
                 if e_col == col and e.health > 0:
                     dmg = lightning_dmg
-                    if e.enemy_type == EnemyType.GOLD_ARMORED:
+                    if e.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.ENDLESS_ARMORED):
                         dmg = self.lightning_damage
                     reward = e.take_damage(dmg, color=GOLD)
                     self.game.coins += reward
@@ -444,7 +444,7 @@ class Bullet(pygame.sprite.Sprite):
                     e_row = e.rect.centery // TILE_SIZE
                     if e_row == row and e.health > 0:
                         dmg = h_lightning_dmg
-                        if e.enemy_type == EnemyType.GOLD_ARMORED:
+                        if e.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.ENDLESS_ARMORED):
                             dmg = self.lightning_damage
                         reward = e.take_damage(dmg, color=GOLD)
                         self.game.coins += reward
@@ -453,7 +453,7 @@ class Bullet(pygame.sprite.Sprite):
         if self.tower_type == TowerType.WIND:
             if self.source_tower:
                 enemy.apply_knockback(self.source_tower.wind_knockback)
-                if self.tower_level >= 6 and enemy.enemy_type not in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED):
+                if self.tower_level >= 6 and enemy.enemy_type not in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED):
                     enemy.wind_mark_tower = self.source_tower
                 if self.tower_level >= 11:
                     stun_frames = {11: 6, 12: 12, 13: 18, 14: 24, 15: 30}
@@ -800,7 +800,7 @@ class MushroomExplosion:
         if assets.explode_sound:
             assets.explode_sound.play()
 
-        final_damage = (tower_level - 10) * 10000
+        final_damage = (20000 + 100 * game.temperature) * (tower_level - 10)
         for enemy in game.enemies:
             if enemy.health <= 0:
                 continue

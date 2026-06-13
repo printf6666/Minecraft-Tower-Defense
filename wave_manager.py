@@ -79,6 +79,10 @@ class WaveManager:
             return EnemyType.SLIME
         elif self.current_wave > 8 and rand < 0.15:
             return EnemyType.ARMORED
+        elif self.current_wave > 8 and rand < 0.08:
+            return EnemyType.DIAMOND_ARMORED
+        elif self.current_wave > 8 and rand < 0.02:
+            return EnemyType.ENDLESS_ARMORED
         elif self.current_wave > 10 and rand < 0.2:
             return EnemyType.TANK
         elif self.current_wave > 5 and rand < 0.3:

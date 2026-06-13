@@ -462,7 +462,7 @@ class Game:
             self.fog_timer = 180
         if self.weather == Weather.MAGNETIC_STORM:
             for enemy in self.enemies:
-                if enemy.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED):
+                if enemy.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED):
                     enemy.broken = True
 
     def play_random_bgm(self):
@@ -766,7 +766,7 @@ class Game:
                 info = [f"无尽矿 Lv{tower.level}", f"全局产量:{self.gold_per_second}/s",
                         f"全局每波产出:{8 * self.gold_per_wave}*当前波数", f"全局每波利息:{int(100 * self.gold_profit_per_wave)}%"]
             elif tower.level >= 6:
-                info = [f"下界金矿 Lv{tower.level}", f"全局每波产出:{10 * self.gold_per_wave}*当前波数",
+                info = [f"下界合金矿 Lv{tower.level}", f"全局每波产出:{8 * self.gold_per_wave}*当前波数",
                         f"全局产量:{self.gold_per_second}/s"]
             else:
                 info = [f"金矿 Lv{tower.level}", f"全局产量:{self.gold_per_second}/s"]
@@ -838,8 +838,10 @@ class Game:
         elif tower.type == TowerType.BOMB:
             if tower.level >= 11:
                 mult = tower.level - 7
-                info = [f"核弹塔 Lv{tower.level}", f"伤害:{(tower.level - 10) * 10000}",
-                        f"击晕:2s", f"中毒:{tower.level * 10}层", f"射程:全屏", f"攻击间隔:10s"]
+                dmg = (20000 + 100 * self.temperature) * (tower.level - 10)
+                info = [f"核弹塔 Lv{tower.level}", f"伤害:{dmg}(受温度影响)",
+                        f"击晕:2s", f"中毒:{tower.level * 10}层",
+                        f"射程:全屏", f"攻击间隔:20s"]
             elif tower.level >= 6:
                 sub_names = {BombSubType.SNOW: "雪TNT", BombSubType.ICE: "冰TNT",
                              BombSubType.FLAME: "火焰TNT", BombSubType.POISON: "毒TNT"}

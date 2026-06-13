@@ -66,14 +66,16 @@ class Enemy(pygame.sprite.Sprite):
         if game.weather == Weather.ACID_RAIN:
             self.poison_stacks = 10
         if game.weather == Weather.MAGNETIC_STORM:
-            if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED):
+            if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED):
                 self.broken = True
 
         self.image = assets.load_image(f"enemy/{config['image']}")
 
         if enemy_key == "GHOST":
             self.image = pygame.transform.scale(self.image, (200, 200))
-        elif enemy_key == "ARMORED" or enemy_key == "GOLD_ARMORED":
+        elif enemy_key == "BOSS":
+            self.image = pygame.transform.scale(self.image, (256, 256))
+        elif enemy_key in ("ARMORED", "GOLD_ARMORED", "DIAMOND_ARMORED", "ENDLESS_ARMORED"):
             self.image = pygame.transform.scale(self.image, (100, 100))
         elif enemy_key == "SLIMELING":
             self.image = pygame.transform.scale(self.image, (64, 64))
@@ -90,7 +92,7 @@ class Enemy(pygame.sprite.Sprite):
         self.pos_y = start_y * TILE_SIZE + TILE_SIZE // 2
         self.rect.center = (self.pos_x, self.pos_y)
 
-        if self.enemy_type == EnemyType.GHOST:
+        if self.enemy_type in (EnemyType.GHOST, EnemyType.BOSS):
             ex, ey = self.path[-1]
             self.ghost_target = (ex * TILE_SIZE + TILE_SIZE // 2, ey * TILE_SIZE + TILE_SIZE // 2)
 
@@ -174,13 +176,13 @@ class Enemy(pygame.sprite.Sprite):
             self.kill()
             return False
 
-        if self.enemy_type == EnemyType.GHOST:
+        if self.enemy_type in (EnemyType.GHOST, EnemyType.BOSS):
             tx, ty = self.ghost_target
             dx = tx - self.pos_x
             dy = ty - self.pos_y
             dist = (dx * dx + dy * dy) ** 0.5
             if dist < self.speed:
-                self.game.lives -= 4
+                self.game.lives -= 4 if self.enemy_type == EnemyType.GHOST else 8
                 self.kill()
                 return True
             self.pos_x += (dx / dist) * self.speed
@@ -242,7 +244,7 @@ class Enemy(pygame.sprite.Sprite):
         self.rect.center = (self.pos_x, self.pos_y)
 
     def apply_knockback(self, distance):
-        if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED):
+        if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED):
             return
         if self.path_index <= 0:
             return
@@ -279,7 +281,9 @@ class Enemy(pygame.sprite.Sprite):
 
         final_dmg = damage
         if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED) and not self.broken:
-            final_dmg *= 0.3
+            final_dmg *= 0.4
+        if self.enemy_type in (EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED) and not self.broken:
+            final_dmg *= 0.2
         if self.broken:
             final_dmg *= 1.2
         final_dmg = int(final_dmg)
