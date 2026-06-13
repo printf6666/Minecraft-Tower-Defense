@@ -838,9 +838,8 @@ class Game:
         elif tower.type == TowerType.BOMB:
             if tower.level >= 11:
                 mult = tower.level - 7
-                info = [f"核弹塔 Lv{tower.level}", f"伤害:{tower.damage}*{mult}={tower.damage * mult}",
-                        f"击晕:2s", f"中毒:{tower.level * 10}层",
-                        f"射程:全屏", f"攻击间隔:10s"]
+                info = [f"核弹塔 Lv{tower.level}", f"伤害:{(tower.level - 10) * 10000}",
+                        f"击晕:2s", f"中毒:{tower.level * 10}层", f"射程:全屏", f"攻击间隔:10s"]
             elif tower.level >= 6:
                 sub_names = {BombSubType.SNOW: "雪TNT", BombSubType.ICE: "冰TNT",
                              BombSubType.FLAME: "火焰TNT", BombSubType.POISON: "毒TNT"}
