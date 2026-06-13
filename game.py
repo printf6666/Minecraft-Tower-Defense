@@ -7,7 +7,7 @@ import os
 import assets
 from config import *
 from enemy import Enemy, DamageText
-from tower import Tower, Bullet, BombBullet, TNTExplosion, DragonBreathPool, LightningEffect, WindExplosion, IceExplosion, HorizontalLightningEffect, PoisonSplash
+from tower import Tower, Bullet, BombBullet, TNTExplosion, NuclearMissile, MushroomExplosion, NuclearShockwave, DragonBreathPool, LightningEffect, WindExplosion, IceExplosion, HorizontalLightningEffect, PoisonSplash
 from wave_manager import WaveManager
 
 
@@ -87,6 +87,8 @@ class Game:
         self.poison_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []
+        self.mushroom_explosions = []
+        self.shockwave_effects = []
         self.thunderstorm_timer = 0
 
         self.fog_timer = 0
@@ -169,6 +171,8 @@ class Game:
                         if self.selected_tower.level < 15 and self.coins >= self.selected_tower.upgrade_cost:
                             self.coins -= self.selected_tower.upgrade_cost
                             self.selected_tower.upgrade()
+                            if assets.level_up_sound and self.selected_tower.level in (6, 11):
+                                assets.level_up_sound.play()
                             if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT):
                                 self.temperature += 1
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.BOMB and 6 <= self.selected_tower.level < 11:
@@ -298,6 +302,16 @@ class Game:
                 explosion.update()
                 if explosion.done:
                     self.tnt_explosions.remove(explosion)
+
+            for explosion in self.mushroom_explosions[:]:
+                explosion.update()
+                if explosion.done:
+                    self.mushroom_explosions.remove(explosion)
+
+            for sw in self.shockwave_effects[:]:
+                sw.update()
+                if sw.done:
+                    self.shockwave_effects.remove(sw)
 
             if self.weather == Weather.THUNDERSTORM:
                 self.thunderstorm_timer += 1
@@ -582,6 +596,10 @@ class Game:
             effect.draw(self.screen)
         for explosion in self.tnt_explosions:
             explosion.draw(self.screen)
+        for sw in self.shockwave_effects:
+            sw.draw(self.screen)
+        for explosion in self.mushroom_explosions:
+            explosion.draw(self.screen)
         self.damage_texts.draw(self.screen)
 
         self.draw_ui()
@@ -819,9 +837,10 @@ class Game:
                         f"中毒层数:{tower.level}层/次", f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.BOMB:
             if tower.level >= 11:
-                stun_s = {11: 1.1, 12: 1.2, 13: 1.3, 14: 1.4, 15: 1.5}
-                info = [f"核弹塔 Lv{tower.level}", f"伤害:{tower.damage}",
-                        f"击晕:{stun_s.get(tower.level, 1.1)}s", f"辐射:1%/2s", f"攻击间隔:2s"]
+                mult = tower.level - 7
+                info = [f"核弹塔 Lv{tower.level}", f"伤害:{tower.damage}*{mult}={tower.damage * mult}",
+                        f"击晕:2s", f"中毒:{tower.level * 10}层",
+                        f"射程:全屏", f"攻击间隔:10s"]
             elif tower.level >= 6:
                 sub_names = {BombSubType.SNOW: "雪TNT", BombSubType.ICE: "冰TNT",
                              BombSubType.FLAME: "火焰TNT", BombSubType.POISON: "毒TNT"}
@@ -841,8 +860,10 @@ class Game:
             else:
                 info = [f"TNT塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:2s"]
         upgrade_str = "MAX" if tower.level >= 15 else str(tower.upgrade_cost)
-        info.extend(
-            [f"射程:{round(tower.get_effective_range() / TILE_SIZE, 1)}", f"升级:{upgrade_str}"])
+        if tower.type == TowerType.BOMB and tower.is_nuclear:
+            info.extend([f"升级:{upgrade_str}"])
+        else:
+            info.extend([f"射程:{round(tower.get_effective_range() / TILE_SIZE, 1)}", f"升级:{upgrade_str}"])
         sell_price = base_cost_map[tower.type] * tower.level
         info.append(f"出售:{sell_price}")
 
@@ -917,6 +938,8 @@ class Game:
         self.poison_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []
+        self.mushroom_explosions = []
+        self.shockwave_effects = []
         self.thunderstorm_timer = 0
         self.fog_timer = 0
         self.fog_visible = False

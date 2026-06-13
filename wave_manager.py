@@ -19,8 +19,10 @@ class WaveManager:
         self.current_wave += 1
         self.enemies_spawned = 0
         self.gold_armored_count = self.calculate_gold_armored_count()
-        self.enemies_to_spawn = self.calculate_enemies_to_spawn() + self.gold_armored_count
+        self.ghost_count = self.calculate_ghost_count()
+        self.enemies_to_spawn = self.calculate_enemies_to_spawn() + self.gold_armored_count + self.ghost_count
         self.gold_armored_spawned = 0
+        self.ghost_spawned = 0
         self.spawn_timer = 0
         self.wave_timer = self.wave_preparation_time
 
@@ -35,6 +37,11 @@ class WaveManager:
     def calculate_gold_armored_count(self):
         if self.current_wave >= 12 and (self.current_wave - 12) % 4 == 0:
             return (self.current_wave - 8) // 4
+        return 0
+
+    def calculate_ghost_count(self):
+        if self.current_wave >= 5 and self.current_wave % 5 == 0:
+            return self.current_wave // 2 + 4
         return 0
 
     def is_elite_wave(self):
@@ -60,6 +67,9 @@ class WaveManager:
         if self.gold_armored_spawned < self.gold_armored_count:
             self.gold_armored_spawned += 1
             return EnemyType.GOLD_ARMORED
+        if self.ghost_spawned < self.ghost_count:
+            self.ghost_spawned += 1
+            return EnemyType.GHOST
         rand = random.random()
         if self.is_boss_wave() and self.enemies_spawned == self.enemies_to_spawn:
             return EnemyType.BOSS

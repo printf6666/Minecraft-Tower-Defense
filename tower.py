@@ -3,6 +3,9 @@ import random
 import assets
 from config import *
 
+MAP_CENTER_X = GRID_WIDTH * TILE_SIZE // 2
+MAP_CENTER_Y = (1 + GRID_HEIGHT) * TILE_SIZE // 2
+
 
 class Tower(pygame.sprite.Sprite):
     def __init__(self, tower_type, x, y, game):
@@ -91,12 +94,13 @@ class Tower(pygame.sprite.Sprite):
             self.cost = 175
             self.upgrade_cost = int(175 * 1.5)
         elif self.type == TowerType.BOMB:
-            self.range = TILE_SIZE * 2
+            self.range = int(TILE_SIZE * 2.2)
             self.damage = 100
             self.fire_rate = 120
             self.cost = 500
             self.upgrade_cost = 750
             self.bomb_subtype = BombSubType.SNOW
+            self.is_nuclear = False
 
     def upgrade(self):
         if self.level >= 15:
@@ -149,7 +153,12 @@ class Tower(pygame.sprite.Sprite):
             self.fire_rate = max(30, self.fire_rate - 6)
         elif self.type == TowerType.BOMB:
             self.damage += 100
+            self.range += int(TILE_SIZE * 0.2)
             self.fire_rate = 120
+            if self.level >= 11:
+                self.is_nuclear = True
+                self.range = 0
+                self.fire_rate = 600
 
         self.update_sprite()
 
@@ -190,6 +199,12 @@ class Tower(pygame.sprite.Sprite):
             return []
         self.last_shot = current_time
 
+        if self.type == TowerType.BOMB and self.is_nuclear:
+            missile = NuclearMissile(self.rect.centerx, self.rect.centery,
+                                     MAP_CENTER_X, MAP_CENTER_Y,
+                                     self.damage, self.level, self.game)
+            return [missile]
+
         if self.type == TowerType.BOMB:
             directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
             bullets = []
@@ -198,7 +213,7 @@ class Tower(pygame.sprite.Sprite):
                     self.rect.centerx, self.rect.centery,
                     dx, dy, self.get_effective_range(),
                     self.damage, self.level,
-                    self.bomb_subtype if self.level < 11 else None,
+                    self.bomb_subtype if not self.is_nuclear else None,
                     self.game)
                 bullets.append(bullet)
             return bullets
@@ -226,7 +241,7 @@ class Tower(pygame.sprite.Sprite):
         return bullets
 
     def draw_range(self, surface):
-        if self.type != TowerType.PRODUCTION:
+        if self.type != TowerType.PRODUCTION and not (self.type == TowerType.BOMB and self.is_nuclear):
             pygame.draw.circle(surface, (255, 255, 255, 50), self.rect.center, self.get_effective_range(), 2)
 
 
@@ -707,10 +722,7 @@ class TNTExplosion:
             if (dx * dx + dy * dy) <= radius_px * radius_px:
                 reward = enemy.take_damage(damage, color=RED, scale=1.0)
                 game.coins += reward
-                if tower_level >= 11:
-                    enemy.apply_stun(int({11: 66, 12: 72, 13: 78, 14: 84, 15: 90}.get(tower_level, 66)))
-                    enemy.apply_contaminate()
-                elif bomb_subtype is not None:
+                if bomb_subtype is not None:
                     if bomb_subtype == BombSubType.SNOW:
                         enemy.apply_slow(0.5, 720)
                     elif bomb_subtype == BombSubType.ICE:
@@ -738,3 +750,107 @@ class TNTExplosion:
         img = assets.tnt_explosion_frames[self.frame]
         rect = img.get_rect(center=(self.x, self.y))
         screen.blit(img, rect)
+
+
+class NuclearMissile(pygame.sprite.Sprite):
+    def __init__(self, x, y, target_x, target_y, damage, tower_level, game):
+        super().__init__()
+        self.x = x
+        self.y = y
+        self.target_x = target_x
+        self.target_y = target_y
+        self.speed = 8
+        self.damage = damage
+        self.tower_level = tower_level
+        self.game = game
+        self.raw_img = assets.load_image("tower/999.png", (TILE_SIZE // 2, TILE_SIZE // 2))
+        self.image = self.raw_img
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self):
+        dx = self.target_x - self.x
+        dy = self.target_y - self.y
+        dist = (dx * dx + dy * dy) ** 0.5
+        if dist < self.speed:
+            explosion = MushroomExplosion(MAP_CENTER_X, MAP_CENTER_Y,
+                                          self.damage, self.tower_level, self.game)
+            self.game.mushroom_explosions.append(explosion)
+            shockwave = NuclearShockwave(MAP_CENTER_X, MAP_CENTER_Y, self.game)
+            self.game.shockwave_effects.append(shockwave)
+            self.kill()
+            return
+        self.x += (dx / dist) * self.speed
+        self.y += (dy / dist) * self.speed
+        self.rect.center = (self.x, self.y)
+
+
+class MushroomExplosion:
+    def __init__(self, x, y, damage, tower_level, game):
+        self.x = x
+        self.y = y
+        self.damage = damage
+        self.tower_level = tower_level
+        self.game = game
+        self.frame = 0
+        self.frame_timer = 0
+        self.frame_duration = 3
+        self.max_frames = 10
+        self.done = False
+
+        if assets.explode_sound:
+            assets.explode_sound.play()
+
+        final_damage = damage * (tower_level - 7)
+        for enemy in game.enemies:
+            if enemy.health <= 0:
+                continue
+            reward = enemy.take_damage(final_damage, color=RED, scale=1.2)
+            game.coins += reward
+            enemy.apply_stun(120)
+            enemy.apply_poison(tower_level * 10)
+
+    def update(self):
+        if self.done:
+            return
+        self.frame_timer += 1
+        if self.frame_timer >= self.frame_duration:
+            self.frame_timer = 0
+            self.frame += 1
+            if self.frame >= self.max_frames:
+                self.done = True
+
+    def draw(self, screen):
+        if self.done or self.frame >= len(assets.mushroom_cloud_frames):
+            return
+        img = assets.mushroom_cloud_frames[self.frame]
+        rect = img.get_rect(center=(self.x, self.y))
+        screen.blit(img, rect)
+
+
+class NuclearShockwave:
+    def __init__(self, x, y, game):
+        self.x = x
+        self.y = y
+        self.game = game
+        self.radius = 0
+        self.max_radius = int(SCREEN_WIDTH * 0.75)
+        self.duration = 45
+        self.timer = 0
+        self.done = False
+
+    def update(self):
+        if self.done:
+            return
+        self.timer += 1
+        self.radius = int(self.max_radius * (self.timer / self.duration))
+        if self.timer >= self.duration:
+            self.done = True
+
+    def draw(self, screen):
+        if self.done:
+            return
+        alpha = max(0, 120 - int(120 * self.timer / self.duration))
+        color = (255, 0, 0, alpha)
+        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, color, (self.radius, self.radius), self.radius)
+        screen.blit(s, (self.x - self.radius, self.y - self.radius))

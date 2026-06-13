@@ -86,6 +86,7 @@ class EnemyType(Enum):
     SLIME = 6
     SLIMELING = 7
     GOLD_ARMORED = 8
+    GHOST = 9
 
 
 class Weather(Enum):
@@ -132,4 +133,5 @@ ENEMY_TYPES = {
     "SLIME": {"image": "slime.png", "speed": 2.0, "health": 180, "reward": 25},
     "SLIMELING": {"image": "slime.png", "speed": 3.0, "health": 90, "reward": 10},
     "GOLD_ARMORED": {"image": "gold_armored.png", "speed": 1.2, "health": 250, "reward": 35},
+    "GHOST": {"image": "ghost.png", "speed": 3, "health": 100, "reward": 25},
 }

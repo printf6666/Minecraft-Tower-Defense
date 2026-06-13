@@ -71,7 +71,9 @@ class Enemy(pygame.sprite.Sprite):
 
         self.image = assets.load_image(f"enemy/{config['image']}")
 
-        if enemy_key == "ARMORED" or enemy_key == "GOLD_ARMORED":
+        if enemy_key == "GHOST":
+            self.image = pygame.transform.scale(self.image, (200, 200))
+        elif enemy_key == "ARMORED" or enemy_key == "GOLD_ARMORED":
             self.image = pygame.transform.scale(self.image, (100, 100))
         elif enemy_key == "SLIMELING":
             self.image = pygame.transform.scale(self.image, (64, 64))
@@ -87,6 +89,10 @@ class Enemy(pygame.sprite.Sprite):
         self.pos_x = start_x * TILE_SIZE + TILE_SIZE // 2
         self.pos_y = start_y * TILE_SIZE + TILE_SIZE // 2
         self.rect.center = (self.pos_x, self.pos_y)
+
+        if self.enemy_type == EnemyType.GHOST:
+            ex, ey = self.path[-1]
+            self.ghost_target = (ex * TILE_SIZE + TILE_SIZE // 2, ey * TILE_SIZE + TILE_SIZE // 2)
 
     def apply_slow(self, slow_factor, duration):
         rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
@@ -166,6 +172,20 @@ class Enemy(pygame.sprite.Sprite):
 
         if self.health <= 0:
             self.kill()
+            return False
+
+        if self.enemy_type == EnemyType.GHOST:
+            tx, ty = self.ghost_target
+            dx = tx - self.pos_x
+            dy = ty - self.pos_y
+            dist = (dx * dx + dy * dy) ** 0.5
+            if dist < self.speed:
+                self.game.lives -= 4
+                self.kill()
+                return True
+            self.pos_x += (dx / dist) * self.speed
+            self.pos_y += (dy / dist) * self.speed
+            self.rect.center = (self.pos_x, self.pos_y)
             return False
 
         if self.path_index >= len(self.path) - 1:

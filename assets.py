@@ -32,6 +32,7 @@ font_damage = None
 tower_icons = []
 
 tnt_explosion_frames = []
+mushroom_cloud_frames = []
 contaminated_img = None
 
 icon1 = None
@@ -64,6 +65,9 @@ dirt_img = None
 start_img = None
 house_img = None
 
+explode_sound = None
+level_up_sound = None
+
 
 def init_assets():
     global font_large, font_medium, font_small, font_tower_level, font_damage
@@ -73,7 +77,8 @@ def init_assets():
     global white_lightning_h_frames, golden_lightning_h_frames
     global bgm_files, bgm_index
     global stone_img, dirt_img, start_img, house_img
-    global tnt_explosion_frames, contaminated_img
+    global tnt_explosion_frames, mushroom_cloud_frames, contaminated_img
+    global explode_sound, level_up_sound
 
     try:
         font_large = pygame.font.Font(resource_path("font/Minecraft.ttf"), 60)
@@ -113,6 +118,20 @@ def init_assets():
         contaminated_img = load_image("debuff/contaminated.png", (BUFF_SIZE, BUFF_SIZE))
     except:
         contaminated_img = pygame.Surface((BUFF_SIZE, BUFF_SIZE))
+
+    global mushroom_cloud_frames
+    mushroom_cloud_frames.clear()
+    try:
+        sheet = load_image("tower/mushroom_cloud.png")
+        fw = sheet.get_width() // 5
+        fh = sheet.get_height() // 2
+        for row in range(2):
+            for col in range(5):
+                frame = sheet.subsurface((col * fw, row * fh, fw, fh))
+                frame = pygame.transform.smoothscale(frame, (800, 1000))
+                mushroom_cloud_frames.append(frame)
+    except:
+        pass
 
     gold_img = load_image("tower/gold.png", (64, 64))
     heart_img = load_image("tower/heart.png", (48, 48))
@@ -169,6 +188,16 @@ def init_assets():
             if f.lower().endswith(('.mp3', '.ogg', '.wav')):
                 bgm_files.append(f"bgm/{f}")
     bgm_index = -1
+
+    global explode_sound, level_up_sound
+    try:
+        explode_sound = pygame.mixer.Sound(resource_path("sound/explode.mp3"))
+    except:
+        explode_sound = None
+    try:
+        level_up_sound = pygame.mixer.Sound(resource_path("sound/level_up.mp3"))
+    except:
+        level_up_sound = None
 
     ts = (128, 128)
     stone_img = load_image("tower/stone.png", ts)
