@@ -63,7 +63,7 @@ class Game:
         self.towers = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
         self.damage_texts = pygame.sprite.Group()
-        self.coins = 2500000
+        self.coins = 2500
         self.lives = 20
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
