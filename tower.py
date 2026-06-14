@@ -23,7 +23,7 @@ class Tower(pygame.sprite.Sprite):
         self.target = None
         self.game = game
 
-        self.teleport_chance = 0.06
+        self.teleport_chance = 0.01
         self.penetrate = False
         self.freeze_time = 0
         self.oneshot_chance = 0
@@ -101,6 +101,12 @@ class Tower(pygame.sprite.Sprite):
             self.upgrade_cost = 750
             self.bomb_subtype = BombSubType.SNOW
             self.is_nuclear = False
+        elif self.type == TowerType.WITHER:
+            self.range = TILE_SIZE * 3
+            self.damage = 20
+            self.fire_rate = 60
+            self.cost = 175
+            self.upgrade_cost = int(175 * 1.5)
 
     def upgrade(self):
         if self.level >= 15:
@@ -159,6 +165,10 @@ class Tower(pygame.sprite.Sprite):
                 self.is_nuclear = True
                 self.range = 0
                 self.fire_rate = 1200
+        elif self.type == TowerType.WITHER:
+            self.damage += 15
+            self.range += TILE_SIZE // 2
+            self.fire_rate = max(30, self.fire_rate - 6)
 
         self.update_sprite()
 
@@ -167,10 +177,17 @@ class Tower(pygame.sprite.Sprite):
             if self.level >= 11:
                 img = "tower/999.png"
             elif self.level >= 6:
-                sub_map = {BombSubType.SNOW: "91", BombSubType.ICE: "92", BombSubType.FLAME: "93", BombSubType.POISON: "94"}
+                sub_map = {BombSubType.SNOW: "91", BombSubType.ICE: "92", BombSubType.FLAME: "93", BombSubType.POISON: "94", BombSubType.WITHER_TNT: "95"}
                 img = f"tower/{sub_map[self.bomb_subtype]}.png"
             else:
                 img = "tower/9.png"
+        elif self.type == TowerType.WITHER:
+            if self.level >= 11:
+                img = "tower/000.png"
+            elif self.level >= 6:
+                img = "tower/00.png"
+            else:
+                img = "tower/0.png"
         else:
             prefix = str(self.type.value + 1)
             if self.level >= 11:
@@ -199,11 +216,48 @@ class Tower(pygame.sprite.Sprite):
             return []
         self.last_shot = current_time
 
+        if self.type == TowerType.PRODUCTION:
+            return []
+
         if self.type == TowerType.BOMB and self.is_nuclear:
-            missile = NuclearMissile(self.rect.centerx, self.rect.centery,
-                                     MAP_CENTER_X, MAP_CENTER_Y,
-                                     self.damage, self.level, self.game)
-            return [missile]
+            if self.game.enemies:
+                missile = NuclearMissile(self.rect.centerx, self.rect.centery,
+                                         MAP_CENTER_X, MAP_CENTER_Y,
+                                         self.damage, self.level, self.game)
+                return [missile]
+            return []
+
+        check_range = self.get_effective_range() + TILE_SIZE // 2
+        tc = self.rect.centerx // TILE_SIZE
+        tr = self.rect.centery // TILE_SIZE
+        cr = int(check_range // TILE_SIZE) + 1
+        has_target = False
+        grid = self.game.enemy_grid
+        for dc in range(-cr, cr + 1):
+            for dr in range(-cr, cr + 1):
+                for e in grid.get((tc + dc, tr + dr), ()):
+                    dx = e.rect.centerx - self.rect.centerx
+                    dy = e.rect.centery - self.rect.centery
+                    if (dx * dx + dy * dy) <= check_range * check_range:
+                        has_target = True
+                        break
+                if has_target:
+                    break
+            if has_target:
+                break
+        if not has_target:
+            return []
+
+        if self.type == TowerType.WITHER:
+            directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            bullets = []
+            for dx, dy in directions:
+                bullet = WitherBullet(
+                    self.rect.centerx, self.rect.centery,
+                    dx, dy, self.get_effective_range(),
+                    self.damage, self.level, self.game)
+                bullets.append(bullet)
+            return bullets
 
         if self.type == TowerType.BOMB:
             directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
@@ -335,10 +389,15 @@ class Bullet(pygame.sprite.Sprite):
             self.kill()
             return
 
-        for enemy in self.enemies:
-            if self.rect.colliderect(enemy.rect):
-                self.on_hit(enemy)
-                return
+        col = int(self.x) // TILE_SIZE
+        row = int(self.y) // TILE_SIZE
+        grid = self.game.enemy_grid
+        for dc in (-1, 0, 1):
+            for dr in (-1, 0, 1):
+                for enemy in grid.get((col + dc, row + dr), ()):
+                    if self.rect.colliderect(enemy.rect):
+                        self.on_hit(enemy)
+                        return
 
     def get_damage_color(self):
         if self.tower_type == TowerType.PHYSICAL:
@@ -407,6 +466,8 @@ class Bullet(pygame.sprite.Sprite):
         if self.tower_type == TowerType.TELEPORT:
             if self.game.weather != Weather.MAGNETIC_STORM and random.random() < self.teleport_chance:
                 enemy.teleport_to_start()
+                if assets.teleport_sound:
+                    assets.teleport_sound.play()
             if random.random() < self.oneshot_chance:
                 reward = enemy.take_damage(9999999, color=RED, scale=1.2)
                 self.game.coins += reward
@@ -657,7 +718,7 @@ class BombBullet(pygame.sprite.Sprite):
         if tower_level >= 11:
             img = "tower/999.png"
         elif tower_level >= 6:
-            sub_map = {BombSubType.SNOW: "91", BombSubType.ICE: "92", BombSubType.FLAME: "93", BombSubType.POISON: "94"}
+            sub_map = {BombSubType.SNOW: "91", BombSubType.ICE: "92", BombSubType.FLAME: "93", BombSubType.POISON: "94", BombSubType.WITHER_TNT: "95"}
             img = f"tower/{sub_map[bomb_subtype]}.png"
         else:
             img = "tower/9.png"
@@ -687,11 +748,16 @@ class BombBullet(pygame.sprite.Sprite):
             self.kill()
             return
 
-        for enemy in self.enemies:
-            if self.rect.colliderect(enemy.rect):
-                self.explode()
-                self.kill()
-                return
+        col = int(self.x) // TILE_SIZE
+        row = int(self.y) // TILE_SIZE
+        grid = self.game.enemy_grid
+        for dc in (-1, 0, 1):
+            for dr in (-1, 0, 1):
+                for enemy in grid.get((col + dc, row + dr), ()):
+                    if self.rect.colliderect(enemy.rect):
+                        self.explode()
+                        self.kill()
+                        return
 
     def explode(self):
         explosion = TNTExplosion(self.rect.centerx, self.rect.centery,
@@ -733,6 +799,8 @@ class TNTExplosion:
                     elif bomb_subtype == BombSubType.POISON:
                         stacks = {6: 12, 7: 14, 8: 16, 9: 18, 10: 20}
                         enemy.apply_poison(stacks.get(tower_level, 12))
+                    elif bomb_subtype == BombSubType.WITHER_TNT:
+                        enemy.apply_wither(300)
 
     def update(self):
         if self.done:
@@ -853,4 +921,107 @@ class NuclearShockwave:
         color = (255, 0, 0, alpha)
         s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
         pygame.draw.circle(s, color, (self.radius, self.radius), self.radius)
+        screen.blit(s, (self.x - self.radius, self.y - self.radius))
+
+
+class WitherBullet(pygame.sprite.Sprite):
+    def __init__(self, x, y, dx, dy, max_distance, damage, tower_level, game):
+        super().__init__()
+        self.x = x
+        self.y = y
+        self.dx = dx
+        self.dy = dy
+        self.speed = 12
+        self.max_distance = max_distance
+        self.traveled = 0
+        self.damage = damage
+        self.tower_level = tower_level
+        self.game = game
+        self.enemies = game.enemies
+
+        if tower_level >= 11:
+            img = "tower/000.png"
+        elif tower_level >= 6:
+            img = "tower/00.png"
+        else:
+            img = "tower/0.png"
+        self.raw_img = assets.load_image(img, (TILE_SIZE // 2, TILE_SIZE // 2))
+
+        if self.dx == 1 and self.dy == 0:
+            rotate_angle = -45
+        elif self.dx == 0 and self.dy == -1:
+            rotate_angle = -315
+        elif self.dx == -1 and self.dy == 0:
+            rotate_angle = -225
+        elif self.dx == 0 and self.dy == 1:
+            rotate_angle = -135
+        else:
+            rotate_angle = 0
+
+        self.image = pygame.transform.rotate(self.raw_img, rotate_angle)
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self):
+        self.x += self.dx * self.speed
+        self.y += self.dy * self.speed
+        self.traveled += self.speed
+        self.rect.center = (self.x, self.y)
+
+        if self.traveled >= self.max_distance:
+            self.kill()
+            return
+
+        col = int(self.x) // TILE_SIZE
+        row = int(self.y) // TILE_SIZE
+        grid = self.game.enemy_grid
+        for dc in (-1, 0, 1):
+            for dr in (-1, 0, 1):
+                for enemy in grid.get((col + dc, row + dr), ()):
+                    if self.rect.colliderect(enemy.rect):
+                        self.on_hit(enemy)
+                        return
+
+    def on_hit(self, enemy):
+        if self.tower_level >= 11:
+            wither_duration = 720
+        else:
+            wither_duration = 300
+        final_dmg = self.damage
+
+        reward = enemy.take_damage(final_dmg, color=(100, 0, 100))
+        self.game.coins += reward
+
+        if self.tower_level >= 6:
+            splash = WitherSplash(self.rect.centerx, self.rect.centery, final_dmg, wither_duration, self.game)
+            self.game.wither_splashes.append(splash)
+        else:
+            enemy.apply_wither(wither_duration)
+
+        self.kill()
+
+
+class WitherSplash:
+    def __init__(self, x, y, damage, wither_duration, game):
+        self.x = x
+        self.y = y
+        self.duration = 6
+        self.radius = 128
+        for enemy in game.enemies:
+            if enemy.health <= 0:
+                continue
+            dx = enemy.rect.centerx - x
+            dy = enemy.rect.centery - y
+            if (dx * dx + dy * dy) <= self.radius * self.radius:
+                reward = enemy.take_damage(damage, color=(100, 0, 100), scale=0.8)
+                game.coins += reward
+                enemy.apply_wither(wither_duration)
+
+    def update(self):
+        self.duration -= 1
+        return self.duration > 0
+
+    def draw(self, screen):
+        alpha = int(80 * self.duration / 6)
+        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, (0, 0, 0, alpha), (self.radius, self.radius), self.radius)
         screen.blit(s, (self.x - self.radius, self.y - self.radius))

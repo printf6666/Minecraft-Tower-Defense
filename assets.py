@@ -60,6 +60,11 @@ golden_lightning_h_frames = []
 bgm_files = []
 bgm_index = -1
 
+rain_cache = {}
+acid_rain_cache = {}
+snow_cache = {}
+fire_cache = {}
+
 stone_img = None
 dirt_img = None
 start_img = None
@@ -67,6 +72,7 @@ house_img = None
 
 explode_sound = None
 level_up_sound = None
+teleport_sound = None
 
 
 def init_assets():
@@ -98,12 +104,13 @@ def init_assets():
 
     icon_size = 100
     tower_icons.clear()
-    for i in range(1, 10):
+    for i in range(1, 11):
         try:
-            tower_icons.append(load_image(f"tower/{i}.png", (icon_size, icon_size)))
+            path = f"tower/{i}.png" if i < 10 else "tower/0.png"
+            tower_icons.append(load_image(path, (icon_size, icon_size)))
         except:
             tower_icons.append(pygame.Surface((icon_size, icon_size)))
-    icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9 = tower_icons
+    icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9, icon10 = tower_icons
 
     global tnt_explosion_frames
     tnt_explosion_frames.clear()
@@ -138,14 +145,16 @@ def init_assets():
     clock_img = load_image("tower/clock.png", (48, 48))
 
     buff_icons["burn"] = load_image("debuff/burn.png", (BUFF_SIZE, BUFF_SIZE))
-    buff_icons["freeze"] = load_image("debuff/freeze.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["slow"] = load_image("debuff/slow.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["broken"] = load_image("debuff/broken.png", (BUFF_SIZE, BUFF_SIZE))
-    buff_icons["stun"] = load_image("debuff/stun.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["poison"] = load_image("debuff/poison.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["wind"] = load_image("debuff/wind.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["speed"] = load_image("debuff/speed.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["contaminated"] = contaminated_img
+    try:
+        buff_icons["wither"] = load_image("debuff/wither.png", (BUFF_SIZE, BUFF_SIZE))
+    except:
+        buff_icons["wither"] = pygame.Surface((BUFF_SIZE, BUFF_SIZE))
 
     try:
         sheet = load_image("tower/white_lightning.png")
@@ -189,7 +198,7 @@ def init_assets():
                 bgm_files.append(f"bgm/{f}")
     bgm_index = -1
 
-    global explode_sound, level_up_sound
+    global explode_sound, level_up_sound, teleport_sound
     try:
         explode_sound = pygame.mixer.Sound(resource_path("sound/explode.mp3"))
     except:
@@ -198,6 +207,10 @@ def init_assets():
         level_up_sound = pygame.mixer.Sound(resource_path("sound/level_up.mp3"))
     except:
         level_up_sound = None
+    try:
+        teleport_sound = pygame.mixer.Sound(resource_path("sound/teleport.mp3"))
+    except:
+        teleport_sound = None
 
     ts = (128, 128)
     stone_img = load_image("tower/stone.png", ts)

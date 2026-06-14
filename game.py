@@ -7,7 +7,7 @@ import os
 import assets
 from config import *
 from enemy import Enemy, DamageText
-from tower import Tower, Bullet, BombBullet, TNTExplosion, NuclearMissile, MushroomExplosion, NuclearShockwave, DragonBreathPool, LightningEffect, WindExplosion, IceExplosion, HorizontalLightningEffect, PoisonSplash
+from tower import Tower, Bullet, BombBullet, TNTExplosion, NuclearMissile, MushroomExplosion, NuclearShockwave, DragonBreathPool, LightningEffect, WindExplosion, IceExplosion, HorizontalLightningEffect, PoisonSplash, WitherBullet, WitherSplash
 from wave_manager import WaveManager
 
 
@@ -48,6 +48,7 @@ TOWER_DATA = [
     (TowerType.WIND,       "风系", 250,  pygame.K_7),
     (TowerType.POISON,     "毒系", 175,  pygame.K_8),
     (TowerType.BOMB,       "TNT", 500,  pygame.K_9),
+    (TowerType.WITHER,     "凋零", 175, pygame.K_0),
 ]
 
 
@@ -85,6 +86,7 @@ class Game:
         self.wind_explosions = []
         self.ice_explosions = []
         self.poison_splashes = []
+        self.wither_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []
         self.mushroom_explosions = []
@@ -100,6 +102,35 @@ class Game:
         self.path = random.choice(SEED_PATHS)
         self.start_point = self.path[0]
         self.end_point = self.path[-1]
+        self.background_surface = None
+        self.enemy_grid = {}
+        self._build_background()
+
+    def _build_background(self):
+        gw = GRID_WIDTH * TILE_SIZE
+        gh = (GRID_HEIGHT + 1) * TILE_SIZE
+        self.background_surface = pygame.Surface((gw, gh))
+        self.background_surface.fill(BLACK)
+        path_set = set(self.path)
+        for x in range(GRID_WIDTH):
+            for y in range(1, GRID_HEIGHT + 1):
+                if (x, y) in path_set:
+                    self.background_surface.blit(assets.dirt_img, (x * TILE_SIZE, y * TILE_SIZE))
+                else:
+                    self.background_surface.blit(assets.stone_img, (x * TILE_SIZE, y * TILE_SIZE))
+        sx, sy = self.start_point
+        ex, ey = self.end_point
+        self.background_surface.blit(assets.start_img, (sx * TILE_SIZE, sy * TILE_SIZE))
+        self.background_surface.blit(assets.house_img, (ex * TILE_SIZE, ey * TILE_SIZE))
+
+    def _build_enemy_grid(self):
+        self.enemy_grid.clear()
+        for e in self.enemies:
+            if e.health <= 0:
+                continue
+            col = e.rect.centerx // TILE_SIZE
+            row = e.rect.centery // TILE_SIZE
+            self.enemy_grid.setdefault((col, row), []).append(e)
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -173,12 +204,12 @@ class Game:
                             self.selected_tower.upgrade()
                             if assets.level_up_sound and self.selected_tower.level in (6, 11):
                                 assets.level_up_sound.play()
-                            if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT):
+                            if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
                                 self.temperature += 1
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.BOMB and 6 <= self.selected_tower.level < 11:
-                        sub_types = [BombSubType.SNOW, BombSubType.ICE, BombSubType.FLAME, BombSubType.POISON]
+                        sub_types = [BombSubType.SNOW, BombSubType.ICE, BombSubType.FLAME, BombSubType.POISON, BombSubType.WITHER_TNT]
                         idx = sub_types.index(self.selected_tower.bomb_subtype)
-                        self.selected_tower.bomb_subtype = sub_types[(idx + 1) % 4]
+                        self.selected_tower.bomb_subtype = sub_types[(idx + 1) % 5]
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_s and self.selected_tower:
                         cost_map = {ttype: cost for ttype, name, cost, key in TOWER_DATA}
@@ -191,7 +222,7 @@ class Game:
                                 self.gold_per_wave -= (level - 5)
                             if level >= 11:
                                 self.gold_profit_per_wave -= (level - 10) * 0.01
-                        if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT):
+                        if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
                             self.temperature -= self.selected_tower.level
                         self.selected_tower.kill()
                         self.selected_tower = None
@@ -250,6 +281,8 @@ class Game:
                     if self.lives <= 0:
                         self.state = GameState.GAME_OVER
 
+            self._build_enemy_grid()
+
             for tower in self.towers:
                 if tower.type != TowerType.PRODUCTION:
                     bullets = tower.attack(self.game_time)
@@ -292,6 +325,10 @@ class Game:
             for splash in self.poison_splashes[:]:
                 if not splash.update():
                     self.poison_splashes.remove(splash)
+
+            for splash in self.wither_splashes[:]:
+                if not splash.update():
+                    self.wither_splashes.remove(splash)
 
             for effect in self.horizontal_lightning_effects[:]:
                 effect.update()
@@ -371,7 +408,7 @@ class Game:
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
         for t in self.towers:
-            if t.type in (TowerType.FLAME, TowerType.TRIDENT):
+            if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
                 self.temperature += t.level
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         if self.weather == Weather.ACID_RAIN:
@@ -435,12 +472,13 @@ class Game:
                             t.fire_rate = min(60, t.fire_rate + 6)
                         elif t.type == TowerType.BOMB:
                             t.damage -= 100
+                            self.temperature -= 1
                         if t.type == TowerType.PRODUCTION:
                             if old_level >= 6: self.gold_per_wave -= 1
                             if old_level >= 11: self.gold_profit_per_wave -= 0.01
                         t.update_sprite()
                     else:
-                        if t.type in (TowerType.FLAME, TowerType.TRIDENT):
+                        if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
                             self.temperature -= 1
                         destroyed.append(t)
             for t in destroyed:
@@ -504,22 +542,23 @@ class Game:
                 phase = random.uniform(0, 6.28)
                 self.weather_particles.append([x, y, speed, drift, size, phase, "fire"])
 
-        for p in self.weather_particles[:]:
+        for p in self.weather_particles:
             if p[-1] in ("rain", "acid_rain"):
                 p[1] += p[2]
-                if p[1] > SCREEN_HEIGHT:
-                    self.weather_particles.remove(p)
             elif p[-1] == "snow":
                 p[1] += p[2]
                 p[0] += p[3]
-                if p[1] > SCREEN_HEIGHT or p[0] < 0 or p[0] > SCREEN_WIDTH:
-                    self.weather_particles.remove(p)
             elif p[-1] == "fire":
                 p[1] -= p[2]
                 p[0] += p[3]
                 p[5] += 0.1
-                if p[1] < -40:
-                    self.weather_particles.remove(p)
+
+        self.weather_particles = [
+            p for p in self.weather_particles
+            if not ((p[-1] in ("rain", "acid_rain") and p[1] > SCREEN_HEIGHT) or
+                    (p[-1] == "snow" and (p[1] > SCREEN_HEIGHT or p[0] < 0 or p[0] > SCREEN_WIDTH)) or
+                    (p[-1] == "fire" and p[1] < -40))
+        ]
 
     def draw(self):
         self.screen.fill(BLACK)
@@ -542,23 +581,13 @@ class Game:
         pygame.draw.rect(self.screen, RED, (900, 1020, 760, 80))
         exit_text = assets.font_medium.render("退出游戏", True, WHITE)
         self.screen.blit(exit_text, (1200, 1035))
-        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6/7/8/9键选择炮塔", "3. U升级 S出售 ESC暂停  R切换TNT形态"]
+        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6/7/8/9/0键选择炮塔", "3. U升级 S出售 ESC暂停  R切换TNT形态"]
         for i, text in enumerate(instructions):
             text_surface = assets.font_small.render(text, True, WHITE)
             self.screen.blit(text_surface, (900, 1200 + i * 50))
 
     def draw_game(self):
-        path_set = set(self.path)
-        for x in range(GRID_WIDTH):
-            for y in range(1, GRID_HEIGHT + 1):
-                if (x, y) in path_set:
-                    self.screen.blit(assets.dirt_img, (x * TILE_SIZE, y * TILE_SIZE))
-                else:
-                    self.screen.blit(assets.stone_img, (x * TILE_SIZE, y * TILE_SIZE))
-        sx, sy = self.start_point
-        ex, ey = self.end_point
-        self.screen.blit(assets.start_img, (sx * TILE_SIZE, sy * TILE_SIZE))
-        self.screen.blit(assets.house_img, (ex * TILE_SIZE, ey * TILE_SIZE))
+        self.screen.blit(self.background_surface, (0, 0))
 
         self.towers.draw(self.screen)
         self.enemies.draw(self.screen)
@@ -591,6 +620,8 @@ class Game:
         for exp in self.ice_explosions:
             exp.draw(self.screen)
         for splash in self.poison_splashes:
+            splash.draw(self.screen)
+        for splash in self.wither_splashes:
             splash.draw(self.screen)
         for effect in self.horizontal_lightning_effects:
             effect.draw(self.screen)
@@ -650,7 +681,7 @@ class Game:
             ix = start_x + i * step
             iy = SCREEN_HEIGHT - 114
             self.screen.blit(assets.tower_icons[i], (ix, iy))
-            num_surf = assets.font_tower_level.render(str(i + 1), True, YELLOW)
+            num_surf = assets.font_tower_level.render("0" if i == 9 else str(i + 1), True, YELLOW)
             self.screen.blit(num_surf, (ix + 2, iy + 2))
             price_surf = assets.font_tower_level.render(str(cost), True, GOLD)
             self.screen.blit(price_surf, (ix + icon_size - price_surf.get_width() - 2,
@@ -682,21 +713,27 @@ class Game:
         for p in self.weather_particles:
             if p[-1] == "rain":
                 x, y, _, length = p[0], p[1], p[2], p[3]
-                color = (100, 150, 255, 180)
-                s = pygame.Surface((2, length), pygame.SRCALPHA)
-                s.fill(color)
+                s = assets.rain_cache.get(length)
+                if s is None:
+                    s = pygame.Surface((2, length), pygame.SRCALPHA)
+                    s.fill((100, 150, 255, 180))
+                    assets.rain_cache[length] = s
                 self.screen.blit(s, (int(x), int(y)))
             elif p[-1] == "acid_rain":
                 x, y, _, length = p[0], p[1], p[2], p[3]
-                color = (0, 200, 0, 180)
-                s = pygame.Surface((2, length), pygame.SRCALPHA)
-                s.fill(color)
+                s = assets.acid_rain_cache.get(length)
+                if s is None:
+                    s = pygame.Surface((2, length), pygame.SRCALPHA)
+                    s.fill((0, 200, 0, 180))
+                    assets.acid_rain_cache[length] = s
                 self.screen.blit(s, (int(x), int(y)))
             elif p[-1] == "snow":
                 x, y, _, _, size = p[0], p[1], p[2], p[3], p[4]
-                color = (255, 255, 255, 200)
-                s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
-                pygame.draw.circle(s, color, (size, size), size)
+                s = assets.snow_cache.get(size)
+                if s is None:
+                    s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+                    pygame.draw.circle(s, (255, 255, 255, 200), (size, size), size)
+                    assets.snow_cache[size] = s
                 self.screen.blit(s, (int(x) - size, int(y) - size))
             elif p[-1] == "fire":
                 x, y, _, _, size, phase = p[0], p[1], p[2], p[3], p[4], p[5]
@@ -704,10 +741,13 @@ class Game:
                 r = min(255, 200 + flicker)
                 g = max(0, min(200, 150 - flicker))
                 alpha = min(200, 120 + flicker)
-                color = (r, g, 0, alpha)
-                s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
-                pygame.draw.circle(s, color, (size, size), size)
-                pygame.draw.circle(s, (255, 255, 100, alpha // 2), (size, size), size // 2)
+                color_key = (r, g, 0)
+                s = assets.fire_cache.get((size, color_key))
+                if s is None:
+                    s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+                    pygame.draw.circle(s, (*color_key, alpha), (size, size), size)
+                    pygame.draw.circle(s, (255, 255, 100, alpha // 2), (size, size), size // 2)
+                    assets.fire_cache[(size, color_key)] = s
                 self.screen.blit(s, (int(x) - size, int(y) - size))
 
     def draw_weather_banner(self):
@@ -835,6 +875,16 @@ class Game:
             else:
                 info = [f"毒箭塔 Lv{tower.level}", f"伤害:{tower.damage}",
                         f"中毒层数:{tower.level}层/次", f"攻击间隔:{tower.fire_rate / 60}s"]
+        elif tower.type == TowerType.WITHER:
+            if tower.level >= 11:
+                info = [f"凋零之首塔 Lv{tower.level}", f"伤害:{tower.damage}",
+                        f"凋零:12s", f"攻击间隔:0.5s"]
+            elif tower.level >= 6:
+                info = [f"凋零瓶塔 Lv{tower.level}", f"伤害:{tower.damage}",
+                        f"范围凋零:5s", f"范围溅射", f"攻击间隔:0.5s"]
+            else:
+                info = [f"凋零箭塔 Lv{tower.level}", f"伤害:{tower.damage}",
+                        f"凋零:5s", f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.BOMB:
             if tower.level >= 11:
                 mult = tower.level - 7
@@ -844,7 +894,8 @@ class Game:
                         f"射程:全屏", f"攻击间隔:20s"]
             elif tower.level >= 6:
                 sub_names = {BombSubType.SNOW: "雪TNT", BombSubType.ICE: "冰TNT",
-                             BombSubType.FLAME: "火焰TNT", BombSubType.POISON: "毒TNT"}
+                             BombSubType.FLAME: "火焰TNT", BombSubType.POISON: "毒TNT",
+                             BombSubType.WITHER_TNT: "凋零TNT"}
                 sub_name = sub_names.get(tower.bomb_subtype, "雪TNT")
                 if tower.bomb_subtype == BombSubType.SNOW:
                     extra = "范围减速50%,持续12s"
@@ -856,6 +907,8 @@ class Game:
                 elif tower.bomb_subtype == BombSubType.POISON:
                     stacks = {6: 12, 7: 14, 8: 16, 9: 18, 10: 20}
                     extra = f"范围中毒{stacks.get(tower.level, 12)}层"
+                elif tower.bomb_subtype == BombSubType.WITHER_TNT:
+                    extra = "范围凋零5s"
                 info = [f"{sub_name} Lv{tower.level}", f"伤害:{tower.damage}",
                         extra, "按 R 切换形态", "攻击间隔:2s"]
             else:
@@ -895,7 +948,7 @@ class Game:
             self.towers.add(t)
             if tower_type == TowerType.PRODUCTION:
                 self.gold_per_second += 1
-            if tower_type in (TowerType.FLAME, TowerType.TRIDENT):
+            if tower_type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
                 self.temperature += 1
 
     def start_game(self):
@@ -910,6 +963,7 @@ class Game:
         self.path = random.choice(SEED_PATHS)
         self.start_point = self.path[0]
         self.end_point = self.path[-1]
+        self._build_background()
         self.enemies.empty()
         self.towers.empty()
         self.bullets.empty()
@@ -937,11 +991,13 @@ class Game:
         self.wind_explosions = []
         self.ice_explosions = []
         self.poison_splashes = []
+        self.wither_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []
         self.mushroom_explosions = []
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
+        self.enemy_grid = {}
         self.fog_timer = 0
         self.fog_visible = False
         self.weather_forecast = []

@@ -67,6 +67,7 @@ class TowerType(Enum):
     WIND = 6
     POISON = 7
     BOMB = 8
+    WITHER = 9
 
 
 class BombSubType(Enum):
@@ -74,6 +75,7 @@ class BombSubType(Enum):
     ICE = 1
     FLAME = 2
     POISON = 3
+    WITHER_TNT = 4
 
 
 class EnemyType(Enum):

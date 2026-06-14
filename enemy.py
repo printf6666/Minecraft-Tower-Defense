@@ -30,6 +30,8 @@ class Enemy(pygame.sprite.Sprite):
         self.wind_mark_tower = None
         self.contaminated = False
         self.contaminated_timer = 0
+        self.wither_time = 0
+        self.wither_timer = 0
 
         self.weather_slowed = False
         self.freeze_resistance = 0.0
@@ -74,7 +76,7 @@ class Enemy(pygame.sprite.Sprite):
         if enemy_key == "GHOST":
             self.image = pygame.transform.scale(self.image, (200, 200))
         elif enemy_key == "BOSS":
-            self.image = pygame.transform.scale(self.image, (256, 256))
+            self.image = pygame.transform.scale(self.image, (280, 280))
         elif enemy_key in ("ARMORED", "GOLD_ARMORED", "DIAMOND_ARMORED", "ENDLESS_ARMORED"):
             self.image = pygame.transform.scale(self.image, (100, 100))
         elif enemy_key == "SLIMELING":
@@ -132,6 +134,11 @@ class Enemy(pygame.sprite.Sprite):
     def apply_contaminate(self):
         self.contaminated = True
 
+    def apply_wither(self, duration):
+        if duration > self.wither_time:
+            self.wither_time = duration
+            self.wither_timer = 0
+
     def update(self):
         if self.health <= 0:
             return False
@@ -170,6 +177,15 @@ class Enemy(pygame.sprite.Sprite):
                 self.contaminated_timer = 0
                 dmg = int(self.max_health * 0.01)
                 reward = self.take_damage(dmg, color=(0, 255, 100), scale=1.0)
+                self.game.coins += reward
+
+        if self.wither_time > 0:
+            self.wither_time -= 1
+            self.wither_timer += 1
+            if self.wither_timer >= 120:
+                self.wither_timer = 0
+                dmg = int(self.max_health * 0.01)
+                reward = self.take_damage(dmg, color=(100, 0, 100), scale=1.0, ignore_armor=True)
                 self.game.coins += reward
 
         if self.health <= 0:
@@ -218,10 +234,6 @@ class Enemy(pygame.sprite.Sprite):
         buff_list = []
         if self.broken:
             buff_list.append("broken")
-        if self.stun_time > 0:
-            buff_list.append("stun")
-        if self.freeze_time > 0:
-            buff_list.append("freeze")
         if self.slow_time > 0 or self.weather_slowed:
             buff_list.append("slow")
         if self.burn_time > 0:
@@ -234,6 +246,8 @@ class Enemy(pygame.sprite.Sprite):
             buff_list.append("speed")
         if self.contaminated:
             buff_list.append("contaminated")
+        if self.wither_time > 0:
+            buff_list.append("wither")
         return buff_list
 
     def teleport_to_start(self):
@@ -275,17 +289,20 @@ class Enemy(pygame.sprite.Sprite):
                     break
         self.rect.center = (self.pos_x, self.pos_y)
 
-    def take_damage(self, damage, color=RED, scale=1.0):
+    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False):
         if self.health <= 0:
             return 0
 
-        final_dmg = damage
-        if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED) and not self.broken:
-            final_dmg *= 0.4
-        if self.enemy_type in (EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED) and not self.broken:
-            final_dmg *= 0.2
-        if self.broken:
-            final_dmg *= 1.2
+        if ignore_armor:
+            final_dmg = damage
+        else:
+            final_dmg = damage
+            if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED) and not self.broken:
+                final_dmg *= 0.4
+            if self.enemy_type in (EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED) and not self.broken:
+                final_dmg *= 0.2
+            if self.broken:
+                final_dmg *= 1.2
         final_dmg = int(final_dmg)
         self.health -= final_dmg
 
