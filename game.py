@@ -809,8 +809,7 @@ class Game:
         if tower.type == TowerType.PHYSICAL:
             if tower.level >= 11:
                 if tower.physical_branch == 2:
-                    info = [f"天堂陨落箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"将当前金币的1%作为伤害加成", f"攻击间隔:0.5s",
-                            f"12方向散射", "按 R 切换分支"]
+                    info = [f"天堂陨落箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"将当前金币的1%作为伤害加成", f"12方向散射", "按 R 切换分支"]
                 else:
                     info = [f"时空撕裂箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s",
                             f"将当前金币的1%作为伤害加成", f"破甲:受伤永久增加20%", "按 R 切换分支"]
