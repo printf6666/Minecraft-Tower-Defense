@@ -58,24 +58,24 @@ class GameState(Enum):
 
 
 class TowerType(Enum):
-    PHYSICAL = 0
-    PRODUCTION = 1
-    ICE = 2
-    TELEPORT = 3
-    FLAME = 4
-    TRIDENT = 5
-    WIND = 6
-    POISON = 7
-    BOMB = 8
-    WITHER = 9
+    PHYSICAL = 1
+    PRODUCTION = 2
+    ICE = 3
+    TELEPORT = 4
+    FLAME = 5
+    TRIDENT = 6
+    WIND = 7
+    POISON = 8
+    BOMB = 9
 
 
 class BombSubType(Enum):
-    SNOW = 0
-    ICE = 1
-    FLAME = 2
-    POISON = 3
-    WITHER_TNT = 4
+    SNOW = 1
+    ICE = 2
+    FLAME = 3
+    POISON = 4
+    WITHER_TNT = 5
+
 
 
 class EnemyType(Enum):

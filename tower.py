@@ -1,5 +1,6 @@
 import pygame
 import random
+import math
 import assets
 from config import *
 
@@ -36,6 +37,8 @@ class Tower(pygame.sprite.Sprite):
         self.dragon_breath_cooldown = 0
 
         self.setup_tower()
+        self.physical_branch = 1
+        self.wind_branch = 1
         self.update_sprite()
 
         self.rect = self.image.get_rect()
@@ -93,6 +96,7 @@ class Tower(pygame.sprite.Sprite):
             self.fire_rate = 60
             self.cost = 175
             self.upgrade_cost = int(175 * 1.5)
+            self.poison_branch = 1
         elif self.type == TowerType.BOMB:
             self.range = int(TILE_SIZE * 2.2)
             self.damage = 100
@@ -101,12 +105,6 @@ class Tower(pygame.sprite.Sprite):
             self.upgrade_cost = 750
             self.bomb_subtype = BombSubType.SNOW
             self.is_nuclear = False
-        elif self.type == TowerType.WITHER:
-            self.range = TILE_SIZE * 3
-            self.damage = 20
-            self.fire_rate = 60
-            self.cost = 175
-            self.upgrade_cost = int(175 * 1.5)
 
     def upgrade(self):
         if self.level >= 15:
@@ -116,7 +114,7 @@ class Tower(pygame.sprite.Sprite):
         if self.type == TowerType.PRODUCTION:
             self.game.gold_per_second += 1
             if self.level >= 6: self.game.gold_per_wave += 1
-            if self.level >= 11: self.game.gold_profit_per_wave += 0.01
+            if self.level >= 11: self.game.gold_profit_per_wave += 0.002
         if self.type == TowerType.PHYSICAL:
             self.damage += 15
             self.range += TILE_SIZE // 2
@@ -165,37 +163,45 @@ class Tower(pygame.sprite.Sprite):
                 self.is_nuclear = True
                 self.range = 0
                 self.fire_rate = 1200
-        elif self.type == TowerType.WITHER:
-            self.damage += 15
-            self.range += TILE_SIZE // 2
-            self.fire_rate = max(30, self.fire_rate - 6)
 
         self.update_sprite()
 
     def update_sprite(self):
         if self.type == TowerType.BOMB:
             if self.level >= 11:
-                img = "tower/999.png"
+                img = "tower/999-1.png"
             elif self.level >= 6:
-                sub_map = {BombSubType.SNOW: "91", BombSubType.ICE: "92", BombSubType.FLAME: "93", BombSubType.POISON: "94", BombSubType.WITHER_TNT: "95"}
+                sub_map = {BombSubType.SNOW: "99-1", BombSubType.ICE: "99-2", BombSubType.FLAME: "99-3", BombSubType.POISON: "99-4", BombSubType.WITHER_TNT: "99-5"}
                 img = f"tower/{sub_map[self.bomb_subtype]}.png"
             else:
-                img = "tower/9.png"
-        elif self.type == TowerType.WITHER:
-            if self.level >= 11:
-                img = "tower/000.png"
+                img = "tower/9-1.png"
+        elif self.type == TowerType.POISON:
+            if self.poison_branch == 2:
+                if self.level >= 11:
+                    img = "tower/888-2.png"
+                elif self.level >= 6:
+                    img = "tower/88-2.png"
+                else:
+                    img = "tower/8-2.png"
+            elif self.level >= 11:
+                img = "tower/888-1.png"
             elif self.level >= 6:
-                img = "tower/00.png"
+                img = "tower/88-1.png"
             else:
-                img = "tower/0.png"
+                img = "tower/8-1.png"
         else:
-            prefix = str(self.type.value + 1)
+            prefix = str(self.type.value)
             if self.level >= 11:
-                img = f"tower/{prefix}{prefix}{prefix}.png"
+                if self.type == TowerType.PHYSICAL and self.physical_branch == 2:
+                    img = f"tower/{prefix}{prefix}{prefix}-2.png"
+                elif self.type == TowerType.WIND and self.wind_branch == 2:
+                    img = f"tower/{prefix}{prefix}{prefix}-2.png"
+                else:
+                    img = f"tower/{prefix}{prefix}{prefix}-1.png"
             elif self.level >= 6:
-                img = f"tower/{prefix}{prefix}.png"
+                img = f"tower/{prefix}{prefix}-1.png"
             else:
-                img = f"tower/{prefix}.png"
+                img = f"tower/{prefix}-1.png"
         self.image = assets.load_image(img, (TILE_SIZE, TILE_SIZE))
         self.rect = self.image.get_rect()
         self.rect.topleft = (self.x * TILE_SIZE, self.y * TILE_SIZE)
@@ -248,7 +254,7 @@ class Tower(pygame.sprite.Sprite):
         if not has_target:
             return []
 
-        if self.type == TowerType.WITHER:
+        if self.type == TowerType.POISON and self.poison_branch == 2:
             directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
             bullets = []
             for dx, dy in directions:
@@ -273,6 +279,27 @@ class Tower(pygame.sprite.Sprite):
             return bullets
             return []
 
+        if self.type == TowerType.PHYSICAL and self.physical_branch == 2 and self.level >= 11:
+            directions = []
+            for i in range(12):
+                angle = math.radians(i * 30)
+                directions.append((math.cos(angle), math.sin(angle)))
+            bullets = []
+            for dx, dy in directions:
+                bullet = Bullet(
+                    self.rect.centerx, self.rect.centery,
+                    dx, dy, self.get_effective_range(),
+                    self.damage, self.type, self.game,
+                    self.teleport_chance, self.penetrate,
+                    self.freeze_time, self.oneshot_chance, self.stun_time,
+                    self.game.enemies, self.level)
+                bullet.lightning_damage = self.lightning_damage
+                bullet.execute_threshold = self.execute_threshold
+                bullet.source_tower = self
+                bullet.physical_branch = 2
+                bullets.append(bullet)
+            return bullets
+
         directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
         bullets = []
         for dx, dy in directions:
@@ -282,7 +309,8 @@ class Tower(pygame.sprite.Sprite):
                 self.damage, self.type, self.game,
                 self.teleport_chance, self.penetrate,
                 self.freeze_time, self.oneshot_chance, self.stun_time,
-                self.game.enemies, self.level)
+                self.game.enemies, self.level,
+                wind_branch=self.wind_branch)
             bullet.lightning_damage = self.lightning_damage
             bullet.execute_threshold = self.execute_threshold
             bullet.source_tower = self
@@ -302,7 +330,8 @@ class Tower(pygame.sprite.Sprite):
 class Bullet(pygame.sprite.Sprite):
     def __init__(self, x, y, dx, dy, max_distance, damage, tower_type, game,
                  teleport_chance=0, penetrate=False,
-                 freeze_time=0, oneshot_chance=0, stun_time=0, enemies=None, tower_level=1):
+                 freeze_time=0, oneshot_chance=0, stun_time=0, enemies=None, tower_level=1,
+                 wind_branch=1):
         super().__init__()
         self.x = x
         self.y = y
@@ -322,32 +351,29 @@ class Bullet(pygame.sprite.Sprite):
         self.stun_time = stun_time
         self.enemies = enemies
         self.tower_level = tower_level
+        self.wind_branch = wind_branch
 
         self.lightning_damage = 0
         self.execute_threshold = 0
         self.source_tower = None
         self.poison_stacks = 0
+        self.physical_branch = 1
 
-        prefix = str(self.tower_type.value + 1)
+        prefix = str(self.tower_type.value)
         if self.tower_level >= 11:
-            img = f"tower/{prefix}{prefix}{prefix}.png"
+            if self.tower_type == TowerType.WIND and self.wind_branch == 2:
+                img = f"tower/{prefix}{prefix}{prefix}-2.png"
+            else:
+                img = f"tower/{prefix}{prefix}{prefix}-1.png"
         elif self.tower_level >= 6:
-            img = f"tower/{prefix}{prefix}.png"
+            img = f"tower/{prefix}{prefix}-1.png"
         else:
-            img = f"tower/{prefix}.png"
+            img = f"tower/{prefix}-1.png"
 
         self.raw_img = assets.load_image(img, (TILE_SIZE // 2, TILE_SIZE // 2))
 
-        if self.dx == 1 and self.dy == 0:
-            rotate_angle = -45
-        elif self.dx == 0 and self.dy == -1:
-            rotate_angle = -315
-        elif self.dx == -1 and self.dy == 0:
-            rotate_angle = -225
-        elif self.dx == 0 and self.dy == 1:
-            rotate_angle = -135
-        else:
-            rotate_angle = 0
+        angle = math.degrees(math.atan2(-self.dy, self.dx))
+        rotate_angle = angle - 45
 
         self.image = pygame.transform.rotate(self.raw_img, rotate_angle)
         self.rect = self.image.get_rect(center=(x, y))
@@ -363,7 +389,7 @@ class Bullet(pygame.sprite.Sprite):
                 dmg += gold_bonus
 
         if self.tower_type == TowerType.WIND:
-            if self.tower_level >= 11:
+            if self.tower_level >= 11 and (not self.source_tower or self.source_tower.wind_branch == 1):
                 per_px = {11: 8, 12: 10, 13: 12, 14: 14, 15: 16}
                 dmg = int(self.traveled * per_px.get(self.tower_level, 8))
 
@@ -481,7 +507,7 @@ class Bullet(pygame.sprite.Sprite):
                     enemy.rect.centerx, enemy.rect.centery,
                     self.game.temperature, self.tower_level, self.stun_time)
         if self.tower_type == TowerType.PHYSICAL:
-            if self.tower_level >= 11 and not enemy.broken:
+            if self.tower_level >= 11 and not enemy.broken and self.physical_branch == 1:
                 enemy.broken = True
         if self.tower_type == TowerType.TRIDENT:
             col = enemy.rect.centerx // TILE_SIZE
@@ -516,9 +542,19 @@ class Bullet(pygame.sprite.Sprite):
                 enemy.apply_knockback(self.source_tower.wind_knockback)
                 if self.tower_level >= 6 and enemy.enemy_type not in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED):
                     enemy.wind_mark_tower = self.source_tower
-                if self.tower_level >= 11:
+                if self.tower_level >= 11 and (not self.source_tower or self.source_tower.wind_branch == 1):
                     stun_frames = {11: 6, 12: 12, 13: 18, 14: 24, 15: 30}
                     enemy.apply_stun(stun_frames.get(self.tower_level, 6))
+            if self.source_tower and self.source_tower.wind_branch == 2 and self.tower_level >= 11:
+                dmg_map = {11: 2000, 12: 4000, 13: 6000, 14: 8000, 15: 10000}
+                lightning_dmg = dmg_map.get(self.tower_level, 2500)
+                col = enemy.rect.centerx // TILE_SIZE
+                for e in self.game.enemies:
+                    e_col = e.rect.centerx // TILE_SIZE
+                    if e_col == col and e.health > 0:
+                        reward = e.take_damage(lightning_dmg, color=GOLD)
+                        self.game.coins += reward
+                self.game.add_lightning(enemy.rect.centerx, 800, False)
         if self.tower_type == TowerType.POISON and self.poison_stacks > 0:
             enemy.apply_poison(self.poison_stacks)
             if self.tower_level >= 6:
@@ -716,24 +752,16 @@ class BombBullet(pygame.sprite.Sprite):
         self.enemies = game.enemies
 
         if tower_level >= 11:
-            img = "tower/999.png"
+            img = "tower/999-1.png"
         elif tower_level >= 6:
-            sub_map = {BombSubType.SNOW: "91", BombSubType.ICE: "92", BombSubType.FLAME: "93", BombSubType.POISON: "94", BombSubType.WITHER_TNT: "95"}
+            sub_map = {BombSubType.SNOW: "99-1", BombSubType.ICE: "99-2", BombSubType.FLAME: "99-3", BombSubType.POISON: "99-4", BombSubType.WITHER_TNT: "99-5"}
             img = f"tower/{sub_map[bomb_subtype]}.png"
         else:
-            img = "tower/9.png"
+            img = "tower/9-1.png"
         self.raw_img = assets.load_image(img, (TILE_SIZE // 2, TILE_SIZE // 2))
 
-        if self.dx == 1 and self.dy == 0:
-            rotate_angle = -45
-        elif self.dx == 0 and self.dy == -1:
-            rotate_angle = -315
-        elif self.dx == -1 and self.dy == 0:
-            rotate_angle = -225
-        elif self.dx == 0 and self.dy == 1:
-            rotate_angle = -135
-        else:
-            rotate_angle = 0
+        angle = math.degrees(math.atan2(-self.dy, self.dx))
+        rotate_angle = angle - 45
 
         self.image = pygame.transform.rotate(self.raw_img, rotate_angle)
         self.rect = self.image.get_rect(center=(x, y))
@@ -831,7 +859,7 @@ class NuclearMissile(pygame.sprite.Sprite):
         self.damage = damage
         self.tower_level = tower_level
         self.game = game
-        self.raw_img = assets.load_image("tower/999.png", (TILE_SIZE // 2, TILE_SIZE // 2))
+        self.raw_img = assets.load_image("tower/999-1.png", (TILE_SIZE // 2, TILE_SIZE // 2))
         self.image = self.raw_img
         self.rect = self.image.get_rect(center=(x, y))
 
@@ -940,23 +968,15 @@ class WitherBullet(pygame.sprite.Sprite):
         self.enemies = game.enemies
 
         if tower_level >= 11:
-            img = "tower/000.png"
+            img = "tower/888-2.png"
         elif tower_level >= 6:
-            img = "tower/00.png"
+            img = "tower/88-2.png"
         else:
-            img = "tower/0.png"
+            img = "tower/8-2.png"
         self.raw_img = assets.load_image(img, (TILE_SIZE // 2, TILE_SIZE // 2))
 
-        if self.dx == 1 and self.dy == 0:
-            rotate_angle = -45
-        elif self.dx == 0 and self.dy == -1:
-            rotate_angle = -315
-        elif self.dx == -1 and self.dy == 0:
-            rotate_angle = -225
-        elif self.dx == 0 and self.dy == 1:
-            rotate_angle = -135
-        else:
-            rotate_angle = 0
+        angle = math.degrees(math.atan2(-self.dy, self.dx))
+        rotate_angle = angle - 45
 
         self.image = pygame.transform.rotate(self.raw_img, rotate_angle)
         self.rect = self.image.get_rect(center=(x, y))

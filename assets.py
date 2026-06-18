@@ -1,6 +1,7 @@
 import pygame
 import sys
 import os
+from config import TowerType
 
 ASSET_CACHE = {}
 
@@ -104,13 +105,12 @@ def init_assets():
 
     icon_size = 100
     tower_icons.clear()
-    for i in range(1, 11):
+    for ttype in TowerType:
         try:
-            path = f"tower/{i}.png" if i < 10 else "tower/0.png"
-            tower_icons.append(load_image(path, (icon_size, icon_size)))
+            tower_icons.append(load_image(f"tower/{ttype.value}-1.png", (icon_size, icon_size)))
         except:
             tower_icons.append(pygame.Surface((icon_size, icon_size)))
-    icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9, icon10 = tower_icons
+    icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9 = tower_icons
 
     global tnt_explosion_frames
     tnt_explosion_frames.clear()
