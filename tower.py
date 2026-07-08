@@ -4,6 +4,7 @@ import math
 import assets
 from config import *
 from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash
+from dragons import Dragon
 
 MAP_CENTER_X = GRID_WIDTH * TILE_SIZE // 2
 MAP_CENTER_Y = (1 + GRID_HEIGHT) * TILE_SIZE // 2
@@ -40,6 +41,8 @@ class Tower(pygame.sprite.Sprite):
         self.setup_tower()
         self.physical_branch = 1
         self.wind_branch = 1
+        self.ice_branch = 1
+        self.flame_branch = 1
         self.update_sprite()
 
         self.rect = self.image.get_rect()
@@ -190,6 +193,28 @@ class Tower(pygame.sprite.Sprite):
                 img = "tower/88-1.png"
             else:
                 img = "tower/8-1.png"
+        elif self.type == TowerType.ICE:
+            prefix = str(self.type.value)
+            if self.level >= 11:
+                if self.ice_branch == 2:
+                    img = f"tower/{prefix}{prefix}{prefix}-2.png"
+                else:
+                    img = f"tower/{prefix}{prefix}{prefix}-1.png"
+            elif self.level >= 6:
+                img = f"tower/{prefix}{prefix}-1.png"
+            else:
+                img = f"tower/{prefix}-1.png"
+        elif self.type == TowerType.FLAME:
+            prefix = str(self.type.value)
+            if self.level >= 11:
+                if self.flame_branch == 2:
+                    img = f"tower/{prefix}{prefix}{prefix}-2.png"
+                else:
+                    img = f"tower/{prefix}{prefix}{prefix}-1.png"
+            elif self.level >= 6:
+                img = f"tower/{prefix}{prefix}-1.png"
+            else:
+                img = f"tower/{prefix}-1.png"
         else:
             prefix = str(self.type.value)
             if self.level >= 11:
@@ -312,7 +337,9 @@ class Tower(pygame.sprite.Sprite):
                 self.teleport_chance, self.penetrate,
                 self.freeze_time, self.oneshot_chance, self.stun_time,
                 self.game.enemies, self.level,
-                wind_branch=self.wind_branch)
+                wind_branch=self.wind_branch,
+                ice_branch=self.ice_branch,
+                flame_branch=self.flame_branch)
             bullet.lightning_damage = self.lightning_damage
             bullet.execute_threshold = self.execute_threshold
             bullet.source_tower = self
@@ -322,6 +349,17 @@ class Tower(pygame.sprite.Sprite):
                 else:
                     bullet.poison_stacks = self.level
             bullets.append(bullet)
+
+        if self.type == TowerType.ICE and self.level >= 11 and self.ice_branch == 2:
+            if random.random() < 0.02:
+                dragon = Dragon(self.game.path, "ice", self.level, self.game)
+                self.game.dragons.add(dragon)
+
+        if self.type == TowerType.FLAME and self.level >= 11 and self.flame_branch == 2:
+            if random.random() < 0.05:
+                dragon = Dragon(self.game.path, "fire", self.level, self.game)
+                self.game.dragons.add(dragon)
+
         return bullets
 
     def draw_range(self, surface):
@@ -333,7 +371,7 @@ class Bullet(pygame.sprite.Sprite):
     def __init__(self, x, y, dx, dy, max_distance, damage, tower_type, game,
                  teleport_chance=0, penetrate=False,
                  freeze_time=0, oneshot_chance=0, stun_time=0, enemies=None, tower_level=1,
-                 wind_branch=1):
+                 wind_branch=1, ice_branch=1, flame_branch=1):
         super().__init__()
         self.x = x
         self.y = y
@@ -354,6 +392,8 @@ class Bullet(pygame.sprite.Sprite):
         self.enemies = enemies
         self.tower_level = tower_level
         self.wind_branch = wind_branch
+        self.ice_branch = ice_branch
+        self.flame_branch = flame_branch
 
         self.lightning_damage = 0
         self.execute_threshold = 0
@@ -364,6 +404,10 @@ class Bullet(pygame.sprite.Sprite):
         prefix = str(self.tower_type.value)
         if self.tower_level >= 11:
             if self.tower_type == TowerType.WIND and self.wind_branch == 2:
+                img = f"tower/{prefix}{prefix}{prefix}-2.png"
+            elif self.tower_type == TowerType.ICE and self.ice_branch == 2:
+                img = f"tower/{prefix}{prefix}{prefix}-2.png"
+            elif self.tower_type == TowerType.FLAME and self.flame_branch == 2:
                 img = f"tower/{prefix}{prefix}{prefix}-2.png"
             else:
                 img = f"tower/{prefix}{prefix}{prefix}-1.png"
@@ -447,7 +491,7 @@ class Bullet(pygame.sprite.Sprite):
     def on_hit(self, enemy):
         final_dmg = self.calculate_final_damage()
 
-        if self.tower_type == TowerType.ICE and self.tower_level >= 11 and enemy.freeze_time > 0:
+        if self.tower_type == TowerType.ICE and self.tower_level >= 11 and self.ice_branch == 1 and enemy.freeze_time > 0:
             bonus = int(self.game.temperature * 3 * (self.tower_level - 10))
             final_dmg += bonus
 
@@ -485,7 +529,7 @@ class Bullet(pygame.sprite.Sprite):
             if self.game.weather == Weather.EXTREME_COLD:
                 freeze_frames = int(freeze_frames * 2)
             enemy.apply_freeze(freeze_frames)
-            if self.tower_level >= 11:
+            if self.tower_level >= 11 and self.ice_branch == 1:
                 freeze_frames_for_exp = freeze_frames
                 if self.freeze_time <= 0:
                     freeze_frames_for_exp = 60
@@ -504,7 +548,7 @@ class Bullet(pygame.sprite.Sprite):
             enemy.apply_burn(burn_dmg, 240)
             if self.tower_level >= 6:
                 enemy.apply_stun(int(self.stun_time * 60))
-            if self.tower_level >= 11:
+            if self.tower_level >= 11 and self.flame_branch == 1:
                 self.game.add_dragon_breath(
                     enemy.rect.centerx, enemy.rect.centery,
                     self.game.temperature, self.tower_level, self.stun_time)

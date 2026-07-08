@@ -30,6 +30,8 @@ class UIManager:
         self.game.towers.draw(self.game.screen)
         self.game.enemies.draw(self.game.screen)
         self.game.bullets.draw(self.game.screen)
+        for dragon in self.game.dragons:
+            dragon.draw(self.game.screen)
         for tower in self.game.towers:
             self.game.screen.blit(assets.font_tower_level.render(f"Lv{tower.level}", True, YELLOW),
                                  (tower.x * TILE_SIZE + 70, tower.y * TILE_SIZE + 90))

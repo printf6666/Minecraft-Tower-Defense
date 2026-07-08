@@ -71,6 +71,9 @@ dirt_img = None
 start_img = None
 house_img = None
 
+ice_dragon_img = None
+fire_dragon_img = None
+
 explode_sound = None
 level_up_sound = None
 teleport_sound = None
@@ -217,3 +220,15 @@ def init_assets():
     dirt_img = load_image("tower/dirt.png", ts)
     start_img = load_image("tower/start.png", ts)
     house_img = load_image("tower/house.png", ts)
+
+    global ice_dragon_img, fire_dragon_img
+    try:
+        ice_dragon_img = load_image("tower/ice_dragon.png", (256, 256))
+    except:
+        ice_dragon_img = pygame.Surface((256, 256))
+        ice_dragon_img.fill((100, 150, 255))
+    try:
+        fire_dragon_img = load_image("tower/fire_dragon.png", (256, 256))
+    except:
+        fire_dragon_img = pygame.Surface((256, 256))
+        fire_dragon_img.fill((255, 100, 0))
