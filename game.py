@@ -224,11 +224,15 @@ class Game:
                                 assets.level_up_sound.play()
                             if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
                                 self.temperature += 1
-                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.BOMB and 6 <= self.selected_tower.level < 11:
-                        sub_types = [BombSubType.SNOW, BombSubType.ICE, BombSubType.FLAME, BombSubType.POISON, BombSubType.WITHER_TNT]
-                        idx = sub_types.index(self.selected_tower.bomb_subtype)
-                        self.selected_tower.bomb_subtype = sub_types[(idx + 1) % 5]
-                        self.selected_tower.update_sprite()
+                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.BOMB:
+                        if self.selected_tower.level >= 11:
+                            self.selected_tower.bomb_branch = 3 - self.selected_tower.bomb_branch
+                            self.selected_tower.update_sprite()
+                        elif 6 <= self.selected_tower.level < 11:
+                            sub_types = [BombSubType.SNOW, BombSubType.ICE, BombSubType.FLAME, BombSubType.POISON, BombSubType.WITHER_TNT]
+                            idx = sub_types.index(self.selected_tower.bomb_subtype)
+                            self.selected_tower.bomb_subtype = sub_types[(idx + 1) % 5]
+                            self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.POISON:
                         max_branch = 3 if self.selected_tower.level >= 11 else 2
                         self.selected_tower.poison_branch = self.selected_tower.poison_branch % max_branch + 1
@@ -652,7 +656,7 @@ class Game:
                     info = [f"冰霜炸弹塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
                             f"对冻结+{bonus_pct}%温度伤害", f"攻击间隔:0.5s", "按R切换形态"]
             elif tower.level >= 6:
-                info = [f"冰块塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
+                info = [f"冰球塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
                         f"攻击间隔:0.5s"]
             else:
                 info = [f"雪球塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
@@ -737,10 +741,18 @@ class Game:
                         f"中毒层数:{tower.level}层/次", "按 R 切换分支", f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.BOMB:
             if tower.level >= 11:
-                dmg = (20000 + 100 * self.temperature) * (tower.level - 10)
-                info = [f"核弹塔 Lv{tower.level}", f"伤害:{dmg}(受温度影响)",
-                        f"击晕:2s", f"中毒:{tower.level * 10}层",
-                        f"射程:全屏", f"攻击间隔:20s"]
+                if tower.bomb_branch == 2:
+                    percent = [4, 5, 6, 7, 8][tower.level - 11]
+                    fixed = [2000, 4000, 6000, 8000, 10000][tower.level - 11]
+                    info = [f"凋零核弹塔 Lv{tower.level}",
+                            f"伤害:{percent}%最大生命+{fixed}固定",
+                            f"击晕:2s", f"凋零:10s",
+                            f"射程:全屏", f"攻击间隔:20s", "按 R 切换形态"]
+                else:
+                    dmg = (20000 + 100 * self.temperature) * (tower.level - 10)
+                    info = [f"核弹塔 Lv{tower.level}", f"伤害:{dmg}(受温度影响)",
+                            f"击晕:2s", f"中毒:{tower.level * 10}层",
+                            f"射程:全屏", f"攻击间隔:20s", "按 R 切换形态"]
             elif tower.level >= 6:
                 sub_names = {BombSubType.SNOW: "雪TNT", BombSubType.ICE: "冰TNT",
                              BombSubType.FLAME: "火焰TNT", BombSubType.POISON: "毒TNT",

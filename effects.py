@@ -232,12 +232,13 @@ class TNTExplosion:
 
 
 class MushroomExplosion:
-    def __init__(self, x, y, damage, tower_level, game):
+    def __init__(self, x, y, damage, tower_level, game, bomb_branch=1):
         self.x = x
         self.y = y
         self.damage = damage
         self.tower_level = tower_level
         self.game = game
+        self.bomb_branch = bomb_branch
         self.frame = 0
         self.frame_timer = 0
         self.frame_duration = 3
@@ -247,14 +248,27 @@ class MushroomExplosion:
         if assets.explode_sound:
             assets.explode_sound.play()
 
-        final_damage = (20000 + 100 * game.temperature) * (tower_level - 10)
-        for enemy in game.enemies:
-            if enemy.health <= 0:
-                continue
-            reward = enemy.take_damage(final_damage, color=RED, scale=1.2)
-            game.coins += reward
-            enemy.apply_stun(120)
-            enemy.apply_poison(tower_level * 10)
+        if bomb_branch == 1:
+            final_damage = (20000 + 100 * game.temperature) * (tower_level - 10)
+            for enemy in game.enemies:
+                if enemy.health <= 0:
+                    continue
+                reward = enemy.take_damage(final_damage, color=RED, scale=1.2)
+                game.coins += reward
+                enemy.apply_stun(120)
+                enemy.apply_poison(tower_level * 10)
+        else:
+            percent_damage = [0.04, 0.05, 0.06, 0.07, 0.08][tower_level - 11]
+            fixed_damage = [2000, 4000, 6000, 8000, 10000][tower_level - 11]
+            for enemy in game.enemies:
+                if enemy.health <= 0:
+                    continue
+                percent_dmg = int(enemy.max_health * percent_damage)
+                reward = enemy.take_damage(percent_dmg, color=RED, scale=1.2)
+                reward += enemy.take_damage(fixed_damage, color=RED, scale=1.2)
+                game.coins += reward
+                enemy.apply_stun(120)
+                enemy.wither_timer = 600
 
     def update(self):
         if self.done:
@@ -275,10 +289,11 @@ class MushroomExplosion:
 
 
 class NuclearShockwave:
-    def __init__(self, x, y, game):
+    def __init__(self, x, y, game, bomb_branch=1):
         self.x = x
         self.y = y
         self.game = game
+        self.bomb_branch = bomb_branch
         self.radius = 0
         self.max_radius = int(SCREEN_WIDTH * 0.75)
         self.duration = 45
@@ -297,7 +312,10 @@ class NuclearShockwave:
         if self.done:
             return
         alpha = max(0, 120 - int(120 * self.timer / self.duration))
-        color = (255, 0, 0, alpha)
+        if self.bomb_branch == 2:
+            color = (0, 0, 0, alpha)
+        else:
+            color = (255, 0, 0, alpha)
         s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
         pygame.draw.circle(s, color, (self.radius, self.radius), self.radius)
         screen.blit(s, (self.x - self.radius, self.y - self.radius))

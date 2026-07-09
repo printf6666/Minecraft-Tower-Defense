@@ -43,6 +43,8 @@ class Tower(pygame.sprite.Sprite):
         self.wind_branch = 1
         self.ice_branch = 1
         self.flame_branch = 1
+        self.poison_branch = 1
+        self.bomb_branch = 1
         self.update_sprite()
 
         self.rect = self.image.get_rect()
@@ -168,14 +170,17 @@ class Tower(pygame.sprite.Sprite):
             if self.level >= 11:
                 self.is_nuclear = True
                 self.range = 0
-                self.fire_rate = 1200
+                if self.bomb_branch == 2:
+                    self.fire_rate = 1200
+                else:
+                    self.fire_rate = 1200
 
         self.update_sprite()
 
     def update_sprite(self):
         if self.type == TowerType.BOMB:
             if self.level >= 11:
-                img = "tower/999-1.png"
+                img = f"tower/999-{self.bomb_branch}.png"
             elif self.level >= 6:
                 sub_map = {BombSubType.SNOW: "99-1", BombSubType.ICE: "99-2", BombSubType.FLAME: "99-3", BombSubType.POISON: "99-4", BombSubType.WITHER_TNT: "99-5"}
                 img = f"tower/{sub_map[self.bomb_subtype]}.png"
@@ -263,7 +268,8 @@ class Tower(pygame.sprite.Sprite):
             if self.game.enemies:
                 missile = NuclearMissile(self.rect.centerx, self.rect.centery,
                                          MAP_CENTER_X, MAP_CENTER_Y,
-                                         self.damage, self.level, self.game)
+                                         self.damage, self.level, self.game,
+                                         self.bomb_branch)
                 return [missile]
             return []
 
@@ -687,7 +693,7 @@ class BombBullet(pygame.sprite.Sprite):
 
 
 class NuclearMissile(pygame.sprite.Sprite):
-    def __init__(self, x, y, target_x, target_y, damage, tower_level, game):
+    def __init__(self, x, y, target_x, target_y, damage, tower_level, game, bomb_branch=1):
         super().__init__()
         self.x = x
         self.y = y
@@ -697,7 +703,8 @@ class NuclearMissile(pygame.sprite.Sprite):
         self.damage = damage
         self.tower_level = tower_level
         self.game = game
-        self.raw_img = assets.load_image("tower/999-1.png", (TILE_SIZE // 2, TILE_SIZE // 2))
+        self.bomb_branch = bomb_branch
+        self.raw_img = assets.load_image(f"tower/999-{bomb_branch}.png", (TILE_SIZE // 2, TILE_SIZE // 2))
         self.image = self.raw_img
         self.rect = self.image.get_rect(center=(x, y))
 
@@ -707,9 +714,9 @@ class NuclearMissile(pygame.sprite.Sprite):
         dist = (dx * dx + dy * dy) ** 0.5
         if dist < self.speed:
             explosion = MushroomExplosion(MAP_CENTER_X, MAP_CENTER_Y,
-                                          self.damage, self.tower_level, self.game)
+                                          self.damage, self.tower_level, self.game, self.bomb_branch)
             self.game.mushroom_explosions.append(explosion)
-            shockwave = NuclearShockwave(MAP_CENTER_X, MAP_CENTER_Y, self.game)
+            shockwave = NuclearShockwave(MAP_CENTER_X, MAP_CENTER_Y, self.game, self.bomb_branch)
             self.game.shockwave_effects.append(shockwave)
             self.kill()
             return
