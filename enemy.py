@@ -68,7 +68,8 @@ class Enemy(pygame.sprite.Sprite):
         if game.weather == Weather.ACID_RAIN:
             self.poison_stacks = 10
         if game.weather == Weather.MAGNETIC_STORM:
-            if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED):
+            if self.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED,
+                                   EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
                 self.broken = True
 
         self.image = assets.load_image(f"enemy/{config['image']}")
@@ -77,8 +78,10 @@ class Enemy(pygame.sprite.Sprite):
             self.image = pygame.transform.scale(self.image, (200, 200))
         elif enemy_key == "BOSS":
             self.image = pygame.transform.scale(self.image, (280, 280))
-        elif enemy_key in ("ARMORED", "GOLD_ARMORED", "DIAMOND_ARMORED", "ENDLESS_ARMORED"):
+        elif enemy_key in ("IRON_ARMORED", "GOLD_ARMORED", "DIAMOND_ARMORED", "NETHERITE_ARMORED"):
             self.image = pygame.transform.scale(self.image, (100, 100))
+        elif enemy_key in ("NAUTILUS", "IRON_NAUTILUS", "GOLD_NAUTILUS", "DIAMOND_NAUTILUS", "NETHERITE_NAUTILUS"):
+            pass
         elif enemy_key == "SLIMELING":
             self.image = pygame.transform.scale(self.image, (64, 64))
         elif enemy_key == "NORMAL" or enemy_key == "FAST":
@@ -127,6 +130,8 @@ class Enemy(pygame.sprite.Sprite):
         self.last_stun_time = self.game.game_time
 
     def apply_poison(self, stacks):
+        if self.enemy_type in (EnemyType.NAUTILUS, EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
+            return
         if self.game.weather == Weather.ACID_RAIN:
             stacks *= 2
         self.poison_stacks += stacks
@@ -258,7 +263,8 @@ class Enemy(pygame.sprite.Sprite):
         self.rect.center = (self.pos_x, self.pos_y)
 
     def apply_knockback(self, distance):
-        if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED):
+        if self.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED,
+                               EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
             return
         if self.path_index <= 0:
             return
@@ -297,9 +303,9 @@ class Enemy(pygame.sprite.Sprite):
             final_dmg = damage
         else:
             final_dmg = damage
-            if self.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED) and not self.broken:
+            if self.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED) and not self.broken:
                 final_dmg *= 0.4
-            if self.enemy_type in (EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED) and not self.broken:
+            if self.enemy_type in (EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED) and not self.broken:
                 final_dmg *= 0.2
             if self.broken:
                 final_dmg *= 1.2

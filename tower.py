@@ -48,6 +48,7 @@ class Tower(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.topleft = (x * TILE_SIZE, y * TILE_SIZE)
         self.is_production = (self.type == TowerType.PRODUCTION)
+        self.is_on_gold_ore = (x, y) in self.game.gold_ore_positions
 
     def setup_tower(self):
         if self.type == TowerType.PHYSICAL:
@@ -116,9 +117,10 @@ class Tower(pygame.sprite.Sprite):
         self.level += 1
         self.upgrade_cost = int(self.upgrade_cost * 1.5)
         if self.type == TowerType.PRODUCTION:
-            self.game.gold_per_second += 1
-            if self.level >= 6: self.game.gold_per_wave += 1
-            if self.level >= 11: self.game.gold_profit_per_wave += 0.002
+            multiplier = 2 if self.is_on_gold_ore else 1
+            self.game.gold_per_second += multiplier
+            if self.level >= 6: self.game.gold_per_wave += multiplier
+            if self.level >= 11: self.game.gold_profit_per_wave += 0.001 * multiplier
         if self.type == TowerType.PHYSICAL:
             self.damage += 15
             self.range += TILE_SIZE // 2
@@ -180,19 +182,23 @@ class Tower(pygame.sprite.Sprite):
             else:
                 img = "tower/9-1.png"
         elif self.type == TowerType.POISON:
-            if self.poison_branch == 2:
-                if self.level >= 11:
+            if self.level >= 11:
+                if self.poison_branch == 3:
+                    img = "tower/888-3.png"
+                elif self.poison_branch == 2:
                     img = "tower/888-2.png"
-                elif self.level >= 6:
+                else:
+                    img = "tower/888-1.png"
+            elif self.level >= 6:
+                if self.poison_branch == 2:
                     img = "tower/88-2.png"
                 else:
-                    img = "tower/8-2.png"
-            elif self.level >= 11:
-                img = "tower/888-1.png"
-            elif self.level >= 6:
-                img = "tower/88-1.png"
+                    img = "tower/88-1.png"
             else:
-                img = "tower/8-1.png"
+                if self.poison_branch == 2:
+                    img = "tower/8-2.png"
+                else:
+                    img = "tower/8-1.png"
         elif self.type == TowerType.ICE:
             prefix = str(self.type.value)
             if self.level >= 11:
@@ -339,12 +345,15 @@ class Tower(pygame.sprite.Sprite):
                 self.game.enemies, self.level,
                 wind_branch=self.wind_branch,
                 ice_branch=self.ice_branch,
-                flame_branch=self.flame_branch)
+                flame_branch=self.flame_branch,
+                poison_branch=self.poison_branch)
             bullet.lightning_damage = self.lightning_damage
             bullet.execute_threshold = self.execute_threshold
             bullet.source_tower = self
             if self.type == TowerType.POISON:
-                if self.level >= 11:
+                if self.poison_branch == 3:
+                    bullet.poison_stacks = self.level * 9
+                elif self.level >= 11:
                     bullet.poison_stacks = self.level * 4
                 else:
                     bullet.poison_stacks = self.level
@@ -371,7 +380,7 @@ class Bullet(pygame.sprite.Sprite):
     def __init__(self, x, y, dx, dy, max_distance, damage, tower_type, game,
                  teleport_chance=0, penetrate=False,
                  freeze_time=0, oneshot_chance=0, stun_time=0, enemies=None, tower_level=1,
-                 wind_branch=1, ice_branch=1, flame_branch=1):
+                 wind_branch=1, ice_branch=1, flame_branch=1, poison_branch=1):
         super().__init__()
         self.x = x
         self.y = y
@@ -394,6 +403,7 @@ class Bullet(pygame.sprite.Sprite):
         self.wind_branch = wind_branch
         self.ice_branch = ice_branch
         self.flame_branch = flame_branch
+        self.poison_branch = poison_branch
 
         self.lightning_damage = 0
         self.execute_threshold = 0
@@ -409,12 +419,22 @@ class Bullet(pygame.sprite.Sprite):
                 img = f"tower/{prefix}{prefix}{prefix}-2.png"
             elif self.tower_type == TowerType.FLAME and self.flame_branch == 2:
                 img = f"tower/{prefix}{prefix}{prefix}-2.png"
+            elif self.tower_type == TowerType.POISON:
+                img = f"tower/{prefix}{prefix}{prefix}-{self.poison_branch}.png"
             else:
                 img = f"tower/{prefix}{prefix}{prefix}-1.png"
         elif self.tower_level >= 6:
-            img = f"tower/{prefix}{prefix}-1.png"
+            if self.tower_type == TowerType.POISON:
+                branch = self.poison_branch if self.poison_branch <= 2 else 2
+                img = f"tower/{prefix}{prefix}-{branch}.png"
+            else:
+                img = f"tower/{prefix}{prefix}-1.png"
         else:
-            img = f"tower/{prefix}-1.png"
+            if self.tower_type == TowerType.POISON:
+                branch = self.poison_branch if self.poison_branch <= 2 else 2
+                img = f"tower/{prefix}-{branch}.png"
+            else:
+                img = f"tower/{prefix}-1.png"
 
         self.raw_img = assets.load_image(img, (TILE_SIZE // 2, TILE_SIZE // 2))
 
@@ -500,7 +520,7 @@ class Bullet(pygame.sprite.Sprite):
             hp_bonus = int(enemy.max_health * hp_ratios.get(self.tower_level, 0))
             final_dmg += hp_bonus
 
-        if enemy.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.ENDLESS_ARMORED) and self.tower_level >= 6:
+        if enemy.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED) and self.tower_level >= 6:
             if self.tower_type in (TowerType.PHYSICAL, TowerType.TRIDENT):
                 final_dmg = self.damage
 
@@ -563,7 +583,7 @@ class Bullet(pygame.sprite.Sprite):
                 e_col = e.rect.centerx // TILE_SIZE
                 if e_col == col and e.health > 0:
                     dmg = lightning_dmg
-                    if e.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.ENDLESS_ARMORED):
+                    if e.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED):
                         dmg = self.lightning_damage
                     reward = e.take_damage(dmg, color=GOLD)
                     self.game.coins += reward
@@ -577,7 +597,7 @@ class Bullet(pygame.sprite.Sprite):
                     e_row = e.rect.centery // TILE_SIZE
                     if e_row == row and e.health > 0:
                         dmg = h_lightning_dmg
-                        if e.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.ENDLESS_ARMORED):
+                        if e.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED):
                             dmg = self.lightning_damage
                         reward = e.take_damage(dmg, color=GOLD)
                         self.game.coins += reward
@@ -586,7 +606,7 @@ class Bullet(pygame.sprite.Sprite):
         if self.tower_type == TowerType.WIND:
             if self.source_tower:
                 enemy.apply_knockback(self.source_tower.wind_knockback)
-                if self.tower_level >= 6 and enemy.enemy_type not in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED):
+                if self.tower_level >= 6 and enemy.enemy_type not in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED):
                     enemy.wind_mark_tower = self.source_tower
                 if self.tower_level >= 11 and (not self.source_tower or self.source_tower.wind_branch == 1):
                     stun_frames = {11: 6, 12: 12, 13: 18, 14: 24, 15: 30}
@@ -603,7 +623,7 @@ class Bullet(pygame.sprite.Sprite):
                 self.game.add_lightning(enemy.rect.centerx, 800, False)
         if self.tower_type == TowerType.POISON and self.poison_stacks > 0:
             enemy.apply_poison(self.poison_stacks)
-            if self.tower_level >= 6:
+            if self.tower_level >= 6 and (not self.source_tower or self.source_tower.poison_branch != 3):
                 splash = PoisonSplash(enemy.rect.centerx, enemy.rect.centery, self.damage, self.poison_stacks, self.game)
                 self.game.poison_splashes.append(splash)
 

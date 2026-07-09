@@ -44,14 +44,14 @@ with open(resource_path("seed.json")) as f:
 TOWER_DATA = [
     (TowerType.PHYSICAL,   "物理", 100,  pygame.K_1),
     (TowerType.PRODUCTION, "生产", 50,   pygame.K_2),
-    (TowerType.ICE,        "冰霜", 150,  pygame.K_3),
+    (TowerType.ICE,        "冰系", 150,  pygame.K_3),
     (TowerType.TELEPORT,   "传送", 300,  pygame.K_4),
-    (TowerType.FLAME,      "火焰", 200,  pygame.K_5),
+    (TowerType.FLAME,      "火系", 200,  pygame.K_5),
     (TowerType.TRIDENT,    "三叉", 400,  pygame.K_6),
     (TowerType.WIND,       "风系", 250,  pygame.K_7),
     (TowerType.POISON,     "毒系", 175,  pygame.K_8),
     (TowerType.BOMB,       "TNT", 500,  pygame.K_9),
-]
+    ]
 
 
 class Game:
@@ -119,10 +119,21 @@ class Game:
         self.background_surface = pygame.Surface((gw, gh))
         self.background_surface.fill(BLACK)
         path_set = set(self.path)
+
+        stone_tiles = []
+        for x in range(GRID_WIDTH):
+            for y in range(1, GRID_HEIGHT + 1):
+                if (x, y) not in path_set and (x, y) != self.end_point:
+                    stone_tiles.append((x, y))
+
+        self.gold_ore_positions = set(random.sample(stone_tiles, min(5, len(stone_tiles))))
+
         for x in range(GRID_WIDTH):
             for y in range(1, GRID_HEIGHT + 1):
                 if (x, y) in path_set:
                     self.background_surface.blit(assets.dirt_img, (x * TILE_SIZE, y * TILE_SIZE))
+                elif (x, y) in self.gold_ore_positions:
+                    self.background_surface.blit(assets.gold_ore_img, (x * TILE_SIZE, y * TILE_SIZE))
                 else:
                     self.background_surface.blit(assets.stone_img, (x * TILE_SIZE, y * TILE_SIZE))
         sx, sy = self.start_point
@@ -219,7 +230,8 @@ class Game:
                         self.selected_tower.bomb_subtype = sub_types[(idx + 1) % 5]
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.POISON:
-                        self.selected_tower.poison_branch = 3 - self.selected_tower.poison_branch
+                        max_branch = 3 if self.selected_tower.level >= 11 else 2
+                        self.selected_tower.poison_branch = self.selected_tower.poison_branch % max_branch + 1
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.PHYSICAL and self.selected_tower.level >= 11:
                         self.selected_tower.physical_branch = 3 - self.selected_tower.physical_branch
@@ -239,11 +251,12 @@ class Game:
                         self.coins += sell_price
                         if self.selected_tower.type == TowerType.PRODUCTION:
                             level = self.selected_tower.level
-                            self.gold_per_second -= level
+                            multiplier = 2 if self.selected_tower.is_on_gold_ore else 1
+                            self.gold_per_second -= level * multiplier
                             if level >= 6:
-                                self.gold_per_wave -= (level - 5)
+                                self.gold_per_wave -= (level - 5) * multiplier
                             if level >= 11:
-                                self.gold_profit_per_wave -= (level - 10) * 0.002
+                                self.gold_profit_per_wave -= (level - 10) * 0.001 * multiplier
                         if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
                             self.temperature -= self.selected_tower.level
                         self.selected_tower.kill()
@@ -445,7 +458,8 @@ class Game:
                     t.level -= 1
                     t.upgrade_cost = int(t.upgrade_cost / 1.5)
                     if t.type == TowerType.PRODUCTION:
-                        self.gold_per_second -= 1
+                        multiplier = 2 if t.is_on_gold_ore else 1
+                        self.gold_per_second -= multiplier
                     if old_level > 1:
                         if t.type == TowerType.PHYSICAL:
                             t.damage -= 15
@@ -505,8 +519,9 @@ class Game:
                                 t.fire_rate = 120
                             self.temperature -= 1
                         if t.type == TowerType.PRODUCTION:
-                            if old_level >= 6: self.gold_per_wave -= 1
-                            if old_level >= 11: self.gold_profit_per_wave -= 0.002
+                            multiplier = 2 if t.is_on_gold_ore else 1
+                            if old_level >= 6: self.gold_per_wave -= multiplier
+                            if old_level >= 11: self.gold_profit_per_wave -= 0.001 * multiplier
                         t.update_sprite()
                     else:
                         if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
@@ -531,7 +546,7 @@ class Game:
             self.fog_timer = 180
         if self.weather == Weather.MAGNETIC_STORM:
             for enemy in self.enemies:
-                if enemy.enemy_type in (EnemyType.ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.ENDLESS_ARMORED):
+                if enemy.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED):
                     enemy.broken = True
 
     def play_random_bgm(self):
@@ -620,12 +635,12 @@ class Game:
         elif tower.type == TowerType.PRODUCTION:
             if tower.level >= 11:
                 info = [f"无尽矿 Lv{tower.level}", f"全局产量:{self.gold_per_second}/s",
-                        f"全局每波产出:{5 * self.gold_per_wave}*当前波数", f"全局每波利息:{round(100 * self.gold_profit_per_wave, 1)}%"]
+                        f"全局每波产出:{5 * self.gold_per_wave}*当前波数", f"全局每波利息:{round(100 * self.gold_profit_per_wave, 1)}%", "放置在金矿石上时产出+100%"]
             elif tower.level >= 6:
                 info = [f"下界合金矿 Lv{tower.level}", f"全局每波产出:{5 * self.gold_per_wave}*当前波数",
-                        f"全局产量:{self.gold_per_second}/s"]
+                        f"全局产量:{self.gold_per_second}/s", "放置在金矿石上时产出+100%"]
             else:
-                info = [f"金矿 Lv{tower.level}", f"全局产量:{self.gold_per_second}/s"]
+                info = [f"金矿 Lv{tower.level}", f"全局产量:{self.gold_per_second}/s", "放置在金矿石上时产出+100%"]
         elif tower.type == TowerType.ICE:
             if tower.level >= 11:
                 if tower.ice_branch == 2:
@@ -696,23 +711,27 @@ class Game:
                 info = [f"风弹塔 Lv{tower.level}", f"伤害:{tower.damage}", f"击退:{tower.wind_knockback}px",
                         f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.POISON:
-            if tower.poison_branch == 2:
+            if tower.poison_branch == 3:
+                stacks = tower.level * 9
+                info = [f"九头蛇毒箭塔 Lv{tower.level}", f"单体伤害:{tower.damage}",
+                        f"中毒层数:{stacks}层/次", "按 R 切换分支", f"攻击间隔:0.5s"]
+            elif tower.poison_branch == 2:
                 if tower.level >= 11:
-                    info = [f"凋零之首 Lv{tower.level}", f"伤害:{tower.damage}",
+                    info = [f"凋零之首 Lv{tower.level}", f"范围伤害:{tower.damage}",
                             f"凋零:12s", "按 R 切换分支", f"攻击间隔:0.5s"]
                 elif tower.level >= 6:
-                    info = [f"凋零瓶 Lv{tower.level}", f"伤害:{tower.damage}",
-                            f"范围凋零:5s", "范围溅射", "按 R 切换分支", f"攻击间隔:0.5s"]
+                    info = [f"凋零瓶 Lv{tower.level}", f"范围伤害:{tower.damage}",
+                            f"范围凋零:5s", "按 R 切换分支", f"攻击间隔:0.5s"]
                 else:
                     info = [f"凋零箭 Lv{tower.level}", f"伤害:{tower.damage}",
                             f"凋零:5s", "按 R 切换分支", f"攻击间隔:{tower.fire_rate / 60}s"]
             elif tower.level >= 11:
                 stacks = tower.level * 4
-                info = [f"剧毒环刃塔 Lv{tower.level}", f"伤害:{tower.damage}",
+                info = [f"剧毒环刃塔 Lv{tower.level}", f"范围伤害:{tower.damage}",
                         f"中毒层数:{stacks}层/次", "按 R 切换分支", f"攻击间隔:0.5s"]
             elif tower.level >= 6:
-                info = [f"毒瓶塔 Lv{tower.level}", f"伤害:{tower.damage}",
-                        f"中毒层数:{tower.level}层/次", f"范围溅射", "按 R 切换分支", f"攻击间隔:0.5s"]
+                info = [f"毒瓶塔 Lv{tower.level}", f"范围伤害:{tower.damage}",
+                        f"中毒层数:{tower.level}层/次", "按 R 切换分支", f"攻击间隔:0.5s"]
             else:
                 info = [f"毒箭塔 Lv{tower.level}", f"伤害:{tower.damage}",
                         f"中毒层数:{tower.level}层/次", "按 R 切换分支", f"攻击间隔:{tower.fire_rate / 60}s"]
@@ -777,7 +796,8 @@ class Game:
             t = Tower(tower_type, x, y, self)
             self.towers.add(t)
             if tower_type == TowerType.PRODUCTION:
-                self.gold_per_second += 1
+                multiplier = 2 if (x, y) in self.gold_ore_positions else 1
+                self.gold_per_second += multiplier
             if tower_type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
                 self.temperature += 1
 

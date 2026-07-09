@@ -23,6 +23,9 @@ class Dragon(pygame.sprite.Sprite):
             self.damage_multiplier = {11: 36, 12: 72, 13: 108, 14: 144, 15: 180}
             self.burn_duration = 20 * 60
 
+        self.image_flipped = pygame.transform.flip(self.image, True, False)
+        self.current_image = self.image
+
         self.rect = self.image.get_rect()
 
         end_point = self.path[-1]
@@ -39,6 +42,7 @@ class Dragon(pygame.sprite.Sprite):
 
         self.done = False
         self.hit_enemies = set()
+        self.last_direction = -1
 
     def update_target(self):
         if self.path_idx > 0:
@@ -57,6 +61,20 @@ class Dragon(pygame.sprite.Sprite):
         dx = self.target_x - self.x
         dy = self.target_y - self.y
         dist = (dx * dx + dy * dy) ** 0.5
+
+        if dx > 1:
+            current_dir = 1
+        elif dx < -1:
+            current_dir = -1
+        else:
+            current_dir = self.last_direction
+
+        if current_dir != self.last_direction:
+            self.last_direction = current_dir
+            if current_dir == 1:
+                self.current_image = self.image_flipped
+            else:
+                self.current_image = self.image
 
         if dist < self.speed:
             self.x = self.target_x
@@ -103,4 +121,4 @@ class Dragon(pygame.sprite.Sprite):
             enemy.apply_burn(self.game.temperature, self.burn_duration)
 
     def draw(self, screen):
-        screen.blit(self.image, self.rect)
+        screen.blit(self.current_image, self.rect)

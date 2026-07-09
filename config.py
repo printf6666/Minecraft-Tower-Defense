@@ -84,13 +84,18 @@ class EnemyType(Enum):
     TANK = 2
     ELITE = 3
     BOSS = 4
-    ARMORED = 5
+    IRON_ARMORED = 5
     SLIME = 6
     SLIMELING = 7
     GOLD_ARMORED = 8
     GHOST = 9
     DIAMOND_ARMORED = 10
-    ENDLESS_ARMORED = 11
+    NETHERITE_ARMORED = 11
+    NAUTILUS = 12
+    IRON_NAUTILUS = 13
+    GOLD_NAUTILUS = 14
+    DIAMOND_NAUTILUS = 15
+    NETHERITE_NAUTILUS = 16
 
 
 class Weather(Enum):
@@ -133,11 +138,16 @@ ENEMY_TYPES = {
     "TANK": {"image": "tank.png", "speed": 1.5, "health": 300, "reward": 30},
     "ELITE": {"image": "elite.png", "speed": 2.5, "health": 200, "reward": 40},
     "BOSS": {"image": "boss.png", "speed": 2, "health": 800, "reward": 100},
-    "ARMORED": {"image": "armored.png", "speed": 1.2, "health": 250, "reward": 35},
+    "IRON_ARMORED": {"image": "iron_armored.png", "speed": 1.2, "health": 250, "reward": 35},
     "SLIME": {"image": "slime.png", "speed": 2.0, "health": 180, "reward": 25},
     "SLIMELING": {"image": "slime.png", "speed": 3.0, "health": 90, "reward": 10},
     "GOLD_ARMORED": {"image": "gold_armored.png", "speed": 1.2, "health": 250, "reward": 35},
     "GHOST": {"image": "ghost.png", "speed": 3, "health": 100, "reward": 25},
     "DIAMOND_ARMORED": {"image": "diamond_armored.png", "speed": 1.2, "health": 300, "reward": 40},
-    "ENDLESS_ARMORED": {"image": "endless_armored.png", "speed": 1.2, "health": 300, "reward": 50},
+    "NETHERITE_ARMORED": {"image": "netherite_armored.png", "speed": 1.2, "health": 300, "reward": 50},
+    "NAUTILUS": {"image": "nautilus.png", "speed": 2, "health": 100, "reward": 10},
+    "IRON_NAUTILUS": {"image": "iron_nautilus.png", "speed": 1.2, "health": 250, "reward": 35},
+    "GOLD_NAUTILUS": {"image": "gold_nautilus.png", "speed": 1.2, "health": 250, "reward": 35},
+    "DIAMOND_NAUTILUS": {"image": "diamond_nautilus.png", "speed": 1.2, "health": 300, "reward": 40},
+    "NETHERITE_NAUTILUS": {"image": "netherite_nautilus.png", "speed": 1.2, "health": 300, "reward": 50},
 }

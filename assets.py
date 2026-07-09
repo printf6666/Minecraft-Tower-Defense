@@ -70,6 +70,7 @@ stone_img = None
 dirt_img = None
 start_img = None
 house_img = None
+gold_ore_img = None
 
 ice_dragon_img = None
 fire_dragon_img = None
@@ -86,7 +87,7 @@ def init_assets():
     global white_lightning_frames, golden_lightning_frames
     global white_lightning_h_frames, golden_lightning_h_frames
     global bgm_files, bgm_index
-    global stone_img, dirt_img, start_img, house_img
+    global stone_img, dirt_img, start_img, house_img, gold_ore_img
     global tnt_explosion_frames, mushroom_cloud_frames, contaminated_img
     global explode_sound, level_up_sound
 
@@ -220,6 +221,11 @@ def init_assets():
     dirt_img = load_image("tower/dirt.png", ts)
     start_img = load_image("tower/start.png", ts)
     house_img = load_image("tower/house.png", ts)
+    try:
+        gold_ore_img = load_image("tower/gold_ore.png", ts)
+    except:
+        gold_ore_img = pygame.Surface(ts)
+        gold_ore_img.fill((255, 200, 0))
 
     global ice_dragon_img, fire_dragon_img
     try:
