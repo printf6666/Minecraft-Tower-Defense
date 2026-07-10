@@ -47,7 +47,6 @@ icon8 = None
 
 gold_img = None
 heart_img = None
-clock_img = None
 
 BUFF_SIZE = 32
 buff_icons = {}
@@ -74,6 +73,7 @@ gold_ore_img = None
 
 ice_dragon_img = None
 fire_dragon_img = None
+electric_dragon_img = None
 
 explode_sound = None
 level_up_sound = None
@@ -124,11 +124,6 @@ def init_assets():
         except:
             tnt_explosion_frames.append(pygame.Surface((350, 350)))
 
-    global contaminated_img
-    try:
-        contaminated_img = load_image("debuff/contaminated.png", (BUFF_SIZE, BUFF_SIZE))
-    except:
-        contaminated_img = pygame.Surface((BUFF_SIZE, BUFF_SIZE))
 
     global mushroom_cloud_frames
     mushroom_cloud_frames.clear()
@@ -144,9 +139,8 @@ def init_assets():
     except:
         pass
 
-    gold_img = load_image("tower/gold.png", (64, 64))
-    heart_img = load_image("tower/heart.png", (48, 48))
-    clock_img = load_image("tower/clock.png", (48, 48))
+    gold_img = load_image("tower/2-1.png", (64, 64))
+    heart_img = load_image("tower/heart.png", (128, 128))
 
     buff_icons["burn"] = load_image("debuff/burn.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["slow"] = load_image("debuff/slow.png", (BUFF_SIZE, BUFF_SIZE))
@@ -154,7 +148,6 @@ def init_assets():
     buff_icons["poison"] = load_image("debuff/poison.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["wind"] = load_image("debuff/wind.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["speed"] = load_image("debuff/speed.png", (BUFF_SIZE, BUFF_SIZE))
-    buff_icons["contaminated"] = contaminated_img
     try:
         buff_icons["wither"] = load_image("debuff/wither.png", (BUFF_SIZE, BUFF_SIZE))
     except:
@@ -227,7 +220,7 @@ def init_assets():
         gold_ore_img = pygame.Surface(ts)
         gold_ore_img.fill((255, 200, 0))
 
-    global ice_dragon_img, fire_dragon_img
+    global ice_dragon_img, fire_dragon_img, electric_dragon_img
     try:
         ice_dragon_img = load_image("tower/ice_dragon.png", (256, 256))
     except:
@@ -238,3 +231,8 @@ def init_assets():
     except:
         fire_dragon_img = pygame.Surface((256, 256))
         fire_dragon_img.fill((255, 100, 0))
+    try:
+        electric_dragon_img = load_image("tower/electric_dragon.png", (256, 256))
+    except:
+        electric_dragon_img = pygame.Surface((256, 256))
+        electric_dragon_img.fill((255, 255, 0))

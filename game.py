@@ -249,6 +249,9 @@ class Game:
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.FLAME and self.selected_tower.level >= 11:
                         self.selected_tower.flame_branch = 3 - self.selected_tower.flame_branch
                         self.selected_tower.update_sprite()
+                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.TRIDENT and self.selected_tower.level >= 11:
+                        self.selected_tower.trident_branch = 3 - self.selected_tower.trident_branch
+                        self.selected_tower.update_sprite()
                     elif event.key == pygame.K_s and self.selected_tower:
                         cost_map = {ttype: cost for ttype, name, cost, key in TOWER_DATA}
                         sell_price = cost_map[self.selected_tower.type] * self.selected_tower.level
@@ -650,7 +653,7 @@ class Game:
                 if tower.ice_branch == 2:
                     ice_dmg = {11: 30, 12: 60, 13: 90, 14: 120, 15: 150}
                     info = [f"冰龙塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
-                            f"2%召唤冰龙:{ice_dmg.get(tower.level,30)}倍温度伤害+冰冻3s", f"攻击间隔:0.5s", "按R切换形态"]
+                            f"2%召唤冰龙:{ice_dmg.get(tower.level,30)}倍温度+冰冻3s", f"攻击间隔:0.5s", "按R切换形态"]
                 else:
                     bonus_pct = 300 * (tower.level - 10)
                     info = [f"冰霜炸弹塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
@@ -676,7 +679,7 @@ class Game:
                 if tower.flame_branch == 2:
                     fire_dmg = {11: 36, 12: 72, 13: 108, 14: 144, 15: 180}
                     info = [f"火龙塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{self.temperature}/s,持续4s",
-                            f"5%召唤火龙:{fire_dmg.get(tower.level,36)}倍温度伤害+燃烧20s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
+                            f"5%召唤火龙:{fire_dmg.get(tower.level,36)}倍温度+燃烧", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
                 else:
                     dmg_mult = (tower.level - 10) * 10
                     info = [f"龙息塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{self.temperature}/s,持续4s",
@@ -689,8 +692,12 @@ class Game:
                         f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.TRIDENT:
             if tower.level >= 11:
-                info = [f"海神三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
-                        f"将当前金币的1%作为伤害加成", f"攻击施放十字闪电", f"攻击间隔:0.5s"]
+                if tower.trident_branch == 2:
+                    info = [f"电龙塔 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
+                            f"将当前金币的1%作为伤害加成", f"5%召唤电龙:{(tower.level-10)*50}倍温度+麻痹1s", f"攻击间隔:0.5s", "按 R 切换形态"]
+                else:
+                    info = [f"海神三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
+                            f"将当前金币的1%作为伤害加成", f"攻击施放十字闪电", f"攻击间隔:0.5s", "按 R 切换形态"]
             elif tower.level >= 6:
                 info = [f"黄金三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
                         f"将当前金币的1%作为伤害加成", f"攻击间隔:0.5s"]

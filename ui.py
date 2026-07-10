@@ -80,17 +80,16 @@ class UIManager:
     def draw_ui(self):
         pygame.draw.rect(self.game.screen, BLACK, (0, 0, SCREEN_WIDTH, 80))
         pygame.draw.line(self.game.screen, WHITE, (0, 80), (SCREEN_WIDTH, 80), 4)
-        self.game.screen.blit(assets.gold_img, (30, 8))
-        self.game.screen.blit(assets.font_medium.render(str(self.game.coins), True, GOLD), (85, 16))
-        self.game.screen.blit(assets.heart_img, (360, 16))
-        self.game.screen.blit(assets.font_medium.render(str(self.game.lives), True, RED), (415, 16))
-        self.game.screen.blit(assets.clock_img, (720, 16))
+        self.game.screen.blit(assets.gold_img, (0, 8))
+        self.game.screen.blit(assets.font_medium.render(str(self.game.coins), True, GOLD), (70, 16))
+        self.game.screen.blit(assets.heart_img, (320, -25))
+        self.game.screen.blit(assets.font_medium.render(str(self.game.lives), True, RED), (420, 16))
         self.game.screen.blit(
-            assets.font_medium.render(f"{self.game.wave_manager.current_wave}/{self.game.wave_manager.total_waves}", True, WHITE),
-            (775, 16))
+            assets.font_medium.render(f"波数:{self.game.wave_manager.current_wave}/{self.game.wave_manager.total_waves}", True, WHITE),
+            (520, 16))
         weather_name = WEATHER_CONFIG[self.game.weather]["name"]
         weather_color = WEATHER_CONFIG[self.game.weather]["color"]
-        self.game.screen.blit(assets.font_medium.render(f"天气:{weather_name}  温度:{self.game.temperature}", True, weather_color), (1520, 16))
+        self.game.screen.blit(assets.font_medium.render(f"天气:{weather_name}  温度:{self.game.temperature}", True, weather_color), (1550, 16))
 
         can_buy = self.game.state == GameState.PLAYING and not self.game.forecast_purchased
         can_afford = self.game.coins >= 100 * self.game.wave_manager.current_wave
