@@ -45,6 +45,7 @@ class Tower(pygame.sprite.Sprite):
         self.flame_branch = 1
         self.poison_branch = 1
         self.bomb_branch = 1
+        self.trident_branch = 1
         self.update_sprite()
 
         self.rect = self.image.get_rect()
@@ -226,6 +227,17 @@ class Tower(pygame.sprite.Sprite):
                 img = f"tower/{prefix}{prefix}-1.png"
             else:
                 img = f"tower/{prefix}-1.png"
+        elif self.type == TowerType.TRIDENT:
+            prefix = str(self.type.value)
+            if self.level >= 11:
+                if self.trident_branch == 2:
+                    img = f"tower/{prefix}{prefix}{prefix}-2.png"
+                else:
+                    img = f"tower/{prefix}{prefix}{prefix}-1.png"
+            elif self.level >= 6:
+                img = f"tower/{prefix}{prefix}-1.png"
+            else:
+                img = f"tower/{prefix}-1.png"
         else:
             prefix = str(self.type.value)
             if self.level >= 11:
@@ -352,7 +364,8 @@ class Tower(pygame.sprite.Sprite):
                 wind_branch=self.wind_branch,
                 ice_branch=self.ice_branch,
                 flame_branch=self.flame_branch,
-                poison_branch=self.poison_branch)
+                poison_branch=self.poison_branch,
+                trident_branch=self.trident_branch)
             bullet.lightning_damage = self.lightning_damage
             bullet.execute_threshold = self.execute_threshold
             bullet.source_tower = self
@@ -386,7 +399,7 @@ class Bullet(pygame.sprite.Sprite):
     def __init__(self, x, y, dx, dy, max_distance, damage, tower_type, game,
                  teleport_chance=0, penetrate=False,
                  freeze_time=0, oneshot_chance=0, stun_time=0, enemies=None, tower_level=1,
-                 wind_branch=1, ice_branch=1, flame_branch=1, poison_branch=1):
+                 wind_branch=1, ice_branch=1, flame_branch=1, poison_branch=1, trident_branch=1):
         super().__init__()
         self.x = x
         self.y = y
@@ -410,6 +423,7 @@ class Bullet(pygame.sprite.Sprite):
         self.ice_branch = ice_branch
         self.flame_branch = flame_branch
         self.poison_branch = poison_branch
+        self.trident_branch = trident_branch
 
         self.lightning_damage = 0
         self.execute_threshold = 0
@@ -427,6 +441,8 @@ class Bullet(pygame.sprite.Sprite):
                 img = f"tower/{prefix}{prefix}{prefix}-2.png"
             elif self.tower_type == TowerType.POISON:
                 img = f"tower/{prefix}{prefix}{prefix}-{self.poison_branch}.png"
+            elif self.tower_type == TowerType.TRIDENT and self.trident_branch == 2:
+                img = f"tower/{prefix}{prefix}{prefix}-2.png"
             else:
                 img = f"tower/{prefix}{prefix}{prefix}-1.png"
         elif self.tower_level >= 6:
@@ -597,18 +613,22 @@ class Bullet(pygame.sprite.Sprite):
             is_golden = self.tower_level >= 6
             self.game.add_lightning(enemy.rect.centerx, 800, is_golden)
             if self.tower_level >= 11:
-                row = enemy.rect.centery // TILE_SIZE
-                h_lightning_dmg = self.calculate_lightning_damage()
-                for e in self.game.enemies:
-                    e_row = e.rect.centery // TILE_SIZE
-                    if e_row == row and e.health > 0:
-                        dmg = h_lightning_dmg
-                        if e.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED):
-                            dmg = self.lightning_damage
-                        reward = e.take_damage(dmg, color=GOLD)
-                        self.game.coins += reward
-                h_effect = HorizontalLightningEffect(1024, row * TILE_SIZE + TILE_SIZE // 2, not is_golden)
-                self.game.horizontal_lightning_effects.append(h_effect)
+                if self.trident_branch == 1:
+                    row = enemy.rect.centery // TILE_SIZE
+                    h_lightning_dmg = self.calculate_lightning_damage()
+                    for e in self.game.enemies:
+                        e_row = e.rect.centery // TILE_SIZE
+                        if e_row == row and e.health > 0:
+                            dmg = h_lightning_dmg
+                            if e.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED):
+                                dmg = self.lightning_damage
+                            reward = e.take_damage(dmg, color=GOLD)
+                            self.game.coins += reward
+                    h_effect = HorizontalLightningEffect(1024, row * TILE_SIZE + TILE_SIZE // 2, not is_golden)
+                    self.game.horizontal_lightning_effects.append(h_effect)
+                elif random.random() < 0.05:
+                    dragon = Dragon(self.game.path, 'electric', self.tower_level, self.game)
+                    self.game.dragons.add(dragon)
         if self.tower_type == TowerType.WIND:
             if self.source_tower:
                 enemy.apply_knockback(self.source_tower.wind_knockback)
