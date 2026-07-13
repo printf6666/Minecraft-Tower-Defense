@@ -1,4 +1,5 @@
 import pygame
+import math
 import assets
 from config import *
 from tower import WindExplosion
@@ -57,11 +58,13 @@ class Enemy(pygame.sprite.Sprite):
             self.weather_slowed = True
 
         if game.weather == Weather.SCORCHING_SUN:
-            self.burn_damage = max(self.burn_damage, game.temperature)
-            self.burn_time = max(self.burn_time, 999999)
+            if game.temperature > 0 and self.enemy_type not in (EnemyType.MAGMA_CUBE, EnemyType.MAGMA_CUBE_SMALL):
+                self.burn_damage = max(self.burn_damage, game.temperature)
+                self.burn_time = max(self.burn_time, 999999)
         if game.weather == Weather.FIRE_RAIN:
-            self.burn_damage = max(self.burn_damage, game.temperature)
-            self.burn_time = max(self.burn_time, 999999)
+            if game.temperature > 0 and self.enemy_type not in (EnemyType.MAGMA_CUBE, EnemyType.MAGMA_CUBE_SMALL):
+                self.burn_damage = max(self.burn_damage, game.temperature)
+                self.burn_time = max(self.burn_time, 999999)
 
         self.poison_stacks = 0
         self.poison_timer = 0
@@ -83,6 +86,8 @@ class Enemy(pygame.sprite.Sprite):
         elif enemy_key in ("NAUTILUS", "IRON_NAUTILUS", "GOLD_NAUTILUS", "DIAMOND_NAUTILUS", "NETHERITE_NAUTILUS"):
             pass
         elif enemy_key == "SLIMELING":
+            self.image = pygame.transform.scale(self.image, (64, 64))
+        elif enemy_key == "MAGMA_CUBE_SMALL":
             self.image = pygame.transform.scale(self.image, (64, 64))
         elif enemy_key == "NORMAL" or enemy_key == "FAST":
             original_w = self.image.get_width()
@@ -109,6 +114,10 @@ class Enemy(pygame.sprite.Sprite):
         self.slow_time = duration
 
     def apply_burn(self, damage, duration):
+        if self.enemy_type in (EnemyType.MAGMA_CUBE, EnemyType.MAGMA_CUBE_SMALL):
+            return
+        if self.game.temperature <= 0:
+            return
         rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
         if self.game.weather in rain_weathers:
             return
@@ -119,6 +128,9 @@ class Enemy(pygame.sprite.Sprite):
         if self.game.weather == Weather.FIRE_RAIN:
             return
         effective = int(duration * (1.0 - self.freeze_resistance))
+        if self.game.temperature < 0:
+            temp_abs = abs(self.game.temperature)
+            effective = int(effective * (1 + temp_abs / 100))
         self.freeze_time = max(self.freeze_time, effective)
         self.freeze_resistance = min(0.90, self.freeze_resistance + 0.10)
         self.last_freeze_time = self.game.game_time
@@ -143,6 +155,22 @@ class Enemy(pygame.sprite.Sprite):
         if duration > self.wither_time:
             self.wither_time = duration
             self.wither_timer = 0
+
+    def apply_speed(self, speed_factor, duration):
+        self.speed = self.base_speed * speed_factor
+        self.slow_time = duration
+
+    def apply_wind(self, knockback):
+        if self.enemy_type in (EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
+            return
+        dx = self.path[self.path_index][0] - self.rect.centerx if self.path_index < len(self.path) else 0
+        dy = self.path[self.path_index][1] - self.rect.centery if self.path_index < len(self.path) else 0
+        if dx != 0 or dy != 0:
+            dist = math.sqrt(dx * dx + dy * dy)
+            dx /= dist
+            dy /= dist
+            self.rect.centerx -= dx * knockback
+            self.rect.centery -= dy * knockback
 
     def update(self):
         if self.health <= 0:
@@ -319,6 +347,14 @@ class Enemy(pygame.sprite.Sprite):
             if self.enemy_type == EnemyType.SLIME:
                 for _ in range(3):
                     child = Enemy(self.path, EnemyType.SLIMELING, self.game)
+                    child.path_index = self.path_index
+                    child.pos_x = self.pos_x
+                    child.pos_y = self.pos_y
+                    child.rect.center = (child.pos_x, child.pos_y)
+                    self.game.enemies.add(child)
+            if self.enemy_type == EnemyType.MAGMA_CUBE:
+                for _ in range(3):
+                    child = Enemy(self.path, EnemyType.MAGMA_CUBE_SMALL, self.game)
                     child.path_index = self.path_index
                     child.pos_x = self.pos_x
                     child.pos_y = self.pos_y

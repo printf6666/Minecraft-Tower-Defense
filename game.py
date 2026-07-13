@@ -219,20 +219,34 @@ class Game:
                     if event.key == pygame.K_u and self.selected_tower:
                         if self.selected_tower.level < 15 and self.coins >= self.selected_tower.upgrade_cost:
                             self.coins -= self.selected_tower.upgrade_cost
-                            self.selected_tower.upgrade()
-                            if assets.level_up_sound and self.selected_tower.level in (6, 11):
+                            tower = self.selected_tower
+                            old_effect = self.get_bomb_temp_effect(tower) if tower.type == TowerType.BOMB else 0
+                            tower.upgrade()
+                            if assets.level_up_sound and tower.level in (6, 11):
                                 assets.level_up_sound.play()
-                            if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
+                            if tower.type in (TowerType.FLAME, TowerType.TRIDENT):
                                 self.temperature += 1
+                            elif tower.type == TowerType.ICE:
+                                self.temperature -= 1
+                                self.temperature = max(-273, self.temperature)
+                            elif tower.type == TowerType.BOMB:
+                                new_effect = self.get_bomb_temp_effect(tower)
+                                self.temperature += (new_effect - old_effect)
+                                self.temperature = max(-273, self.temperature)
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.BOMB:
-                        if self.selected_tower.level >= 11:
-                            self.selected_tower.bomb_branch = 3 - self.selected_tower.bomb_branch
-                            self.selected_tower.update_sprite()
-                        elif 6 <= self.selected_tower.level < 11:
+                        tower = self.selected_tower
+                        old_effect = self.get_bomb_temp_effect(tower)
+                        if tower.level >= 11:
+                            tower.bomb_branch = 3 - tower.bomb_branch
+                            tower.update_sprite()
+                        elif 6 <= tower.level < 11:
                             sub_types = [BombSubType.SNOW, BombSubType.ICE, BombSubType.FLAME, BombSubType.POISON, BombSubType.WITHER_TNT]
-                            idx = sub_types.index(self.selected_tower.bomb_subtype)
-                            self.selected_tower.bomb_subtype = sub_types[(idx + 1) % 5]
-                            self.selected_tower.update_sprite()
+                            idx = sub_types.index(tower.bomb_subtype)
+                            tower.bomb_subtype = sub_types[(idx + 1) % 5]
+                            tower.update_sprite()
+                        new_effect = self.get_bomb_temp_effect(tower)
+                        self.temperature += (new_effect - old_effect)
+                        self.temperature = max(-273, self.temperature)
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.POISON:
                         max_branch = 3 if self.selected_tower.level >= 11 else 2
                         self.selected_tower.poison_branch = self.selected_tower.poison_branch % max_branch + 1
@@ -252,6 +266,10 @@ class Game:
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.TRIDENT and self.selected_tower.level >= 11:
                         self.selected_tower.trident_branch = 3 - self.selected_tower.trident_branch
                         self.selected_tower.update_sprite()
+                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.TELEPORT:
+                        self.selected_tower.teleport_branch = 3 - self.selected_tower.teleport_branch
+                        self.selected_tower.recalculate_stats()
+                        self.selected_tower.update_sprite()
                     elif event.key == pygame.K_s and self.selected_tower:
                         cost_map = {ttype: cost for ttype, name, cost, key in TOWER_DATA}
                         sell_price = cost_map[self.selected_tower.type] * self.selected_tower.level
@@ -264,8 +282,14 @@ class Game:
                                 self.gold_per_wave -= (level - 5) * multiplier
                             if level >= 11:
                                 self.gold_profit_per_wave -= (level - 10) * 0.001 * multiplier
-                        if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
+                        if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT):
                             self.temperature -= self.selected_tower.level
+                        elif self.selected_tower.type == TowerType.ICE:
+                            self.temperature += self.selected_tower.level
+                        elif self.selected_tower.type == TowerType.BOMB:
+                            old_temp_effect = self.get_bomb_temp_effect(self.selected_tower)
+                            self.temperature -= old_temp_effect
+                        self.temperature = max(-273, self.temperature)
                         self.selected_tower.kill()
                         self.selected_tower = None
                     elif event.key == pygame.K_ESCAPE:
@@ -281,6 +305,20 @@ class Game:
                             self.show_range = False
                     elif event.key == pygame.K_F11:
                         pygame.display.toggle_fullscreen()
+
+    def get_bomb_temp_effect(self, tower):
+        if tower.level >= 11:
+            if tower.bomb_branch == 1:
+                return tower.level
+            elif tower.bomb_branch == 2:
+                return 0
+        else:
+            if tower.bomb_subtype == BombSubType.ICE:
+                return -tower.level
+            elif tower.bomb_subtype == BombSubType.FLAME:
+                return tower.level
+            else:
+                return 0
 
     def global_production(self):
         current_time = pygame.time.get_ticks()
@@ -441,7 +479,7 @@ class Game:
         weathers = [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
                     Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.TAILWIND, Weather.HEADWIND,
                     Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD, Weather.MAGNETIC_STORM,
-                    Weather.FIRE_RAIN]
+                    Weather.FIRE_RAIN, Weather.AURORA]
         self.weather_forecast = [random.choice(weathers) for _ in range(self.wave_manager.total_waves)]
 
     def select_weather(self):
@@ -454,8 +492,13 @@ class Game:
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
         for t in self.towers:
-            if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
+            if t.type in (TowerType.FLAME, TowerType.TRIDENT):
                 self.temperature += t.level
+            elif t.type == TowerType.ICE:
+                self.temperature -= t.level
+            elif t.type == TowerType.BOMB:
+                self.temperature += self.get_bomb_temp_effect(t)
+        self.temperature = max(-273, self.temperature)
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         if self.weather == Weather.ACID_RAIN:
             destroyed = []
@@ -478,15 +521,21 @@ class Game:
                             t.fire_rate = min(60, t.fire_rate + 6)
                             if old_level >= 6:
                                 t.freeze_time = round(t.freeze_time - 0.1, 1)
+                            self.temperature += 1
                         elif t.type == TowerType.TELEPORT:
-                            t.damage -= 5
-                            t.teleport_chance = max(0, t.teleport_chance - 0.01)
-                            t.range -= TILE_SIZE // 4
-                            t.fire_rate = min(60, t.fire_rate + 6)
-                            if old_level >= 6:
-                                t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
-                            if old_level >= 11:
-                                t.execute_threshold = 0
+                            if t.teleport_branch == 2:
+                                t.damage -= 100
+                                t.range -= TILE_SIZE // 2
+                                t.fire_rate = min(60, t.fire_rate + 6)
+                            else:
+                                t.damage -= 5
+                                t.teleport_chance = max(0, t.teleport_chance - 0.01)
+                                t.range -= TILE_SIZE // 4
+                                t.fire_rate = min(60, t.fire_rate + 6)
+                                if old_level >= 6:
+                                    t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
+                                if old_level >= 11:
+                                    t.execute_threshold = 0
                         elif t.type == TowerType.FLAME:
                             t.damage -= 15
                             t.range -= TILE_SIZE // 4
@@ -533,6 +582,9 @@ class Game:
                     else:
                         if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
                             self.temperature -= 1
+                        elif t.type == TowerType.ICE:
+                            self.temperature += 1
+                        self.temperature = max(-273, self.temperature)
                         destroyed.append(t)
             for t in destroyed:
                 if self.selected_tower is t:
@@ -540,11 +592,11 @@ class Game:
                 t.kill()
             for enemy in self.enemies:
                 enemy.apply_poison(10)
-        if self.weather == Weather.SCORCHING_SUN:
+        if self.weather == Weather.SCORCHING_SUN and self.temperature > 0:
             for enemy in self.enemies:
                 enemy.burn_damage = max(enemy.burn_damage, self.temperature)
                 enemy.burn_time = max(enemy.burn_time, 999999)
-        if self.weather == Weather.FIRE_RAIN:
+        if self.weather == Weather.FIRE_RAIN and self.temperature > 0:
             for enemy in self.enemies:
                 enemy.burn_damage = max(enemy.burn_damage, self.temperature)
                 enemy.burn_time = max(enemy.burn_time, 999999)
@@ -664,16 +716,28 @@ class Game:
             else:
                 info = [f"雪球塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
         elif tower.type == TowerType.TELEPORT:
-            if tower.level >= 11:
-                info = [f"终望珍珠塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
-                        f"瞬移概率:{int(tower.teleport_chance * 100)}%", f"斩杀线:{tower.execute_threshold}%",
-                        f"范围伤害:{tower.damage}", f"攻击间隔:0.5s"]
-            elif tower.level >= 6:
-                info = [f"末影之眼塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
-                        f"瞬移概率:{int(tower.teleport_chance * 100)}%", f"伤害:{tower.damage}", f"攻击间隔:0.5s"]
+            if tower.teleport_branch == 2:
+                if tower.level >= 11:
+                    info = [f"无尽催化剂塔 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
+                            f"八方向散射", f"必定施加随机永久debuff", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+                elif tower.level >= 6:
+                    poison_stacks = {6: 600, 7: 700, 8: 800, 9: 900, 10: 1000}
+                    info = [f"毒马铃薯塔 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
+                            f"2%施加{poison_stacks.get(tower.level, 600)}层中毒", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+                else:
+                    info = [f"幸运四叶草塔 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
+                            f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
             else:
-                info = [f"末影珍珠塔 Lv{tower.level}", f"瞬移概率:{int(tower.teleport_chance * 100)}%",
-                        f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
+                if tower.level >= 11:
+                    info = [f"终望珍珠塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
+                            f"瞬移概率:{int(tower.teleport_chance * 100)}%", f"斩杀线:{tower.execute_threshold}%",
+                            f"范围伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+                elif tower.level >= 6:
+                    info = [f"末影之眼塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
+                            f"瞬移概率:{int(tower.teleport_chance * 100)}%", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+                else:
+                    info = [f"末影珍珠塔 Lv{tower.level}", f"瞬移概率:{int(tower.teleport_chance * 100)}%",
+                            f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
         elif tower.type == TowerType.FLAME:
             if tower.level >= 11:
                 if tower.flame_branch == 2:
@@ -817,8 +881,13 @@ class Game:
             if tower_type == TowerType.PRODUCTION:
                 multiplier = 2 if (x, y) in self.gold_ore_positions else 1
                 self.gold_per_second += multiplier
-            if tower_type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
+            if tower_type in (TowerType.FLAME, TowerType.TRIDENT):
                 self.temperature += 1
+            elif tower_type == TowerType.ICE:
+                self.temperature -= 1
+                self.temperature = max(-273, self.temperature)
+            elif tower_type == TowerType.BOMB:
+                self.temperature += self.get_bomb_temp_effect(t)
 
     def start_game(self):
         self.generate_weather_forecast()

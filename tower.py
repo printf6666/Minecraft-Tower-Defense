@@ -38,7 +38,6 @@ class Tower(pygame.sprite.Sprite):
 
         self.dragon_breath_cooldown = 0
 
-        self.setup_tower()
         self.physical_branch = 1
         self.wind_branch = 1
         self.ice_branch = 1
@@ -46,6 +45,9 @@ class Tower(pygame.sprite.Sprite):
         self.poison_branch = 1
         self.bomb_branch = 1
         self.trident_branch = 1
+        self.teleport_branch = 1
+
+        self.setup_tower()
         self.update_sprite()
 
         self.rect = self.image.get_rect()
@@ -73,8 +75,12 @@ class Tower(pygame.sprite.Sprite):
             self.cost = 150
             self.upgrade_cost = 225
         elif self.type == TowerType.TELEPORT:
-            self.range = TILE_SIZE * 1.5
-            self.damage = 5
+            if self.teleport_branch == 2:
+                self.range = TILE_SIZE * 3
+                self.damage = 100
+            else:
+                self.range = TILE_SIZE * 1.5
+                self.damage = 5
             self.fire_rate = 60
             self.cost = 300
             self.upgrade_cost = 450
@@ -134,13 +140,18 @@ class Tower(pygame.sprite.Sprite):
             self.fire_rate = max(30, self.fire_rate - 6)
             if self.level >= 6: self.freeze_time = round(self.freeze_time + 0.1, 1)
         elif self.type == TowerType.TELEPORT:
-            self.damage += 5
-            self.teleport_chance += 0.01
-            self.range += TILE_SIZE // 4
-            self.fire_rate = max(30, self.fire_rate - 6)
-            if self.level >= 6: self.oneshot_chance += 0.01
-            if self.level >= 11:
-                self.execute_threshold = min(10, 6 + (self.level - 11))
+            if self.teleport_branch == 2:
+                self.damage += 100
+                self.range += TILE_SIZE // 2
+                self.fire_rate = max(30, self.fire_rate - 6)
+            else:
+                self.damage += 5
+                self.teleport_chance += 0.01
+                self.range += TILE_SIZE // 4
+                self.fire_rate = max(30, self.fire_rate - 6)
+                if self.level >= 6: self.oneshot_chance += 0.01
+                if self.level >= 11:
+                    self.execute_threshold = min(10, 6 + (self.level - 11))
         elif self.type == TowerType.FLAME:
             self.damage += 15
             self.range += TILE_SIZE // 4
@@ -177,6 +188,26 @@ class Tower(pygame.sprite.Sprite):
                     self.fire_rate = 1200
 
         self.update_sprite()
+
+    def recalculate_stats(self):
+        if self.type != TowerType.TELEPORT:
+            return
+        self.teleport_chance = 0.01
+        self.oneshot_chance = 0
+        self.execute_threshold = 0
+        if self.teleport_branch == 2:
+            self.damage = 100 + (self.level - 1) * 100
+            self.range = TILE_SIZE * 3 + (self.level - 1) * (TILE_SIZE // 2)
+        else:
+            self.damage = 5 + (self.level - 1) * 5
+            self.range = TILE_SIZE * 1.5 + (self.level - 1) * (TILE_SIZE // 4)
+            for i in range(self.level - 1):
+                self.teleport_chance += 0.01
+                if i >= 5:
+                    self.oneshot_chance += 0.01
+                if i >= 10:
+                    self.execute_threshold = min(10, 6 + (i - 9))
+        self.fire_rate = max(30, 60 - (self.level - 1) * 6)
 
     def update_sprite(self):
         if self.type == TowerType.BOMB:
@@ -238,6 +269,14 @@ class Tower(pygame.sprite.Sprite):
                 img = f"tower/{prefix}{prefix}-1.png"
             else:
                 img = f"tower/{prefix}-1.png"
+        elif self.type == TowerType.TELEPORT:
+            prefix = str(self.type.value)
+            if self.level >= 11:
+                img = f"tower/{prefix}{prefix}{prefix}-{self.teleport_branch}.png"
+            elif self.level >= 6:
+                img = f"tower/{prefix}{prefix}-{self.teleport_branch}.png"
+            else:
+                img = f"tower/{prefix}-{self.teleport_branch}.png"
         else:
             prefix = str(self.type.value)
             if self.level >= 11:
@@ -256,7 +295,12 @@ class Tower(pygame.sprite.Sprite):
         self.rect.topleft = (self.x * TILE_SIZE, self.y * TILE_SIZE)
 
     def can_attack(self, current_time):
-        return current_time - self.last_shot >= self.fire_rate
+        effective_fire_rate = self.fire_rate
+        if self.game.weather == Weather.AURORA and self.game.temperature < 0:
+            temp_abs = abs(self.game.temperature)
+            speed_multiplier = 1 + temp_abs / 100
+            effective_fire_rate = self.fire_rate / speed_multiplier
+        return current_time - self.last_shot >= effective_fire_rate
 
     def get_effective_range(self):
         if self.type == TowerType.BOMB and self.is_nuclear:
@@ -388,6 +432,25 @@ class Tower(pygame.sprite.Sprite):
                 dragon = Dragon(self.game.path, "fire", self.level, self.game)
                 self.game.dragons.add(dragon)
 
+        if self.type == TowerType.TELEPORT and self.teleport_branch == 2:
+            if self.level >= 11:
+                directions = [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1)]
+            else:
+                directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            bullets = []
+            for dx, dy in directions:
+                bullet = Bullet(
+                    self.rect.centerx, self.rect.centery,
+                    dx, dy, self.get_effective_range(),
+                    self.damage, self.type, self.game,
+                    self.teleport_chance, self.penetrate,
+                    self.freeze_time, self.oneshot_chance, self.stun_time,
+                    self.game.enemies, self.level,
+                    teleport_branch=self.teleport_branch)
+                bullet.source_tower = self
+                bullets.append(bullet)
+            return bullets
+
         return bullets
 
     def draw_range(self, surface):
@@ -399,7 +462,8 @@ class Bullet(pygame.sprite.Sprite):
     def __init__(self, x, y, dx, dy, max_distance, damage, tower_type, game,
                  teleport_chance=0, penetrate=False,
                  freeze_time=0, oneshot_chance=0, stun_time=0, enemies=None, tower_level=1,
-                 wind_branch=1, ice_branch=1, flame_branch=1, poison_branch=1, trident_branch=1):
+                 wind_branch=1, ice_branch=1, flame_branch=1, poison_branch=1, trident_branch=1,
+                 teleport_branch=1):
         super().__init__()
         self.x = x
         self.y = y
@@ -424,6 +488,7 @@ class Bullet(pygame.sprite.Sprite):
         self.flame_branch = flame_branch
         self.poison_branch = poison_branch
         self.trident_branch = trident_branch
+        self.teleport_branch = teleport_branch
 
         self.lightning_damage = 0
         self.execute_threshold = 0
@@ -443,18 +508,24 @@ class Bullet(pygame.sprite.Sprite):
                 img = f"tower/{prefix}{prefix}{prefix}-{self.poison_branch}.png"
             elif self.tower_type == TowerType.TRIDENT and self.trident_branch == 2:
                 img = f"tower/{prefix}{prefix}{prefix}-2.png"
+            elif self.tower_type == TowerType.TELEPORT:
+                img = f"tower/{prefix}{prefix}{prefix}-{self.teleport_branch}.png"
             else:
                 img = f"tower/{prefix}{prefix}{prefix}-1.png"
         elif self.tower_level >= 6:
             if self.tower_type == TowerType.POISON:
                 branch = self.poison_branch if self.poison_branch <= 2 else 2
                 img = f"tower/{prefix}{prefix}-{branch}.png"
+            elif self.tower_type == TowerType.TELEPORT:
+                img = f"tower/{prefix}{prefix}-{self.teleport_branch}.png"
             else:
                 img = f"tower/{prefix}{prefix}-1.png"
         else:
             if self.tower_type == TowerType.POISON:
                 branch = self.poison_branch if self.poison_branch <= 2 else 2
                 img = f"tower/{prefix}-{branch}.png"
+            elif self.tower_type == TowerType.TELEPORT:
+                img = f"tower/{prefix}-{self.teleport_branch}.png"
             else:
                 img = f"tower/{prefix}-1.png"
 
@@ -480,6 +551,9 @@ class Bullet(pygame.sprite.Sprite):
             if self.tower_level >= 11 and (not self.source_tower or self.source_tower.wind_branch == 1):
                 per_px = {11: 8, 12: 10, 13: 12, 14: 14, 15: 16}
                 dmg = int(self.traveled * per_px.get(self.tower_level, 8))
+
+        if self.tower_type == TowerType.TELEPORT and self.teleport_branch == 2:
+            dmg = random.randint(0, self.damage * 2)
 
         return int(dmg)
 
@@ -534,10 +608,10 @@ class Bullet(pygame.sprite.Sprite):
         final_dmg = self.calculate_final_damage()
 
         if self.tower_type == TowerType.ICE and self.tower_level >= 11 and self.ice_branch == 1 and enemy.freeze_time > 0:
-            bonus = int(self.game.temperature * 3 * (self.tower_level - 10))
+            bonus = int(abs(self.game.temperature) * 3 * (self.tower_level - 10))
             final_dmg += bonus
 
-        if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11:
+        if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11 and self.teleport_branch == 1:
             hp_ratios = {11: 0.01, 12: 0.0125, 13: 0.015, 14: 0.0175, 15: 0.02}
             hp_bonus = int(enemy.max_health * hp_ratios.get(self.tower_level, 0))
             final_dmg += hp_bonus
@@ -546,7 +620,7 @@ class Bullet(pygame.sprite.Sprite):
             if self.tower_type in (TowerType.PHYSICAL, TowerType.TRIDENT):
                 final_dmg = self.damage
 
-        if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11 and self.execute_threshold > 0:
+        if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11 and self.execute_threshold > 0 and self.teleport_branch == 1:
             threshold_ratio = self.execute_threshold / 100.0
             if enemy.health <= enemy.max_health * threshold_ratio:
                 reward = enemy.take_damage(9999999, color=RED, scale=1.2)
@@ -566,10 +640,6 @@ class Bullet(pygame.sprite.Sprite):
             if self.game.weather not in rain_weathers:
                 enemy.apply_slow(0.5, 60)
             freeze_frames = int(self.freeze_time * 60)
-            if self.game.weather == Weather.SNOWY:
-                freeze_frames = int(freeze_frames * 1.5)
-            if self.game.weather == Weather.EXTREME_COLD:
-                freeze_frames = int(freeze_frames * 2)
             enemy.apply_freeze(freeze_frames)
             if self.tower_level >= 11 and self.ice_branch == 1:
                 freeze_frames_for_exp = freeze_frames
@@ -578,13 +648,40 @@ class Bullet(pygame.sprite.Sprite):
                 exp = IceExplosion(enemy.rect.centerx, enemy.rect.centery, self.damage, freeze_frames_for_exp, self.game)
                 self.game.ice_explosions.append(exp)
         if self.tower_type == TowerType.TELEPORT:
-            if self.game.weather != Weather.MAGNETIC_STORM and random.random() < self.teleport_chance:
-                enemy.teleport_to_start()
-                if assets.teleport_sound:
-                    assets.teleport_sound.play()
-            if random.random() < self.oneshot_chance:
-                reward = enemy.take_damage(9999999, color=RED, scale=1.2)
-                self.game.coins += reward
+            if self.teleport_branch == 1:
+                if self.game.weather != Weather.MAGNETIC_STORM and random.random() < self.teleport_chance:
+                    enemy.teleport_to_start()
+                    if assets.teleport_sound:
+                        assets.teleport_sound.play()
+                if random.random() < self.oneshot_chance:
+                    reward = enemy.take_damage(9999999, color=RED, scale=1.2)
+                    self.game.coins += reward
+            else:
+                if self.tower_level >= 6 and self.tower_level < 11:
+                    poison_chance = 0.02
+                    poison_stacks = {6: 600, 7: 700, 8: 800, 9: 900, 10: 1000}
+                    if random.random() < poison_chance:
+                        enemy.apply_poison(poison_stacks.get(self.tower_level, 600))
+                elif self.tower_level >= 11:
+                    debuffs = ['burn', 'slow', 'speed', 'wind', 'poison', 'wither', 'broken']
+                    debuff = random.choice(debuffs)
+                    if debuff == 'burn':
+                        if self.game.temperature > 0:
+                            rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
+                            if self.game.weather not in rain_weathers:
+                                enemy.apply_burn(self.game.temperature, 999999)
+                    elif debuff == 'slow':
+                        enemy.apply_slow(0.3, 999999)
+                    elif debuff == 'speed':
+                        enemy.apply_speed(0.5, 999999)
+                    elif debuff == 'wind':
+                        enemy.apply_wind(200)
+                    elif debuff == 'poison':
+                        enemy.apply_poison(100)
+                    elif debuff == 'wither':
+                        enemy.apply_wither(999999)
+                    elif debuff == 'broken':
+                        enemy.broken = True
         if self.tower_type == TowerType.FLAME:
             burn_dmg = self.game.temperature
             enemy.apply_burn(burn_dmg, 240)

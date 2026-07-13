@@ -96,6 +96,8 @@ class EnemyType(Enum):
     GOLD_NAUTILUS = 14
     DIAMOND_NAUTILUS = 15
     NETHERITE_NAUTILUS = 16
+    MAGMA_CUBE = 17
+    MAGMA_CUBE_SMALL = 18
 
 
 class Weather(Enum):
@@ -113,23 +115,25 @@ class Weather(Enum):
     EXTREME_COLD = 11
     MAGNETIC_STORM = 12
     FIRE_RAIN = 13
+    AURORA = 14
 
 
 WEATHER_CONFIG = {
     Weather.EXTREME_HEAT: {"name": "酷暑", "temp": 40, "desc": "酷暑：温度较高，火焰伤害提升", "color": (255, 69, 0)},
     Weather.SUNNY: {"name": "晴天", "temp": 30, "desc": "晴天：温度适中", "color": (255, 255, 255)},
     Weather.CLOUDY: {"name": "多云", "temp": 20, "desc": "多云：温度较低", "color": (180, 180, 180)},
-    Weather.RAINY: {"name": "雨天", "temp": 10, "desc": "雨天：温度较低，敌人行动变慢", "color": (100, 150, 255)},
-    Weather.SNOWY: {"name": "雪天", "temp": 0, "desc": "雪天：温度骤降，敌人冻结时间延长", "color": (150, 200, 255)},
+    Weather.RAINY: {"name": "雨天", "temp": 10, "desc": "雨天：温度较低，敌人移速-50%，无法点燃", "color": (100, 150, 255)},
+    Weather.SNOWY: {"name": "雪天", "temp": 0, "desc": "雪天：温度骤降", "color": (150, 200, 255)},
     Weather.THUNDERSTORM: {"name": "雷暴", "temp": 15, "desc": "雷暴：温度较低，闪电将会劈下", "color": (255, 215, 0)},
     Weather.ACID_RAIN: {"name": "酸雨", "temp": 5, "desc": "酸雨：敌人中毒，炮塔等级-1，中毒伤害翻倍", "color": (0, 255, 0)},
     Weather.TAILWIND: {"name": "顺风", "temp": 25, "desc": "顺风：敌人移速+50%，炮塔射程+50%", "color": (152, 255, 152)},
     Weather.HEADWIND: {"name": "逆风", "temp": 25, "desc": "逆风：敌人移速-50%，炮塔射程-50%", "color": (152, 255, 152)},
     Weather.SCORCHING_SUN: {"name": "烈日", "temp": 50, "desc": "烈日：温度极高，敌人全体燃烧", "color": (255, 200, 0)},
     Weather.FOG: {"name": "迷雾", "temp": 15, "desc": "迷雾：视野遮挡", "color": (180, 180, 180)},
-    Weather.EXTREME_COLD: {"name": "极寒", "temp": -20, "desc": "极寒：冻结时间翻倍，敌人移速-50%", "color": (100, 200, 255)},
+    Weather.EXTREME_COLD: {"name": "极寒", "temp": -20, "desc": "极寒：温度极低，敌人移速-50%", "color": (100, 200, 255)},
     Weather.MAGNETIC_STORM: {"name": "磁暴", "temp": 20, "desc": "磁暴：闪电伤害翻倍，传送失效，金属敌人破甲", "color": (0, 255, 255)},
     Weather.FIRE_RAIN: {"name": "火雨", "temp": 100, "desc": "火雨：敌人持续燃烧，无法冻结", "color": (255, 69, 0)},
+    Weather.AURORA: {"name": "极光", "temp": -10, "desc": "极光：温度较低，炮塔攻速随零下温度提升", "color": (0, 255, 255)},
 }
 
 ENEMY_TYPES = {
@@ -150,4 +154,6 @@ ENEMY_TYPES = {
     "GOLD_NAUTILUS": {"image": "gold_nautilus.png", "speed": 1.2, "health": 250, "reward": 35},
     "DIAMOND_NAUTILUS": {"image": "diamond_nautilus.png", "speed": 1.2, "health": 300, "reward": 40},
     "NETHERITE_NAUTILUS": {"image": "netherite_nautilus.png", "speed": 1.2, "health": 300, "reward": 50},
+    "MAGMA_CUBE": {"image": "magma_cube.png", "speed": 2.0, "health": 180, "reward": 25},
+    "MAGMA_CUBE_SMALL": {"image": "magma_cube.png", "speed": 3.0, "health": 90, "reward": 10},
 }

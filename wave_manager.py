@@ -87,6 +87,8 @@ class WaveManager:
             return EnemyType.ELITE
         elif self.current_wave > 15 and rand < 0.10:
             return EnemyType.SLIME
+        elif self.current_wave > 15 and rand < 0.18:
+            return EnemyType.MAGMA_CUBE
         elif self.current_wave > 8 and rand < 0.15:
             return EnemyType.IRON_ARMORED
         elif self.current_wave > 20 and rand < 0.05:
