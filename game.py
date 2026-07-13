@@ -534,8 +534,6 @@ class Game:
                                 t.fire_rate = min(60, t.fire_rate + 6)
                                 if old_level >= 6:
                                     t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
-                                if old_level >= 11:
-                                    t.execute_threshold = 0
                         elif t.type == TowerType.FLAME:
                             t.damage -= 15
                             t.range -= TILE_SIZE // 4
@@ -730,7 +728,7 @@ class Game:
             else:
                 if tower.level >= 11:
                     info = [f"终望珍珠塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
-                            f"瞬移概率:{int(tower.teleport_chance * 100)}%", f"斩杀线:{tower.execute_threshold}%",
+                            f"瞬移概率:{int(tower.teleport_chance * 100)}%", f"百分比伤害:{(tower.level-10)*0.5}%",
                             f"范围伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
                 elif tower.level >= 6:
                     info = [f"末影之眼塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",

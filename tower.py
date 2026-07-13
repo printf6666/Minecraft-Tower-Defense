@@ -33,7 +33,6 @@ class Tower(pygame.sprite.Sprite):
         self.stun_time = 0
 
         self.lightning_damage = 0
-        self.execute_threshold = 0
         self.wind_knockback = 0
 
         self.dragon_breath_cooldown = 0
@@ -150,8 +149,6 @@ class Tower(pygame.sprite.Sprite):
                 self.range += TILE_SIZE // 4
                 self.fire_rate = max(30, self.fire_rate - 6)
                 if self.level >= 6: self.oneshot_chance += 0.01
-                if self.level >= 11:
-                    self.execute_threshold = min(10, 6 + (self.level - 11))
         elif self.type == TowerType.FLAME:
             self.damage += 15
             self.range += TILE_SIZE // 4
@@ -194,7 +191,6 @@ class Tower(pygame.sprite.Sprite):
             return
         self.teleport_chance = 0.01
         self.oneshot_chance = 0
-        self.execute_threshold = 0
         if self.teleport_branch == 2:
             self.damage = 100 + (self.level - 1) * 100
             self.range = TILE_SIZE * 3 + (self.level - 1) * (TILE_SIZE // 2)
@@ -205,8 +201,6 @@ class Tower(pygame.sprite.Sprite):
                 self.teleport_chance += 0.01
                 if i >= 5:
                     self.oneshot_chance += 0.01
-                if i >= 10:
-                    self.execute_threshold = min(10, 6 + (i - 9))
         self.fire_rate = max(30, 60 - (self.level - 1) * 6)
 
     def update_sprite(self):
@@ -389,7 +383,6 @@ class Tower(pygame.sprite.Sprite):
                     self.freeze_time, self.oneshot_chance, self.stun_time,
                     self.game.enemies, self.level)
                 bullet.lightning_damage = self.lightning_damage
-                bullet.execute_threshold = self.execute_threshold
                 bullet.source_tower = self
                 bullet.physical_branch = 2
                 bullets.append(bullet)
@@ -411,7 +404,6 @@ class Tower(pygame.sprite.Sprite):
                 poison_branch=self.poison_branch,
                 trident_branch=self.trident_branch)
             bullet.lightning_damage = self.lightning_damage
-            bullet.execute_threshold = self.execute_threshold
             bullet.source_tower = self
             if self.type == TowerType.POISON:
                 if self.poison_branch == 3:
@@ -491,7 +483,6 @@ class Bullet(pygame.sprite.Sprite):
         self.teleport_branch = teleport_branch
 
         self.lightning_damage = 0
-        self.execute_threshold = 0
         self.source_tower = None
         self.poison_stacks = 0
         self.physical_branch = 1
@@ -619,14 +610,6 @@ class Bullet(pygame.sprite.Sprite):
         if enemy.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED) and self.tower_level >= 6:
             if self.tower_type in (TowerType.PHYSICAL, TowerType.TRIDENT):
                 final_dmg = self.damage
-
-        if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11 and self.execute_threshold > 0 and self.teleport_branch == 1:
-            threshold_ratio = self.execute_threshold / 100.0
-            if enemy.health <= enemy.max_health * threshold_ratio:
-                reward = enemy.take_damage(9999999, color=RED, scale=1.2)
-                self.game.coins += reward
-                self.kill()
-                return
 
         color = self.get_damage_color()
         reward = enemy.take_damage(final_dmg, color=color)
