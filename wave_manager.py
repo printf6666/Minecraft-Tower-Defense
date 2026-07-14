@@ -18,10 +18,16 @@ class WaveManager:
     def start_new_wave(self):
         self.current_wave += 1
         self.enemies_spawned = 0
-        self.gold_armored_count = self.calculate_gold_armored_count()
-        self.ghost_count = self.calculate_ghost_count()
-        self.gold_nautilus_count = self.calculate_gold_nautilus_count()
-        self.enemies_to_spawn = self.calculate_enemies_to_spawn() + self.gold_armored_count + self.ghost_count + self.gold_nautilus_count
+        if self.current_wave == 50:
+            self.enemies_to_spawn = 1
+            self.gold_armored_count = 0
+            self.ghost_count = 0
+            self.gold_nautilus_count = 0
+        else:
+            self.gold_armored_count = self.calculate_gold_armored_count()
+            self.ghost_count = self.calculate_ghost_count()
+            self.gold_nautilus_count = self.calculate_gold_nautilus_count()
+            self.enemies_to_spawn = self.calculate_enemies_to_spawn() + self.gold_armored_count + self.ghost_count + self.gold_nautilus_count
         self.gold_armored_spawned = 0
         self.ghost_spawned = 0
         self.gold_nautilus_spawned = 0
@@ -71,6 +77,8 @@ class WaveManager:
         return None
 
     def select_enemy_type(self):
+        if self.current_wave == 50:
+            return EnemyType.HEROBRINE
         if self.gold_armored_spawned < self.gold_armored_count:
             self.gold_armored_spawned += 1
             return EnemyType.GOLD_ARMORED
@@ -91,18 +99,18 @@ class WaveManager:
             return EnemyType.MAGMA_CUBE
         elif self.current_wave > 8 and rand < 0.15:
             return EnemyType.IRON_ARMORED
-        elif self.current_wave > 20 and rand < 0.05:
+        elif self.current_wave > 12 and rand < 0.25:
+            return EnemyType.NAUTILUS
+        elif self.current_wave > 20 and rand < 0.15:
             return EnemyType.IRON_NAUTILUS
         elif self.current_wave > 8 and rand < 0.08:
             return EnemyType.DIAMOND_ARMORED
-        elif self.current_wave > 25 and rand < 0.03:
+        elif self.current_wave > 25 and rand < 0.10:
             return EnemyType.DIAMOND_NAUTILUS
         elif self.current_wave > 8 and rand < 0.04:
             return EnemyType.NETHERITE_ARMORED
-        elif self.current_wave > 30 and rand < 0.02:
+        elif self.current_wave > 30 and rand < 0.08:
             return EnemyType.NETHERITE_NAUTILUS
-        elif self.current_wave > 12 and rand < 0.12:
-            return EnemyType.NAUTILUS
         elif self.current_wave > 10 and rand < 0.2:
             return EnemyType.TANK
         elif self.current_wave > 5 and rand < 0.3:
