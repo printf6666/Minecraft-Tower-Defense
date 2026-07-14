@@ -252,10 +252,7 @@ class UIManager:
             x, y = cb["x"], cb["y"]
             timer = cb["timer"]
             if timer > 0:
-                alpha = 150 + int(100 * (timer % 30) / 30)
-                img = assets.command_block_img.copy()
-                img.set_alpha(alpha)
-                self.game.screen.blit(img, (x * TILE_SIZE, y * TILE_SIZE))
+                self.game.screen.blit(assets.command_block_img, (x * TILE_SIZE, y * TILE_SIZE))
 
     def draw_victory(self):
         self.game.screen.fill(BLACK)
