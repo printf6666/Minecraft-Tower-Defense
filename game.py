@@ -431,16 +431,17 @@ class Game:
                     self.enemies.add(enemy)
 
                 self.command_block_timer += 1
-                if self.command_block_timer >= 3000:
+                if self.command_block_timer >= 1440:
                     self.command_block_timer = 0
                     self.weather_banner_text = "HIM释放会爆炸的命令方块了!"
                     self.weather_banner_timer = 180
-                    while True:
-                        x = random.randint(0, GRID_WIDTH - 1)
-                        y = random.randint(1, GRID_HEIGHT)
-                        if (x, y) not in self.path and (x, y) != self.end_point:
-                            break
-                    self.command_blocks.append({"x": x, "y": y, "timer": 180, "exploded": False})
+                    for _ in range(3):
+                        while True:
+                            x = random.randint(0, GRID_WIDTH - 1)
+                            y = random.randint(1, GRID_HEIGHT)
+                            if (x, y) not in self.path and (x, y) != self.end_point:
+                                break
+                        self.command_blocks.append({"x": x, "y": y, "timer": 180, "exploded": False})
 
             for cb in self.command_blocks[:]:
                 cb["timer"] -= 1
