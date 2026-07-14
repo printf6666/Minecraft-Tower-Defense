@@ -17,8 +17,16 @@ class Enemy(pygame.sprite.Sprite):
         config = ENEMY_TYPES[enemy_key]
 
         self.speed = config["speed"]
-        self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
-        self.health = self.max_health
+        if enemy_key == "HEROBRINE":
+            self.max_health = config["health"]
+            self.health = self.max_health
+            self.total_layers = 3
+            self.current_layer = 3
+        else:
+            self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
+            self.health = self.max_health
+            self.total_layers = 1
+            self.current_layer = 1
         self.reward = config["reward"]
         self.base_speed = self.speed
 
@@ -57,6 +65,12 @@ class Enemy(pygame.sprite.Sprite):
             self.base_speed = self.speed
             self.weather_slowed = True
 
+        if game.weather == Weather.ENDLESS_NIGHT:
+            if self.enemy_type not in (EnemyType.GHOST, EnemyType.BOSS):
+                self.speed *= 0.5
+                self.base_speed = self.speed
+                self.weather_slowed = True
+
         if game.weather == Weather.SCORCHING_SUN:
             if game.temperature > 0 and self.enemy_type not in (EnemyType.MAGMA_CUBE, EnemyType.MAGMA_CUBE_SMALL):
                 self.burn_damage = max(self.burn_damage, game.temperature)
@@ -81,6 +95,8 @@ class Enemy(pygame.sprite.Sprite):
             self.image = pygame.transform.scale(self.image, (200, 200))
         elif enemy_key == "BOSS":
             self.image = pygame.transform.scale(self.image, (280, 280))
+        elif enemy_key == "HEROBRINE":
+            pass
         elif enemy_key in ("IRON_ARMORED", "GOLD_ARMORED", "DIAMOND_ARMORED", "NETHERITE_ARMORED"):
             self.image = pygame.transform.scale(self.image, (100, 100))
         elif enemy_key in ("NAUTILUS", "IRON_NAUTILUS", "GOLD_NAUTILUS", "DIAMOND_NAUTILUS", "NETHERITE_NAUTILUS"):
@@ -121,25 +137,22 @@ class Enemy(pygame.sprite.Sprite):
         rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
         if self.game.weather in rain_weathers:
             return
-        self.burn_damage = damage
-        self.burn_time = duration
-
-    def apply_freeze(self, duration):
-        if self.game.weather == Weather.FIRE_RAIN:
-            return
-        effective = int(duration * (1.0 - self.freeze_resistance))
-        if self.game.temperature < 0:
-            temp_abs = abs(self.game.temperature)
-            effective = int(effective * (1 + temp_abs / 100))
-        self.freeze_time = max(self.freeze_time, effective)
-        self.freeze_resistance = min(0.90, self.freeze_resistance + 0.10)
-        self.last_freeze_time = self.game.game_time
+        if self.game.weather == Weather.ENDLESS_NIGHT:
+            damage *= 2
+        self.burn_damage = max(self.burn_damage, damage)
+        self.burn_time = max(self.burn_time, duration)
 
     def apply_stun(self, duration):
         effective = int(duration * (1.0 - self.stun_resistance))
         self.stun_time = max(self.stun_time, effective)
         self.stun_resistance = min(0.90, self.stun_resistance + 0.10)
         self.last_stun_time = self.game.game_time
+
+    def apply_freeze(self, duration):
+        effective = int(duration * (1.0 - self.freeze_resistance))
+        self.freeze_time = max(self.freeze_time, effective)
+        self.freeze_resistance = min(0.90, self.freeze_resistance + 0.10)
+        self.last_freeze_time = self.game.game_time
 
     def apply_poison(self, stacks):
         if self.enemy_type in (EnemyType.NAUTILUS, EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
@@ -163,14 +176,19 @@ class Enemy(pygame.sprite.Sprite):
     def apply_wind(self, knockback):
         if self.enemy_type in (EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
             return
-        dx = self.path[self.path_index][0] - self.rect.centerx if self.path_index < len(self.path) else 0
-        dy = self.path[self.path_index][1] - self.rect.centery if self.path_index < len(self.path) else 0
-        if dx != 0 or dy != 0:
-            dist = math.sqrt(dx * dx + dy * dy)
+        if self.path_index >= len(self.path):
+            return
+        tx = self.path[self.path_index][0] * TILE_SIZE + TILE_SIZE // 2
+        ty = self.path[self.path_index][1] * TILE_SIZE + TILE_SIZE // 2
+        dx = tx - self.pos_x
+        dy = ty - self.pos_y
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist > 0:
             dx /= dist
             dy /= dist
-            self.rect.centerx -= dx * knockback
-            self.rect.centery -= dy * knockback
+            self.pos_x -= dx * knockback
+            self.pos_y -= dy * knockback
+            self.rect.center = (self.pos_x, self.pos_y)
 
     def update(self):
         if self.health <= 0:
@@ -271,6 +289,8 @@ class Enemy(pygame.sprite.Sprite):
             buff_list.append("slow")
         if self.burn_time > 0:
             buff_list.append("burn")
+            if self.game.weather == Weather.ENDLESS_NIGHT:
+                buff_list.append("soul_burn")
         if self.poison_stacks > 0:
             buff_list.append("poison")
         if self.wind_mark_tower is not None:
@@ -344,6 +364,22 @@ class Enemy(pygame.sprite.Sprite):
             self.game.spawn_damage_text(final_dmg, self.rect.center, color=color, scale=scale)
 
         if self.health <= 0:
+            if self.enemy_type == EnemyType.HEROBRINE:
+                self.current_layer -= 1
+                if self.current_layer > 0:
+                    self.health = self.max_health
+                    self.game.herobrine_phase = 3 - self.current_layer
+                    if self.game.herobrine_phase == 1:
+                        for _ in range(5):
+                            self.game.herobrine_summon_queue.append(EnemyType.NETHERITE_ARMORED)
+                        for _ in range(5):
+                            self.game.herobrine_summon_queue.append(EnemyType.NETHERITE_NAUTILUS)
+                    elif self.game.herobrine_phase == 2:
+                        for _ in range(15):
+                            self.game.herobrine_summon_queue.append(EnemyType.GHOST)
+                        for _ in range(5):
+                            self.game.herobrine_summon_queue.append(EnemyType.BOSS)
+                    return 0
             if self.enemy_type == EnemyType.SLIME:
                 for _ in range(3):
                     child = Enemy(self.path, EnemyType.SLIMELING, self.game)

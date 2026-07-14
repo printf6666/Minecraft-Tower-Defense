@@ -104,6 +104,15 @@ class Game:
         self.forecast_purchased = False
         self.forecast_weather_idx = -1
 
+        self.night_dark_timer = 0
+        self.herobrine_phase = 0
+        self.herobrine_spawned = False
+        self.herobrine = None
+        self.command_block_timer = 0
+        self.command_blocks = []
+        self.herobrine_summon_timer = 0
+        self.herobrine_summon_queue = []
+
         self.path = random.choice(SEED_PATHS)
         self.start_point = self.path[0]
         self.end_point = self.path[-1]
@@ -113,12 +122,21 @@ class Game:
 
         self.ui_manager = UIManager(self)
 
-    def _build_background(self):
+    def _build_background(self, night_mode=False):
         gw = GRID_WIDTH * TILE_SIZE
         gh = (GRID_HEIGHT + 1) * TILE_SIZE
         self.background_surface = pygame.Surface((gw, gh))
         self.background_surface.fill(BLACK)
         path_set = set(self.path)
+
+        if night_mode:
+            stone_img = assets.blackstone_img
+            dirt_img = assets.soul_sand_img
+            gold_ore_img = assets.gilded_blackstone_img
+        else:
+            stone_img = assets.stone_img
+            dirt_img = assets.dirt_img
+            gold_ore_img = assets.gold_ore_img
 
         stone_tiles = []
         for x in range(GRID_WIDTH):
@@ -126,16 +144,17 @@ class Game:
                 if (x, y) not in path_set and (x, y) != self.end_point:
                     stone_tiles.append((x, y))
 
-        self.gold_ore_positions = set(random.sample(stone_tiles, min(5, len(stone_tiles))))
+        if not hasattr(self, 'gold_ore_positions'):
+            self.gold_ore_positions = set(random.sample(stone_tiles, min(5, len(stone_tiles))))
 
         for x in range(GRID_WIDTH):
             for y in range(1, GRID_HEIGHT + 1):
                 if (x, y) in path_set:
-                    self.background_surface.blit(assets.dirt_img, (x * TILE_SIZE, y * TILE_SIZE))
+                    self.background_surface.blit(dirt_img, (x * TILE_SIZE, y * TILE_SIZE))
                 elif (x, y) in self.gold_ore_positions:
-                    self.background_surface.blit(assets.gold_ore_img, (x * TILE_SIZE, y * TILE_SIZE))
+                    self.background_surface.blit(gold_ore_img, (x * TILE_SIZE, y * TILE_SIZE))
                 else:
-                    self.background_surface.blit(assets.stone_img, (x * TILE_SIZE, y * TILE_SIZE))
+                    self.background_surface.blit(stone_img, (x * TILE_SIZE, y * TILE_SIZE))
         sx, sy = self.start_point
         ex, ey = self.end_point
         self.background_surface.blit(assets.start_img, (sx * TILE_SIZE, sy * TILE_SIZE))
@@ -176,8 +195,10 @@ class Game:
                     grid_y = mouse_y // TILE_SIZE
 
                     if self.state == GameState.MENU:
-                        if 900 <= mouse_x <= 1660 and 900 <= mouse_y <= 980:
+                        if 900 <= mouse_x <= 1660 and 840 <= mouse_y <= 920:
                             self.start_game()
+                        elif 900 <= mouse_x <= 1660 and 930 <= mouse_y <= 1010:
+                            self.start_boss_fight()
                         elif 900 <= mouse_x <= 1660 and 1020 <= mouse_y <= 1100:
                             pygame.quit()
                             import sys
@@ -349,14 +370,18 @@ class Game:
             self.game_time += 1
             if self.pending_first_wave_weather and self.wave_manager.wave_timer <= 0:
                 self.select_weather()
-                self.weather_banner_timer = 180
+                if self.wave_manager.current_wave != 50:
+                    self.weather_banner_timer = 180
                 self.pending_first_wave_weather = False
             self.global_production()
 
             for enemy in self.enemies:
                 reached_end = enemy.update()
                 if reached_end:
-                    self.lives -= 1
+                    if enemy.enemy_type == EnemyType.HEROBRINE:
+                        self.lives -= 50
+                    else:
+                        self.lives -= 1
                     enemy.kill()
                     if self.lives <= 0:
                         self.state = GameState.GAME_OVER
@@ -385,6 +410,58 @@ class Game:
                     self.fog_timer -= 1
                 else:
                     self.fog_visible = True
+
+            if self.weather == Weather.ENDLESS_NIGHT:
+                self.night_dark_timer += 1
+                if self.night_dark_timer >= 1800:
+                    self.night_dark_timer = 0
+                    self.fog_visible = True
+                    for enemy in self.enemies:
+                        heal_amount = int(enemy.max_health * 0.02)
+                        enemy.health = min(enemy.health + heal_amount, enemy.max_health)
+                if self.fog_visible and self.night_dark_timer >= 300:
+                    self.fog_visible = False
+
+                self.herobrine_summon_timer += 1
+                summon_interval = 30 if self.herobrine_phase == 2 else 60
+                if self.herobrine_summon_queue and self.herobrine_summon_timer >= summon_interval:
+                    self.herobrine_summon_timer = 0
+                    enemy_type = self.herobrine_summon_queue.pop(0)
+                    enemy = Enemy(self.path, enemy_type, self)
+                    self.enemies.add(enemy)
+
+                self.command_block_timer += 1
+                if self.command_block_timer >= 3000:
+                    self.command_block_timer = 0
+                    self.weather_banner_text = "HIM释放会爆炸的命令方块了!"
+                    self.weather_banner_timer = 180
+                    while True:
+                        x = random.randint(0, GRID_WIDTH - 1)
+                        y = random.randint(1, GRID_HEIGHT)
+                        if (x, y) not in self.path and (x, y) != self.end_point:
+                            break
+                    self.command_blocks.append({"x": x, "y": y, "timer": 180, "exploded": False})
+
+            for cb in self.command_blocks[:]:
+                cb["timer"] -= 1
+                if cb["timer"] <= 0 and not cb["exploded"]:
+                    cb["exploded"] = True
+                    x, y = cb["x"], cb["y"]
+                    tower = self.get_tower_at(x, y)
+                    if tower:
+                        tower.kill()
+                        if self.selected_tower is tower:
+                            self.selected_tower = None
+                    for dx in [-1, 0, 1]:
+                        for dy in [-1, 0, 1]:
+                            tx, ty = x + dx, y + dy
+                            tower = self.get_tower_at(tx, ty)
+                            if tower:
+                                tower.kill()
+                                if self.selected_tower is tower:
+                                    self.selected_tower = None
+                    self.tnt_explosions.append(TNTExplosion(x * TILE_SIZE + TILE_SIZE // 2, y * TILE_SIZE + TILE_SIZE // 2, 0, 0, None, self))
+            self.command_blocks = [cb for cb in self.command_blocks if not cb["exploded"] or cb["timer"] > -60]
 
             if not pygame.mixer.music.get_busy():
                 self.play_random_bgm()
@@ -458,7 +535,9 @@ class Game:
                     self.enemies_killed += 1
                     enemy.kill()
 
-            if self.wave_manager.is_wave_complete(self.enemies):
+            if self.wave_manager.current_wave == 50 and self.wave_manager.wave_timer > 0:
+                self.wave_manager.update()
+            elif self.wave_manager.is_wave_complete(self.enemies):
                 self.apply_production_bonus()
                 if self.wave_manager.is_game_complete(self.enemies):
                     self.state = GameState.VICTORY
@@ -484,11 +563,15 @@ class Game:
 
     def select_weather(self):
         self.fog_visible = False
-        wave_idx = self.wave_manager.current_wave - 1
-        if 0 <= wave_idx < len(self.weather_forecast):
-            self.weather = self.weather_forecast[wave_idx]
+        if self.wave_manager.current_wave == 50:
+            self.weather = Weather.ENDLESS_NIGHT
+            self._build_background(night_mode=True)
         else:
-            self.weather = Weather.SUNNY
+            wave_idx = self.wave_manager.current_wave - 1
+            if 0 <= wave_idx < len(self.weather_forecast):
+                self.weather = self.weather_forecast[wave_idx]
+            else:
+                self.weather = Weather.SUNNY
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
         for t in self.towers:
@@ -894,6 +977,19 @@ class Game:
         self.pending_first_wave_weather = True
         self.weather_banner_text = "准备时间"
         self.weather_banner_timer = 240
+
+    def start_boss_fight(self):
+        self.generate_weather_forecast()
+        self.coins = 2500000
+        self.state = GameState.PLAYING
+        self.wave_manager = WaveManager()
+        self.wave_manager.current_wave = 49
+        self.wave_manager.start_new_wave()
+        self.wave_manager.wave_timer = 1440
+        self.select_weather()
+        self.pending_first_wave_weather = False
+        self.weather_banner_text = "准备时间"
+        self.weather_banner_timer = 1440
 
     def reset_game(self):
         self.path = random.choice(SEED_PATHS)

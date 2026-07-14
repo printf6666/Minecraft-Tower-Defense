@@ -98,6 +98,7 @@ class EnemyType(Enum):
     NETHERITE_NAUTILUS = 16
     MAGMA_CUBE = 17
     MAGMA_CUBE_SMALL = 18
+    HEROBRINE = 19
 
 
 class Weather(Enum):
@@ -116,6 +117,7 @@ class Weather(Enum):
     MAGNETIC_STORM = 12
     FIRE_RAIN = 13
     AURORA = 14
+    ENDLESS_NIGHT = 15
 
 
 WEATHER_CONFIG = {
@@ -134,6 +136,7 @@ WEATHER_CONFIG = {
     Weather.MAGNETIC_STORM: {"name": "磁暴", "temp": 20, "desc": "磁暴：闪电伤害翻倍，传送失效，金属敌人破甲", "color": (0, 255, 255)},
     Weather.FIRE_RAIN: {"name": "火雨", "temp": 100, "desc": "火雨：敌人持续燃烧，无法冻结", "color": (255, 69, 0)},
     Weather.AURORA: {"name": "极光", "temp": -10, "desc": "极光：温度较低，炮塔攻速随零下温度提升", "color": (0, 255, 255)},
+    Weather.ENDLESS_NIGHT: {"name": "永夜", "temp": 12, "desc": "永夜：黑暗降临，最终Boss战", "color": (148, 0, 211)},
 }
 
 ENEMY_TYPES = {
@@ -142,6 +145,7 @@ ENEMY_TYPES = {
     "TANK": {"image": "tank.png", "speed": 1.5, "health": 300, "reward": 30},
     "ELITE": {"image": "elite.png", "speed": 2.5, "health": 200, "reward": 40},
     "BOSS": {"image": "boss.png", "speed": 2, "health": 800, "reward": 100},
+    "HEROBRINE": {"image": "herobrine.png", "speed": 3, "health": 4500000, "reward": 0},
     "IRON_ARMORED": {"image": "iron_armored.png", "speed": 1.2, "health": 250, "reward": 35},
     "SLIME": {"image": "slime.png", "speed": 2.0, "health": 180, "reward": 25},
     "SLIMELING": {"image": "slime.png", "speed": 3.0, "health": 90, "reward": 10},

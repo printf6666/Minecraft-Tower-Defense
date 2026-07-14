@@ -3,6 +3,7 @@ import math
 import assets
 from config import *
 from tower import TowerType
+from enemy import EnemyType
 from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash
 
 
@@ -13,9 +14,12 @@ class UIManager:
     def draw_menu(self):
         title = assets.font_large.render("像素防线:晶域守卫", True, WHITE)
         self.game.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 300))
-        pygame.draw.rect(self.game.screen, GREEN, (900, 900, 760, 80))
+        pygame.draw.rect(self.game.screen, GREEN, (900, 840, 760, 80))
         start_text = assets.font_medium.render("开始游戏", True, WHITE)
-        self.game.screen.blit(start_text, (1200, 915))
+        self.game.screen.blit(start_text, (1200, 855))
+        pygame.draw.rect(self.game.screen, PURPLE, (900, 930, 760, 80))
+        boss_text = assets.font_medium.render("BOSS战", True, WHITE)
+        self.game.screen.blit(boss_text, (1200, 945))
         pygame.draw.rect(self.game.screen, RED, (900, 1020, 760, 80))
         exit_text = assets.font_medium.render("退出游戏", True, WHITE)
         self.game.screen.blit(exit_text, (1200, 1035))
@@ -38,6 +42,8 @@ class UIManager:
         for enemy in self.game.enemies:
             enemy.draw_health_bar(self.game.screen)
 
+        self.draw_command_blocks()
+
         if self.game.show_range and self.game.selected_tower:
             self.game.selected_tower.draw_range(self.game.screen)
 
@@ -48,7 +54,7 @@ class UIManager:
             gw = GRID_WIDTH * TILE_SIZE
             gh = GRID_HEIGHT * TILE_SIZE
             s = pygame.Surface((gw, gh), pygame.SRCALPHA)
-            s.fill((230, 230, 230, 255))
+            s.fill((0, 0, 0, 255))
             self.game.screen.blit(s, (0, TILE_SIZE))
 
         for pool in self.game.dragon_breath_pools:
@@ -74,6 +80,7 @@ class UIManager:
         self.game.damage_texts.draw(self.game.screen)
 
         self.draw_ui()
+        self.draw_herobrine_health_bar()
         if self.game.state == GameState.PAUSED:
             self.draw_pause_overlay()
 
@@ -220,6 +227,35 @@ class UIManager:
         pygame.draw.rect(self.game.screen, GREEN, (900, 850, 760, 80))
         restart_text = assets.font_medium.render("重新开始", True, WHITE)
         self.game.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
+
+    def draw_herobrine_health_bar(self):
+        for enemy in self.game.enemies:
+            if enemy.enemy_type == EnemyType.HEROBRINE:
+                bar_x = 810
+                bar_y = 20
+                bar_width = 740
+                bar_height = 50
+                pygame.draw.rect(self.game.screen, (100, 0, 0), (bar_x, bar_y, bar_width, bar_height))
+                health_ratio = enemy.health / enemy.max_health
+                fill_width = int(bar_width * health_ratio)
+                pygame.draw.rect(self.game.screen, (0, 255, 0), (bar_x, bar_y, fill_width, bar_height))
+                layers_text = assets.font_medium.render(f"*{enemy.current_layer}", True, WHITE)
+                text_x = bar_x + bar_width - layers_text.get_width() - 5
+                text_y = bar_y + (bar_height - layers_text.get_height()) // 2
+                self.game.screen.blit(layers_text, (text_x, text_y))
+                break
+
+    def draw_command_blocks(self):
+        for cb in self.game.command_blocks:
+            if cb["exploded"]:
+                continue
+            x, y = cb["x"], cb["y"]
+            timer = cb["timer"]
+            if timer > 0:
+                alpha = 150 + int(100 * (timer % 30) / 30)
+                img = assets.command_block_img.copy()
+                img.set_alpha(alpha)
+                self.game.screen.blit(img, (x * TILE_SIZE, y * TILE_SIZE))
 
     def draw_victory(self):
         self.game.screen.fill(BLACK)

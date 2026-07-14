@@ -435,7 +435,7 @@ class Tower(pygame.sprite.Sprite):
                     self.rect.centerx, self.rect.centery,
                     dx, dy, self.get_effective_range(),
                     self.damage, self.type, self.game,
-                    self.teleport_chance, self.penetrate,
+                    0, self.penetrate,
                     self.freeze_time, self.oneshot_chance, self.stun_time,
                     self.game.enemies, self.level,
                     teleport_branch=self.teleport_branch)
@@ -636,7 +636,7 @@ class Bullet(pygame.sprite.Sprite):
                     enemy.teleport_to_start()
                     if assets.teleport_sound:
                         assets.teleport_sound.play()
-                if random.random() < self.oneshot_chance:
+                if enemy.enemy_type != EnemyType.HEROBRINE and random.random() < self.oneshot_chance:
                     reward = enemy.take_damage(9999999, color=RED, scale=1.2)
                     self.game.coins += reward
             else:
@@ -646,7 +646,7 @@ class Bullet(pygame.sprite.Sprite):
                     if random.random() < poison_chance:
                         enemy.apply_poison(poison_stacks.get(self.tower_level, 600))
                 elif self.tower_level >= 11:
-                    debuffs = ['burn', 'slow', 'speed', 'wind', 'poison', 'wither', 'broken']
+                    debuffs = ['burn', 'slow', 'speed', 'poison', 'wither', 'broken']
                     debuff = random.choice(debuffs)
                     if debuff == 'burn':
                         if self.game.temperature > 0:
@@ -657,8 +657,6 @@ class Bullet(pygame.sprite.Sprite):
                         enemy.apply_slow(0.3, 999999)
                     elif debuff == 'speed':
                         enemy.apply_speed(0.5, 999999)
-                    elif debuff == 'wind':
-                        enemy.apply_wind(200)
                     elif debuff == 'poison':
                         enemy.apply_poison(100)
                     elif debuff == 'wither':
