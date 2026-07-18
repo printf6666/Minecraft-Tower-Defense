@@ -478,7 +478,7 @@ class Tower(pygame.sprite.Sprite):
             interval = 60 * 60
             range_size = 5
         else:
-            interval = 120 * 60
+            interval = 90 * 60
             range_size = 3
 
         if self.shield_timer >= interval:

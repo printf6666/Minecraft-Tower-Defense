@@ -209,7 +209,7 @@ class Game:
 
                     if (FORECAST_BTN_X <= mouse_x <= FORECAST_BTN_X + FORECAST_BTN_WIDTH and
                             FORECAST_BTN_Y <= mouse_y <= FORECAST_BTN_Y + FORECAST_BTN_HEIGHT):
-                        if self.state == GameState.PLAYING and not self.forecast_purchased and self.coins >= 100 * self.wave_manager.current_wave:
+                        if self.state == GameState.PLAYING and not self.forecast_purchased and self.wave_manager.current_wave < 47 and self.coins >= 100 * self.wave_manager.current_wave:
                             self.coins -= 100 * self.wave_manager.current_wave
                             self.forecast_purchased = True
                             self.forecast_weather_idx = self.wave_manager.current_wave
@@ -610,8 +610,8 @@ class Game:
 
 
     def generate_weather_forecast(self):
-        weathers = [Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
-                    Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.TAILWIND, Weather.HEADWIND,
+        weathers = [Weather.ACID_RAIN, Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
+                    Weather.THUNDERSTORM, Weather.TAILWIND, Weather.HEADWIND,
                     Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD, Weather.MAGNETIC_STORM,
                     Weather.FIRE_RAIN, Weather.AURORA]
         self.weather_forecast = [random.choice(weathers) for _ in range(self.wave_manager.total_waves)]

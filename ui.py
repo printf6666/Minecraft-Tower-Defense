@@ -300,19 +300,24 @@ class UIManager:
         weather_color = WEATHER_CONFIG[self.game.weather]["color"]
         self.game.screen.blit(assets.font_medium.render(f"天气:{weather_name}  温度:{self.game.temperature}", True, weather_color), (1570, 16))
 
-        can_buy = self.game.state == GameState.PLAYING and not self.game.forecast_purchased
-        can_afford = self.game.coins >= 100 * self.game.wave_manager.current_wave
-        btn_color = FORECAST_BTN_COLOR if can_buy and can_afford else FORECAST_BTN_COLOR_DISABLED
-        pygame.draw.rect(self.game.screen, btn_color,
-                         (FORECAST_BTN_X, FORECAST_BTN_Y, FORECAST_BTN_WIDTH, FORECAST_BTN_HEIGHT))
-        if self.game.forecast_purchased and 0 <= self.game.forecast_weather_idx < len(self.game.weather_forecast):
-            w = self.game.weather_forecast[self.game.forecast_weather_idx]
-            label = f"天气预报:{WEATHER_CONFIG[w]['name']}"
-        else:
-            label = f"天气预报:花费{100*self.game.wave_manager.current_wave}金"
-        fc_color = WHITE if can_afford else GRAY
-        fc_text = assets.font_small.render(label, True, fc_color)
-        self.game.screen.blit(fc_text, (FORECAST_BTN_X + 20, FORECAST_BTN_Y + 10))
+        if self.game.wave_manager.current_wave < 47:
+            can_buy = self.game.state == GameState.PLAYING and not self.game.forecast_purchased
+            can_afford = self.game.coins >= 100 * self.game.wave_manager.current_wave
+            btn_color = FORECAST_BTN_COLOR if can_buy and can_afford else FORECAST_BTN_COLOR_DISABLED
+            pygame.draw.rect(self.game.screen, btn_color,
+                             (FORECAST_BTN_X, FORECAST_BTN_Y, FORECAST_BTN_WIDTH, FORECAST_BTN_HEIGHT))
+            if self.game.forecast_purchased and 0 <= self.game.forecast_weather_idx < len(self.game.weather_forecast):
+                forecast_names = []
+                for i in range(3):
+                    idx = self.game.forecast_weather_idx + i + 1
+                    if idx < len(self.game.weather_forecast):
+                        forecast_names.append(WEATHER_CONFIG[self.game.weather_forecast[idx]]['name'])
+                label = f"天气预报:{','.join(forecast_names)}"
+            else:
+                label = f"天气预报:花费{100*self.game.wave_manager.current_wave}金"
+            fc_color = WHITE if can_afford else GRAY
+            fc_text = assets.font_small.render(label, True, fc_color)
+            self.game.screen.blit(fc_text, (FORECAST_BTN_X + 20, FORECAST_BTN_Y + 10))
 
         pygame.draw.rect(self.game.screen, BLACK, (0, SCREEN_HEIGHT - 128, SCREEN_WIDTH, 128))
         pygame.draw.line(self.game.screen, WHITE, (0, SCREEN_HEIGHT - 128), (SCREEN_WIDTH, SCREEN_HEIGHT - 128), 4)
