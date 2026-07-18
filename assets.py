@@ -36,6 +36,7 @@ tnt_explosion_frames = []
 mushroom_cloud_frames = []
 contaminated_img = None
 
+icon0 = None
 icon1 = None
 icon2 = None
 icon3 = None
@@ -44,12 +45,14 @@ icon5 = None
 icon6 = None
 icon7 = None
 icon8 = None
+icon9 = None
 
 gold_img = None
 heart_img = None
 
 BUFF_SIZE = 32
 buff_icons = {}
+shield_img = None
 
 white_lightning_frames = []
 golden_lightning_frames = []
@@ -73,6 +76,7 @@ gold_ore_img = None
 blackstone_img = None
 soul_sand_img = None
 gilded_blackstone_img = None
+command_block_img = None
 
 ice_dragon_img = None
 fire_dragon_img = None
@@ -94,21 +98,13 @@ def init_assets():
     global tnt_explosion_frames, mushroom_cloud_frames, contaminated_img
     global explode_sound, level_up_sound
 
-    try:
-        font_large = pygame.font.Font(resource_path("font/Minecraft.ttf"), 60)
-        font_medium = pygame.font.Font(resource_path("font/Minecraft.ttf"), 48)
-        font_small = pygame.font.Font(resource_path("font/Minecraft.ttf"), 36)
-        font_tower_level = pygame.font.Font(resource_path("font/Minecraft.ttf"), 28)
-    except:
-        font_large = pygame.font.SysFont('arial', 60)
-        font_medium = pygame.font.SysFont('arial', 48)
-        font_small = pygame.font.SysFont('arial', 36)
-        font_tower_level = pygame.font.SysFont('arial', 28)
 
-    try:
-        font_damage = pygame.font.Font(resource_path("font/Minecraft.ttf"), 36)
-    except:
-        font_damage = font_small
+    font_large = pygame.font.Font(resource_path("font/Minecraft.ttf"), 60)
+    font_medium = pygame.font.Font(resource_path("font/Minecraft.ttf"), 48)
+    font_small = pygame.font.Font(resource_path("font/Minecraft.ttf"), 36)
+    font_tower_level = pygame.font.Font(resource_path("font/Minecraft.ttf"), 28)
+    font_damage = pygame.font.Font(resource_path("font/Minecraft.ttf"), 36)
+
 
     icon_size = 100
     tower_icons.clear()
@@ -117,7 +113,7 @@ def init_assets():
             tower_icons.append(load_image(f"tower/{ttype.value}-1.png", (icon_size, icon_size)))
         except:
             tower_icons.append(pygame.Surface((icon_size, icon_size)))
-    icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9 = tower_icons
+    icon0, icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9 = tower_icons
 
     global tnt_explosion_frames
     tnt_explosion_frames.clear()
@@ -151,14 +147,10 @@ def init_assets():
     buff_icons["poison"] = load_image("debuff/poison.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["wind"] = load_image("debuff/wind.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["speed"] = load_image("debuff/speed.png", (BUFF_SIZE, BUFF_SIZE))
-    try:
-        buff_icons["wither"] = load_image("debuff/wither.png", (BUFF_SIZE, BUFF_SIZE))
-    except:
-        buff_icons["wither"] = pygame.Surface((BUFF_SIZE, BUFF_SIZE))
-    try:
-        buff_icons["soul_burn"] = load_image("debuff/soul_burn.png", (BUFF_SIZE, BUFF_SIZE))
-    except:
-        buff_icons["soul_burn"] = pygame.Surface((BUFF_SIZE, BUFF_SIZE))
+    buff_icons["wither"] = load_image("debuff/wither.png", (BUFF_SIZE, BUFF_SIZE))
+    buff_icons["soul_burn"] = load_image("debuff/soul_burn.png", (BUFF_SIZE, BUFF_SIZE))
+    global shield_img
+    shield_img = load_image("tower/shield.png", (128, 128))
 
     try:
         sheet = load_image("tower/white_lightning.png")
@@ -244,6 +236,13 @@ def init_assets():
         gilded_blackstone_img = pygame.Surface(ts)
         gilded_blackstone_img.fill((45, 45, 45))
         pygame.draw.rect(gilded_blackstone_img, (255, 215, 0), (40, 40, 48, 48))
+
+    global command_block_img
+    try:
+        command_block_img = load_image("enemy/command_block.png", ts)
+    except:
+        command_block_img = pygame.Surface(ts)
+        command_block_img.fill((0, 0, 139))
 
     global ice_dragon_img, fire_dragon_img, electric_dragon_img
     try:

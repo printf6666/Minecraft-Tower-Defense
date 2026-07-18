@@ -36,6 +36,7 @@ class Tower(pygame.sprite.Sprite):
         self.wind_knockback = 0
 
         self.dragon_breath_cooldown = 0
+        self.shield_timer = 0
 
         self.physical_branch = 1
         self.wind_branch = 1
@@ -45,6 +46,7 @@ class Tower(pygame.sprite.Sprite):
         self.bomb_branch = 1
         self.trident_branch = 1
         self.teleport_branch = 1
+        self.shield_branch = 1
 
         self.setup_tower()
         self.update_sprite()
@@ -103,6 +105,12 @@ class Tower(pygame.sprite.Sprite):
             self.cost = 250
             self.upgrade_cost = 375
             self.wind_knockback = 12
+        elif self.type == TowerType.SHIELD:
+            self.range = 0
+            self.damage = 0
+            self.fire_rate = 0
+            self.cost = 450
+            self.upgrade_cost = 675
         elif self.type == TowerType.POISON:
             self.range = TILE_SIZE * 3
             self.damage = 20
@@ -271,6 +279,14 @@ class Tower(pygame.sprite.Sprite):
                 img = f"tower/{prefix}{prefix}-{self.teleport_branch}.png"
             else:
                 img = f"tower/{prefix}-{self.teleport_branch}.png"
+        elif self.type == TowerType.SHIELD:
+            prefix = str(self.type.value)
+            if self.level >= 11:
+                img = f"tower/{prefix}{prefix}{prefix}-{self.shield_branch}.png"
+            elif self.level >= 6:
+                img = f"tower/{prefix}{prefix}-1.png"
+            else:
+                img = f"tower/{prefix}-1.png"
         else:
             prefix = str(self.type.value)
             if self.level >= 11:
@@ -284,7 +300,7 @@ class Tower(pygame.sprite.Sprite):
                 img = f"tower/{prefix}{prefix}-1.png"
             else:
                 img = f"tower/{prefix}-1.png"
-        self.image = assets.load_image(img, (TILE_SIZE, TILE_SIZE))
+        self.image = assets.load_image(img)
         self.rect = self.image.get_rect()
         self.rect.topleft = (self.x * TILE_SIZE, self.y * TILE_SIZE)
 
@@ -448,6 +464,44 @@ class Tower(pygame.sprite.Sprite):
     def draw_range(self, surface):
         if self.type != TowerType.PRODUCTION and not (self.type == TowerType.BOMB and self.is_nuclear):
             pygame.draw.circle(surface, (255, 255, 255, 50), self.rect.center, self.get_effective_range(), 2)
+
+    def update_shield_tower(self):
+        if self.type != TowerType.SHIELD:
+            return
+
+        self.shield_timer += 1
+
+        if self.level >= 11:
+            interval = 30 * 60
+            range_size = GRID_WIDTH
+        elif self.level >= 6:
+            interval = 60 * 60
+            range_size = 5
+        else:
+            interval = 120 * 60
+            range_size = 3
+
+        if self.shield_timer >= interval:
+            self.shield_timer = 0
+            towers_without_shield = []
+            for tower in self.game.towers:
+                if not getattr(tower, 'has_shield', False):
+                    if self.level >= 11:
+                        towers_without_shield.append(tower)
+                    else:
+                        dx = abs(tower.x - self.x)
+                        dy = abs(tower.y - self.y)
+                        if dx <= range_size // 2 and dy <= range_size // 2:
+                            towers_without_shield.append(tower)
+
+            if towers_without_shield:
+                if self.level >= 6:
+                    count = 3
+                else:
+                    count = 1
+                selected = random.sample(towers_without_shield, min(count, len(towers_without_shield)))
+                for tower in selected:
+                    tower.has_shield = True
 
 
 class Bullet(pygame.sprite.Sprite):

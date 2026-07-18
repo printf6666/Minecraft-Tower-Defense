@@ -2,6 +2,7 @@ from enum import Enum
 import pygame
 
 class TowerType(Enum):
+    SHIELD = 0
     PHYSICAL = 1
     PRODUCTION = 2
     ICE = 3
@@ -22,6 +23,7 @@ TOWER_DATA = [
     (TowerType.WIND,       "风系", 250,  pygame.K_7),
     (TowerType.POISON,     "毒系", 175,  pygame.K_8),
     (TowerType.BOMB,       "TNT", 500,  pygame.K_9),
+    (TowerType.SHIELD,     "盾塔", 275,  pygame.K_0),
     ]
 
 SCREEN_WIDTH = 2560

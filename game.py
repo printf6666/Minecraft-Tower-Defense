@@ -98,6 +98,9 @@ class Game:
         self.herobrine_summon_timer = 0
         self.herobrine_summon_queue = []
 
+        self.command_block_timer = 0
+        self.command_blocks = []
+
         self.path = random.choice(SEED_PATHS)
         self.start_point = self.path[0]
         self.end_point = self.path[-1]
@@ -129,8 +132,7 @@ class Game:
                 if (x, y) not in path_set and (x, y) != self.end_point:
                     stone_tiles.append((x, y))
 
-        if not hasattr(self, 'gold_ore_positions'):
-            self.gold_ore_positions = set(random.sample(stone_tiles, min(5, len(stone_tiles))))
+        self.gold_ore_positions = set(random.sample(stone_tiles, min(5, len(stone_tiles))))
 
         for x in range(GRID_WIDTH):
             for y in range(1, GRID_HEIGHT + 1):
@@ -295,6 +297,9 @@ class Game:
                         self.selected_tower.teleport_branch = 3 - self.selected_tower.teleport_branch
                         self.selected_tower.recalculate_stats()
                         self.selected_tower.update_sprite()
+                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
+                        self.selected_tower.shield_branch = self.selected_tower.shield_branch % 3 + 1
+                        self.selected_tower.update_sprite()
                     elif event.key == pygame.K_s and self.selected_tower:
                         cost_map = {ttype: cost for ttype, name, cost, key in TOWER_DATA}
                         sell_price = cost_map[self.selected_tower.type] * self.selected_tower.level
@@ -314,6 +319,11 @@ class Game:
                         elif self.selected_tower.type == TowerType.BOMB:
                             old_temp_effect = self.get_bomb_temp_effect(self.selected_tower)
                             self.temperature -= old_temp_effect
+                        elif self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
+                            if self.selected_tower.shield_branch == 1:
+                                self.temperature -= self.selected_tower.level
+                            elif self.selected_tower.shield_branch == 2:
+                                self.temperature += self.selected_tower.level
                         self.temperature = max(-273, self.temperature)
                         self.selected_tower.kill()
                         self.selected_tower = None
@@ -344,6 +354,27 @@ class Game:
                 return tower.level
             else:
                 return 0
+
+    def trigger_shield_burst(self, broken_tower):
+        for tower in self.towers:
+            if tower.type == TowerType.SHIELD and tower.level >= 11:
+                if tower.shield_branch == 1:
+                    damage = (tower.level - 10) * 20 * abs(self.temperature)
+                    for enemy in self.enemies:
+                        enemy.take_damage(damage, color=(255, 100, 0))
+                        enemy.burn_time = max(enemy.burn_time, 10 * 60)
+                        enemy.burn_damage = max(enemy.burn_damage, self.temperature)
+                elif tower.shield_branch == 2:
+                    damage = (tower.level - 10) * 15 * abs(self.temperature)
+                    for enemy in self.enemies:
+                        enemy.take_damage(damage, color=(100, 150, 255))
+                        enemy.freeze_resistance = 0
+                        enemy.freeze_time = max(enemy.freeze_time, 3 * 60)
+                elif tower.shield_branch == 3:
+                    damage = int(self.coins * 0.01)
+                    for enemy in self.enemies:
+                        enemy.take_damage(damage, color=(255, 215, 0))
+                    self.coins += (tower.level - 10) * 1000
 
     def global_production(self):
         current_time = pygame.time.get_ticks()
@@ -397,6 +428,7 @@ class Game:
                     bullets = tower.attack(self.game_time)
                     for bullet in bullets:
                         self.bullets.add(bullet)
+                tower.update_shield_tower()
 
             self.bullets.update()
             self.damage_texts.update()
@@ -433,6 +465,41 @@ class Game:
                     enemy_type = self.herobrine_summon_queue.pop(0)
                     enemy = Enemy(self.path, enemy_type, self)
                     self.enemies.add(enemy)
+
+                self.command_block_timer += 1
+                initial_delay = 45 * 60
+                interval = 30 * 60
+                if self.command_block_timer >= initial_delay and (self.command_block_timer - initial_delay) % interval == 0:
+                    towers_list = list(self.towers)
+                    if towers_list:
+                        target_tower = random.choice(towers_list)
+                        self.command_blocks.append({
+                            'x': target_tower.x,
+                            'y': target_tower.y,
+                            'timer': 0,
+                            'max_timer': 3 * 60
+                        })
+                        self.weather_banner_text = "HIM释放会爆炸的命令方块了!"
+                        self.weather_banner_timer = 180
+
+                for cb in list(self.command_blocks):
+                    cb['timer'] += 1
+                    if cb['timer'] >= cb['max_timer']:
+                        self.command_blocks.remove(cb)
+                        for tower in list(self.towers):
+                            dx = abs(tower.x - cb['x'])
+                            dy = abs(tower.y - cb['y'])
+                            if dx <= 1 and dy <= 1:
+                                if getattr(tower, 'has_shield', False):
+                                    tower.has_shield = False
+                                    self.trigger_shield_burst(tower)
+                                else:
+                                    tower.kill()
+                                    self.towers.remove(tower)
+                        explosion = TNTExplosion(cb['x'] * TILE_SIZE + TILE_SIZE // 2,
+                                                 cb['y'] * TILE_SIZE + TILE_SIZE // 2,
+                                                 0, 0, None, self)
+                        self.tnt_explosions.append(explosion)
 
             if self.wave_manager.current_wave == 50:
                 if not pygame.mixer.music.get_busy():
@@ -569,6 +636,11 @@ class Game:
                 self.temperature -= t.level
             elif t.type == TowerType.BOMB:
                 self.temperature += self.get_bomb_temp_effect(t)
+            elif t.type == TowerType.SHIELD and t.level >= 11:
+                if t.shield_branch == 1:
+                    self.temperature += t.level
+                elif t.shield_branch == 2:
+                    self.temperature -= t.level
         self.temperature = max(-273, self.temperature)
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         if self.weather == Weather.ENDLESS_NIGHT and not self.herobrine_spawned:
@@ -585,6 +657,10 @@ class Game:
             destroyed = []
             for t in self.towers:
                 if t.level >= 1:
+                    if getattr(t, 'has_shield', False):
+                        t.has_shield = False
+                        self.trigger_shield_burst(t)
+                        continue
                     old_level = t.level
                     t.level -= 1
                     t.upgrade_cost = int(t.upgrade_cost / 1.5)
