@@ -74,8 +74,6 @@ blackstone_img = None
 soul_sand_img = None
 gilded_blackstone_img = None
 
-command_block_img = None
-
 ice_dragon_img = None
 fire_dragon_img = None
 electric_dragon_img = None
@@ -229,7 +227,7 @@ def init_assets():
         gold_ore_img = pygame.Surface(ts)
         gold_ore_img.fill((255, 200, 0))
 
-    global blackstone_img, soul_sand_img, gilded_blackstone_img, command_block_img
+    global blackstone_img, soul_sand_img, gilded_blackstone_img
     try:
         blackstone_img = load_image("tower/blackstone.png", ts)
     except:
@@ -246,11 +244,6 @@ def init_assets():
         gilded_blackstone_img = pygame.Surface(ts)
         gilded_blackstone_img.fill((45, 45, 45))
         pygame.draw.rect(gilded_blackstone_img, (255, 215, 0), (40, 40, 48, 48))
-    try:
-        command_block_img = load_image("tower/command_block.png", ts)
-    except:
-        command_block_img = pygame.Surface(ts)
-        command_block_img.fill((40, 60, 130))
 
     global ice_dragon_img, fire_dragon_img, electric_dragon_img
     try:

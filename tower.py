@@ -603,7 +603,7 @@ class Bullet(pygame.sprite.Sprite):
             final_dmg += bonus
 
         if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11 and self.teleport_branch == 1:
-            hp_ratios = {11: 0.01, 12: 0.0125, 13: 0.015, 14: 0.0175, 15: 0.02}
+            hp_ratios = {11: 0.004, 12: 0.008, 13: 0.012, 14: 0.016, 15: 0.02}
             hp_bonus = int(enemy.max_health * hp_ratios.get(self.tower_level, 0))
             final_dmg += hp_bonus
 

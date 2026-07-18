@@ -1,4 +1,28 @@
 from enum import Enum
+import pygame
+
+class TowerType(Enum):
+    PHYSICAL = 1
+    PRODUCTION = 2
+    ICE = 3
+    TELEPORT = 4
+    FLAME = 5
+    TRIDENT = 6
+    WIND = 7
+    POISON = 8
+    BOMB = 9
+
+TOWER_DATA = [
+    (TowerType.PHYSICAL,   "物理", 100,  pygame.K_1),
+    (TowerType.PRODUCTION, "金矿", 50,   pygame.K_2),
+    (TowerType.ICE,        "冰系", 150,  pygame.K_3),
+    (TowerType.TELEPORT,   "传送", 300,  pygame.K_4),
+    (TowerType.FLAME,      "火系", 200,  pygame.K_5),
+    (TowerType.TRIDENT,    "三叉", 400,  pygame.K_6),
+    (TowerType.WIND,       "风系", 250,  pygame.K_7),
+    (TowerType.POISON,     "毒系", 175,  pygame.K_8),
+    (TowerType.BOMB,       "TNT", 500,  pygame.K_9),
+    ]
 
 SCREEN_WIDTH = 2560
 SCREEN_HEIGHT = 1600
@@ -55,19 +79,6 @@ class GameState(Enum):
     GAME_OVER = 3
     VICTORY = 4
     PAUSED = 5
-
-
-class TowerType(Enum):
-    PHYSICAL = 1
-    PRODUCTION = 2
-    ICE = 3
-    TELEPORT = 4
-    FLAME = 5
-    TRIDENT = 6
-    WIND = 7
-    POISON = 8
-    BOMB = 9
-
 
 class BombSubType(Enum):
     SNOW = 1
@@ -145,7 +156,7 @@ ENEMY_TYPES = {
     "TANK": {"image": "tank.png", "speed": 1.5, "health": 300, "reward": 30},
     "ELITE": {"image": "elite.png", "speed": 2.5, "health": 200, "reward": 40},
     "BOSS": {"image": "boss.png", "speed": 2, "health": 800, "reward": 100},
-    "HEROBRINE": {"image": "herobrine.png", "speed": 3, "health": 4500000, "reward": 0},
+    "HEROBRINE": {"image": "herobrine.png", "speed": 3, "health": 5000000, "reward": 1600},
     "IRON_ARMORED": {"image": "iron_armored.png", "speed": 1.2, "health": 250, "reward": 35},
     "SLIME": {"image": "slime.png", "speed": 2.0, "health": 180, "reward": 25},
     "SLIMELING": {"image": "slime.png", "speed": 3.0, "health": 90, "reward": 10},

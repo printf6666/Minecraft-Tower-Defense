@@ -7,6 +7,183 @@ from enemy import EnemyType
 from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash
 
 
+def get_tower_info(game, tower):
+    base_cost_map = {ttype: cost for ttype, name, cost, key in TOWER_DATA}
+    info = []
+    if tower.type == TowerType.PHYSICAL:
+        if tower.level >= 11:
+            if tower.physical_branch == 2:
+                info = [f"天堂陨落箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"将当前金币的1%作为伤害加成", f"12方向散射", "按 R 切换分支"]
+            else:
+                info = [f"时空撕裂箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s",
+                        f"将当前金币的1%作为伤害加成", f"破甲:受伤永久增加20%", "按 R 切换分支"]
+        elif tower.level >= 6:
+            info = [f"黄金箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"将当前金币的1%作为伤害加成"]
+        else:
+            info = [f"箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
+    elif tower.type == TowerType.PRODUCTION:
+        if tower.level >= 11:
+            info = [f"无尽矿 Lv{tower.level}", f"全局产量:{game.gold_per_second}/s",
+                    f"全局每波产出:{5 * game.gold_per_wave}*当前波数", f"全局每波利息:{round(100 * game.gold_profit_per_wave, 1)}%", "放置在金矿石上时产出+100%"]
+        elif tower.level >= 6:
+            info = [f"下界合金矿 Lv{tower.level}", f"全局每波产出:{5 * game.gold_per_wave}*当前波数",
+                    f"全局产量:{game.gold_per_second}/s", "放置在金矿石上时产出+100%"]
+        else:
+            info = [f"金矿 Lv{tower.level}", f"全局产量:{game.gold_per_second}/s", "放置在金矿石上时产出+100%"]
+    elif tower.type == TowerType.ICE:
+        if tower.level >= 11:
+            if tower.ice_branch == 2:
+                ice_dmg = {11: 30, 12: 60, 13: 90, 14: 120, 15: 150}
+                info = [f"冰龙塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
+                        f"2%召唤冰龙:{ice_dmg.get(tower.level,30)}倍温度+冰冻3s", f"攻击间隔:0.5s", "按R切换形态"]
+            else:
+                bonus_pct = 300 * (tower.level - 10)
+                info = [f"冰霜炸弹塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
+                        f"对冻结+{bonus_pct}%温度伤害", f"攻击间隔:0.5s", "按R切换形态"]
+        elif tower.level >= 6:
+            info = [f"冰球塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
+                    f"攻击间隔:0.5s"]
+        else:
+            info = [f"雪球塔 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
+    elif tower.type == TowerType.TELEPORT:
+        if tower.teleport_branch == 2:
+            if tower.level >= 11:
+                info = [f"无尽催化剂塔 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
+                        f"八方向散射", f"必定施加随机永久debuff", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+            elif tower.level >= 6:
+                poison_stacks = {6: 600, 7: 700, 8: 800, 9: 900, 10: 1000}
+                info = [f"毒马铃薯塔 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
+                        f"2%施加{poison_stacks.get(tower.level, 600)}层中毒", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+            else:
+                info = [f"幸运四叶草塔 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
+                        f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+        else:
+            if tower.level >= 11:
+                info = [f"终望珍珠塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
+                        f"瞬移概率:{int(tower.teleport_chance * 100)}%", f"百分比伤害:{(tower.level-10)*0.4}%",
+                        f"范围伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+            elif tower.level >= 6:
+                info = [f"末影之眼塔 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
+                        f"瞬移概率:{int(tower.teleport_chance * 100)}%", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+            else:
+                info = [f"末影珍珠塔 Lv{tower.level}", f"瞬移概率:{int(tower.teleport_chance * 100)}%",
+                        f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+    elif tower.type == TowerType.FLAME:
+        if tower.level >= 11:
+            if tower.flame_branch == 2:
+                fire_dmg = {11: 36, 12: 72, 13: 108, 14: 144, 15: 180}
+                info = [f"火龙塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
+                        f"5%召唤火龙:{fire_dmg.get(tower.level,36)}倍温度+燃烧", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
+            else:
+                dmg_mult = (tower.level - 10) * 10
+                info = [f"龙息塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
+                        f"龙息:{dmg_mult}倍温度/s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
+        elif tower.level >= 6:
+            info = [f"火球塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
+                    f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
+        else:
+            info = [f"火焰塔 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
+                    f"攻击间隔:{tower.fire_rate / 60}s"]
+    elif tower.type == TowerType.TRIDENT:
+        if tower.level >= 11:
+            if tower.trident_branch == 2:
+                info = [f"电龙塔 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
+                        f"将当前金币的1%作为伤害加成", f"5%召唤电龙:{(tower.level-10)*50}倍温度+麻痹1s", f"攻击间隔:0.5s", "按 R 切换形态"]
+            else:
+                info = [f"海神三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
+                        f"将当前金币的1%作为伤害加成", f"攻击施放十字闪电", f"攻击间隔:0.5s", "按 R 切换形态"]
+        elif tower.level >= 6:
+            info = [f"黄金三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
+                    f"将当前金币的1%作为伤害加成", f"攻击间隔:0.5s"]
+        else:
+            info = [f"三叉戟塔 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
+                    f"攻击间隔:{tower.fire_rate / 60}s"]
+    elif tower.type == TowerType.WIND:
+        if tower.level >= 11:
+            if tower.wind_branch == 2:
+                dmg_map = {11: 2000, 12: 4000, 13: 6000, 14: 8000, 15: 10000}
+                info = [f"雷神之锤塔 Lv{tower.level}", f"伤害:{tower.damage}",
+                        f"子弹命中释放竖向闪电:{dmg_map.get(tower.level,2500)}", "按 R 切换分支", f"攻击间隔:0.5s"]
+            else:
+                per_px = {11: 8, 12: 10, 13: 12, 14: 14, 15: 16}
+                stun_s = {11: 0.1, 12: 0.2, 13: 0.3, 14: 0.4, 15: 0.5}
+                info = [f"重锤塔 Lv{tower.level}", f"伤害:{tower.damage}+{per_px.get(tower.level,8)}/px",
+                        f"击退:{tower.wind_knockback}px", f"击晕:{stun_s.get(tower.level,0.1)}s", "按 R 切换分支", f"攻击间隔:0.5s"]
+        elif tower.level >= 6:
+            info = [f"蓄风箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"击退:{tower.wind_knockback}px",
+                    f"蓄风印记", f"攻击间隔:0.5s"]
+        else:
+            info = [f"风弹塔 Lv{tower.level}", f"伤害:{tower.damage}", f"击退:{tower.wind_knockback}px",
+                    f"攻击间隔:{tower.fire_rate / 60}s"]
+    elif tower.type == TowerType.POISON:
+        if tower.poison_branch == 3:
+            stacks = tower.level * 9
+            info = [f"九头蛇毒箭塔 Lv{tower.level}", f"单体伤害:{tower.damage}",
+                    f"中毒层数:{stacks}层/次", "按 R 切换分支", f"攻击间隔:0.5s"]
+        elif tower.poison_branch == 2:
+            if tower.level >= 11:
+                info = [f"凋零之首 Lv{tower.level}", f"范围伤害:{tower.damage}",
+                        f"凋零:12s", "按 R 切换分支", f"攻击间隔:0.5s"]
+            elif tower.level >= 6:
+                info = [f"凋零瓶 Lv{tower.level}", f"范围伤害:{tower.damage}",
+                        f"范围凋零:5s", "按 R 切换分支", f"攻击间隔:0.5s"]
+            else:
+                info = [f"凋零箭 Lv{tower.level}", f"伤害:{tower.damage}",
+                        f"凋零:5s", "按 R 切换分支", f"攻击间隔:{tower.fire_rate / 60}s"]
+        elif tower.level >= 11:
+            stacks = tower.level * 4
+            info = [f"剧毒环刃塔 Lv{tower.level}", f"范围伤害:{tower.damage}",
+                    f"中毒层数:{stacks}层/次", "按 R 切换分支", f"攻击间隔:0.5s"]
+        elif tower.level >= 6:
+            info = [f"毒瓶塔 Lv{tower.level}", f"范围伤害:{tower.damage}",
+                    f"中毒层数:{tower.level}层/次", "按 R 切换分支", f"攻击间隔:0.5s"]
+        else:
+            info = [f"毒箭塔 Lv{tower.level}", f"伤害:{tower.damage}",
+                    f"中毒层数:{tower.level}层/次", "按 R 切换分支", f"攻击间隔:{tower.fire_rate / 60}s"]
+    elif tower.type == TowerType.BOMB:
+        if tower.level >= 11:
+            if tower.bomb_branch == 2:
+                info = [f"凋零核弹塔 Lv{tower.level}",
+                        f"伤害:{(tower.level - 10)*2}%最大生命+{(tower.level - 10)*2000}固定",
+                        f"击晕:2s", f"凋零:10s",
+                        f"射程:全屏", f"攻击间隔:20s", "按 R 切换形态"]
+            else:
+                dmg = (20000 + 100 * game.temperature) * (tower.level - 10)
+                info = [f"核弹塔 Lv{tower.level}", f"伤害:{dmg}(受温度影响)",
+                        f"击晕:2s", f"中毒:{tower.level * 10}层",
+                        f"射程:全屏", f"攻击间隔:20s", "按 R 切换形态"]
+        elif tower.level >= 6:
+            sub_names = {BombSubType.SNOW: "雪TNT", BombSubType.ICE: "冰TNT",
+                         BombSubType.FLAME: "火焰TNT", BombSubType.POISON: "毒TNT",
+                         BombSubType.WITHER_TNT: "凋零TNT"}
+            sub_name = sub_names.get(tower.bomb_subtype, "雪TNT")
+            if tower.bomb_subtype == BombSubType.SNOW:
+                extra = "范围减速50%,持续12s"
+            elif tower.bomb_subtype == BombSubType.ICE:
+                freeze_s = {6: 0.6, 7: 0.7, 8: 0.8, 9: 0.9, 10: 1.0}
+                extra = f"范围冰冻{freeze_s.get(tower.level, 0.6)}s"
+            elif tower.bomb_subtype == BombSubType.FLAME:
+                extra = "范围燃烧8s"
+            elif tower.bomb_subtype == BombSubType.POISON:
+                stacks = {6: 12, 7: 14, 8: 16, 9: 18, 10: 20}
+                extra = f"范围中毒{stacks.get(tower.level, 12)}层"
+            elif tower.bomb_subtype == BombSubType.WITHER_TNT:
+                extra = "范围凋零5s"
+            info = [f"{sub_name} Lv{tower.level}", f"伤害:{tower.damage}",
+                    extra, "按 R 切换分支", "攻击间隔:2s"]
+        else:
+            info = [f"TNT塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:2s"]
+    upgrade_str = "MAX" if tower.level >= 15 else str(tower.upgrade_cost)
+    if tower.type == TowerType.BOMB and tower.is_nuclear:
+        info.extend([f"升级:{upgrade_str}"])
+    else:
+        info.extend([f"射程:{round(tower.get_effective_range() / TILE_SIZE, 1)}", f"升级:{upgrade_str}"])
+    sell_price = base_cost_map[tower.type] * tower.level
+    info.append(f"出售:{sell_price}")
+
+    return info
+
+
 class UIManager:
     def __init__(self, game):
         self.game = game
@@ -23,7 +200,7 @@ class UIManager:
         pygame.draw.rect(self.game.screen, RED, (900, 1020, 760, 80))
         exit_text = assets.font_medium.render("退出游戏", True, WHITE)
         self.game.screen.blit(exit_text, (1200, 1035))
-        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6/7/8/9键选择炮塔", "3. U升级 S出售 ESC暂停  R切换形态/TNT子类/毒分支"]
+        instructions = ["游戏说明:", "1. 鼠标点击建造炮塔", "2. 1/2/3/4/5/6/7/8/9键选择炮塔", "3. U升级 S出售 ESC暂停 R切换分支 E一键升5级"]
         for i, text in enumerate(instructions):
             text_surface = assets.font_small.render(text, True, WHITE)
             self.game.screen.blit(text_surface, (900, 1200 + i * 50))
@@ -42,8 +219,6 @@ class UIManager:
         for enemy in self.game.enemies:
             enemy.draw_health_bar(self.game.screen)
 
-        self.draw_command_blocks()
-
         if self.game.show_range and self.game.selected_tower:
             self.game.selected_tower.draw_range(self.game.screen)
 
@@ -54,7 +229,10 @@ class UIManager:
             gw = GRID_WIDTH * TILE_SIZE
             gh = GRID_HEIGHT * TILE_SIZE
             s = pygame.Surface((gw, gh), pygame.SRCALPHA)
-            s.fill((0, 0, 0, 255))
+            if self.game.weather == Weather.ENDLESS_NIGHT:
+                s.fill((0, 0, 0, 255))
+            else:
+                s.fill((255, 255, 255, 255))
             self.game.screen.blit(s, (0, TILE_SIZE))
 
         for pool in self.game.dragon_breath_pools:
@@ -96,7 +274,7 @@ class UIManager:
             (520, 16))
         weather_name = WEATHER_CONFIG[self.game.weather]["name"]
         weather_color = WEATHER_CONFIG[self.game.weather]["color"]
-        self.game.screen.blit(assets.font_medium.render(f"天气:{weather_name}  温度:{self.game.temperature}", True, weather_color), (1550, 16))
+        self.game.screen.blit(assets.font_medium.render(f"天气:{weather_name}  温度:{self.game.temperature}", True, weather_color), (1570, 16))
 
         can_buy = self.game.state == GameState.PLAYING and not self.game.forecast_purchased
         can_afford = self.game.coins >= 100 * self.game.wave_manager.current_wave
@@ -141,7 +319,7 @@ class UIManager:
         pygame.draw.rect(self.game.screen, INFO_BORDER_COLOR,
                          (INFO_BORDER_X, INFO_BORDER_Y, INFO_BORDER_SIZE, INFO_BORDER_SIZE), INFO_BORDER_WIDTH)
         if self.game.selected_tower:
-            infos = self.game.get_tower_info(self.game.selected_tower)
+            infos = get_tower_info(self.game, self.game.selected_tower)
             for i, info in enumerate(infos):
                 self.game.screen.blit(assets.font_small.render(info, True, WHITE),
                                      (INFO_BORDER_X + 20, INFO_BORDER_Y + 20 + i * 32))
@@ -154,6 +332,10 @@ class UIManager:
                          (EXIT_BTN_X, EXIT_BTN_Y, EXIT_BTN_WIDTH, EXIT_BTN_HEIGHT))
         exit_text = assets.font_small.render("退出游戏", True, WHITE)
         self.game.screen.blit(exit_text, (EXIT_BTN_X + EXIT_BTN_WIDTH // 2 - exit_text.get_width() // 2, EXIT_BTN_Y + 10))
+
+        instructions = ["操作说明:", "1~9选择炮塔", "U升级 S出售", "R切换分支 E升5级", "ESC暂停"]
+        for i, text in enumerate(instructions):
+            self.game.screen.blit(assets.font_small.render(text, True, WHITE), (2156, 1144 + i * 48))
 
     def draw_weather_particles(self):
         for p in self.game.weather_particles:
@@ -244,15 +426,6 @@ class UIManager:
                 text_y = bar_y + (bar_height - layers_text.get_height()) // 2
                 self.game.screen.blit(layers_text, (text_x, text_y))
                 break
-
-    def draw_command_blocks(self):
-        for cb in self.game.command_blocks:
-            if cb["exploded"]:
-                continue
-            x, y = cb["x"], cb["y"]
-            timer = cb["timer"]
-            if timer > 0:
-                self.game.screen.blit(assets.command_block_img, (x * TILE_SIZE, y * TILE_SIZE))
 
     def draw_victory(self):
         self.game.screen.fill(BLACK)

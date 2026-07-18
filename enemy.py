@@ -20,8 +20,8 @@ class Enemy(pygame.sprite.Sprite):
         if enemy_key == "HEROBRINE":
             self.max_health = config["health"]
             self.health = self.max_health
-            self.total_layers = 3
-            self.current_layer = 3
+            self.total_layers = 9
+            self.current_layer = 9
         else:
             self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
             self.health = self.max_health
@@ -222,14 +222,6 @@ class Enemy(pygame.sprite.Sprite):
                 reward = self.take_damage(self.poison_stacks, color=GREEN, scale=1.0)
                 self.game.coins += reward
 
-        if self.contaminated:
-            self.contaminated_timer += 1
-            if self.contaminated_timer >= 120:
-                self.contaminated_timer = 0
-                dmg = int(self.max_health * 0.01)
-                reward = self.take_damage(dmg, color=(0, 255, 100), scale=1.0)
-                self.game.coins += reward
-
         if self.wither_time > 0:
             self.wither_time -= 1
             self.wither_timer += 1
@@ -368,13 +360,19 @@ class Enemy(pygame.sprite.Sprite):
                 self.current_layer -= 1
                 if self.current_layer > 0:
                     self.health = self.max_health
-                    self.game.herobrine_phase = 3 - self.current_layer
-                    if self.game.herobrine_phase == 1:
+                    phase_group = (9 - self.current_layer) % 3 + 1
+                    self.game.herobrine_phase = phase_group
+                    if phase_group == 1:
+                        for _ in range(5):
+                            self.game.herobrine_summon_queue.append(EnemyType.SLIME)
+                        for _ in range(5):
+                            self.game.herobrine_summon_queue.append(EnemyType.MAGMA_CUBE)
+                    elif phase_group == 2:
                         for _ in range(5):
                             self.game.herobrine_summon_queue.append(EnemyType.NETHERITE_ARMORED)
                         for _ in range(5):
                             self.game.herobrine_summon_queue.append(EnemyType.NETHERITE_NAUTILUS)
-                    elif self.game.herobrine_phase == 2:
+                    elif phase_group == 3:
                         for _ in range(15):
                             self.game.herobrine_summon_queue.append(EnemyType.GHOST)
                         for _ in range(5):
