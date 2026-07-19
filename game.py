@@ -298,7 +298,7 @@ class Game:
                         self.selected_tower.recalculate_stats()
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
-                        self.selected_tower.shield_branch = self.selected_tower.shield_branch % 3 + 1
+                        self.selected_tower.shield_branch = self.selected_tower.shield_branch % 4 + 1
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_s and self.selected_tower:
                         cost_map = {ttype: cost for ttype, name, cost, key in TOWER_DATA}
@@ -324,6 +324,8 @@ class Game:
                                 self.temperature -= self.selected_tower.level
                             elif self.selected_tower.shield_branch == 2:
                                 self.temperature += self.selected_tower.level
+                            elif self.selected_tower.shield_branch == 4:
+                                pass
                         self.temperature = max(-273, self.temperature)
                         self.selected_tower.kill()
                         self.selected_tower = None
@@ -359,13 +361,13 @@ class Game:
         for tower in self.towers:
             if tower.type == TowerType.SHIELD and tower.level >= 11:
                 if tower.shield_branch == 1:
-                    damage = (tower.level - 10) * 20 * abs(self.temperature)
+                    damage = (tower.level - 10) * 36 * abs(self.temperature)
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=(255, 100, 0))
-                        enemy.burn_time = max(enemy.burn_time, 10 * 60)
+                        enemy.burn_time = float('inf')
                         enemy.burn_damage = max(enemy.burn_damage, self.temperature)
                 elif tower.shield_branch == 2:
-                    damage = (tower.level - 10) * 15 * abs(self.temperature)
+                    damage = (tower.level - 10) * 30 * abs(self.temperature)
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=(100, 150, 255))
                         enemy.freeze_resistance = 0
@@ -375,6 +377,14 @@ class Game:
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=(255, 215, 0))
                     self.coins += (tower.level - 10) * 1000
+                elif tower.shield_branch == 4:
+                    damage = (tower.level - 10) * 25 * abs(self.temperature)
+                    for enemy in self.enemies:
+                        enemy.take_damage(damage, color=(255, 255, 0))
+                        enemy.stun_resistance = 0
+                        enemy.stun_time = max(enemy.stun_time, 60)
+                        enemy.burn_time = float('inf')
+                        enemy.burn_damage = max(enemy.burn_damage, self.temperature)
 
     def global_production(self):
         current_time = pygame.time.get_ticks()
