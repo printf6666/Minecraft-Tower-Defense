@@ -196,8 +196,6 @@ class Game:
                     if self.state == GameState.MENU:
                         if 900 <= mouse_x <= 1660 and 840 <= mouse_y <= 920:
                             self.start_game()
-                        elif 900 <= mouse_x <= 1660 and 930 <= mouse_y <= 1010:
-                            self.start_boss_fight()
                         elif 900 <= mouse_x <= 1660 and 1020 <= mouse_y <= 1100:
                             pygame.quit()
                             import sys
@@ -1122,23 +1120,6 @@ class Game:
         self.pending_first_wave_weather = True
         self.weather_banner_text = "准备时间"
         self.weather_banner_timer = 240
-
-    def start_boss_fight(self):
-        try:
-            os.remove(get_save_path())
-        except Exception:
-            pass
-        self.generate_weather_forecast()
-        self.coins = 2500000
-        self.state = GameState.PLAYING
-        self.wave_manager = WaveManager()
-        self.wave_manager.current_wave = 49
-        self.wave_manager.start_new_wave()
-        self.wave_manager.wave_timer = 1440
-        self.select_weather()
-        self.pending_first_wave_weather = False
-        self.weather_banner_text = "准备时间"
-        self.weather_banner_timer = 1440
 
     def reset_game(self):
         try:
