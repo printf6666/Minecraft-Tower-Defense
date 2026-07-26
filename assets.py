@@ -46,6 +46,7 @@ icon6 = None
 icon7 = None
 icon8 = None
 icon9 = None
+icon10 = None
 
 gold_img = None
 heart_img = None
@@ -89,7 +90,7 @@ teleport_sound = None
 
 def init_assets():
     global font_large, font_medium, font_small, font_tower_level, font_damage
-    global icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, tower_icons, buff_icons
+    global icon0, icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9, icon10, tower_icons, buff_icons
     global gold_img, heart_img, clock_img
     global white_lightning_frames, golden_lightning_frames
     global white_lightning_h_frames, golden_lightning_h_frames
@@ -113,7 +114,7 @@ def init_assets():
             tower_icons.append(load_image(f"tower/{ttype.value}-1.png", (icon_size, icon_size)))
         except:
             tower_icons.append(pygame.Surface((icon_size, icon_size)))
-    icon0, icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9 = tower_icons
+    icon0, icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9, icon10 = tower_icons
 
     global tnt_explosion_frames
     tnt_explosion_frames.clear()

@@ -140,6 +140,14 @@ def get_tower_info(game, tower):
         else:
             info = [f"毒箭 Lv{tower.level}", f"伤害:{tower.damage}",
                     f"中毒层数:{tower.level}层/次", "按 R 切换分支", f"攻击间隔:{tower.fire_rate / 60}s"]
+    elif tower.type == TowerType.TIME:
+        n = tower.level * ((tower.level + 4) // 5)
+        if tower.level >= 11:
+            info = [f"时间洪流怀表 Lv{tower.level}", f"攻速加成:{n}%", f"产量加成:{n}%", f"范围:7x7"]
+        elif tower.level >= 6:
+            info = [f"加速火把 Lv{tower.level}", f"攻速加成:{n}%", f"产量加成:{n}%", f"范围:5x5"]
+        else:
+            info = [f"时钟 Lv{tower.level}", f"攻速加成:{n}%", f"产量加成:{n}%", f"范围:3x3"]
     elif tower.type == TowerType.SHIELD:
         if tower.level >= 11:
             if tower.shield_branch == 1:
@@ -294,7 +302,7 @@ class UIManager:
         pygame.draw.rect(self.game.screen, BLACK, (0, 0, SCREEN_WIDTH, 80))
         pygame.draw.line(self.game.screen, WHITE, (0, 80), (SCREEN_WIDTH, 80), 4)
         self.game.screen.blit(assets.gold_img, (0, 8))
-        self.game.screen.blit(assets.font_medium.render(str(self.game.coins), True, GOLD), (70, 16))
+        self.game.screen.blit(assets.font_medium.render(str(int(self.game.coins)), True, GOLD), (70, 16))
         self.game.screen.blit(assets.heart_img, (320, -25))
         self.game.screen.blit(assets.font_medium.render(str(self.game.lives), True, RED), (420, 16))
         self.game.screen.blit(
@@ -337,9 +345,9 @@ class UIManager:
         for i, (ttype, name, cost, key) in enumerate(self.game.TOWER_DATA):
             ix = start_x + i * step
             iy = SCREEN_HEIGHT - 114
+            keys = (1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 'X')
             self.game.screen.blit(assets.tower_icons[ttype.value], (ix, iy))
-            num = 0 if i == len(self.game.TOWER_DATA) - 1 else i + 1
-            num_surf = assets.font_tower_level.render(str(num), True, YELLOW)
+            num_surf = assets.font_tower_level.render(str(keys[i]), True, YELLOW)
             self.game.screen.blit(num_surf, (ix + 2, iy + 2))
             price_surf = assets.font_tower_level.render(str(cost), True, GOLD)
             self.game.screen.blit(price_surf, (ix + icon_size - price_surf.get_width() - 2,
@@ -367,7 +375,7 @@ class UIManager:
         exit_text = assets.font_small.render("退出游戏", True, WHITE)
         self.game.screen.blit(exit_text, (EXIT_BTN_X + EXIT_BTN_WIDTH // 2 - exit_text.get_width() // 2, EXIT_BTN_Y + 10))
 
-        instructions = ["操作说明:", "0~9选择炮塔", "U升级 S出售", "R切换分支 E升5级", "ESC暂停"]
+        instructions = ["操作说明:", "0~9,X选择炮塔", "U升级 S出售", "R切换分支 E升5级", "ESC暂停"]
         for i, text in enumerate(instructions):
             self.game.screen.blit(assets.font_small.render(text, True, WHITE), (2156, 1144 + i * 48))
 

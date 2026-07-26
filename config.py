@@ -12,6 +12,7 @@ class TowerType(Enum):
     WIND = 7
     POISON = 8
     BOMB = 9
+    TIME = 10
 
 TOWER_DATA = [
     (TowerType.PHYSICAL,   "物理", 100,  pygame.K_1),
@@ -23,7 +24,8 @@ TOWER_DATA = [
     (TowerType.WIND,       "风系", 250,  pygame.K_7),
     (TowerType.POISON,     "毒系", 175,  pygame.K_8),
     (TowerType.BOMB,       "TNT", 500,  pygame.K_9),
-    (TowerType.SHIELD,     "盾塔", 275,  pygame.K_0),
+    (TowerType.SHIELD,     "盾塔", 225,  pygame.K_0),
+    (TowerType.TIME,       "时间", 125,  pygame.K_x)
     ]
 
 SCREEN_WIDTH = 2560

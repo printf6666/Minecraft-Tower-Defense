@@ -392,6 +392,33 @@ class Game:
             self.coins += self.gold_per_second
             self.last_global_production_time = current_time
 
+    def apply_time_buffs(self):
+        for t in self.towers:
+            t.attack_speed_buff = 0
+            t.production_buff = 0.0
+        gold_ps = 0.0
+        for tt in self.towers:
+            if tt.type != TowerType.TIME:
+                continue
+            if tt.level <= 5:
+                half = 192
+            elif tt.level <= 10:
+                half = 320
+            else:
+                half = 448
+            cx, cy = tt.rect.center
+            for other in self.towers:
+                if other is tt:
+                    continue
+                ox, oy = other.rect.center
+                if abs(ox - cx) <= half and abs(oy - cy) <= half:
+                    other.attack_speed_buff += tt.level
+        for t in self.towers:
+            if t.type == TowerType.PRODUCTION:
+                mult = 2 if t.is_on_gold_ore else 1
+                gold_ps += t.level * mult * (1 + t.attack_speed_buff / 100)
+        self.gold_per_second = gold_ps
+
     def spawn_damage_text(self, value, pos, color=RED, scale=1.4):
         text = DamageText(value, pos[0], pos[1], color=color, scale=scale)
         self.damage_texts.add(text)
@@ -433,8 +460,10 @@ class Game:
 
             self._build_enemy_grid()
 
+            self.apply_time_buffs()
+
             for tower in self.towers:
-                if tower.type != TowerType.PRODUCTION:
+                if tower.type not in (TowerType.PRODUCTION, TowerType.TIME):
                     bullets = tower.attack(self.game_time)
                     for bullet in bullets:
                         self.bullets.add(bullet)
@@ -739,6 +768,8 @@ class Game:
                                 t.range = base_range + int(TILE_SIZE * 0.2) * (t.level - 1)
                                 t.fire_rate = 120
                             self.temperature -= 1
+                        elif t.type == TowerType.TIME:
+                            pass
                         if t.type == TowerType.PRODUCTION:
                             multiplier = 2 if t.is_on_gold_ore else 1
                             if old_level >= 6: self.gold_per_wave -= multiplier

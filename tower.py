@@ -48,6 +48,9 @@ class Tower(pygame.sprite.Sprite):
         self.teleport_branch = 1
         self.shield_branch = 1
 
+        self.attack_speed_buff = 0
+        self.production_buff = 0.0
+
         self.setup_tower()
         self.update_sprite()
 
@@ -126,6 +129,14 @@ class Tower(pygame.sprite.Sprite):
             self.upgrade_cost = 750
             self.bomb_subtype = BombSubType.SNOW
             self.is_nuclear = False
+        elif self.type == TowerType.TIME:
+            self.range = 0
+            self.damage = 0
+            self.fire_rate = 0
+            self.cost = 125
+            self.upgrade_cost = 190
+            self.attack_speed_buff = 0
+            self.production_buff = 0.0
 
     def upgrade(self):
         if self.level >= 15:
@@ -287,6 +298,14 @@ class Tower(pygame.sprite.Sprite):
                 img = f"tower/{prefix}{prefix}-1.png"
             else:
                 img = f"tower/{prefix}-1.png"
+        elif self.type == TowerType.TIME:
+            prefix = str(self.type.value)
+            if self.level >= 11:
+                img = f"tower/{prefix}{prefix}{prefix}-1.png"
+            elif self.level >= 6:
+                img = f"tower/{prefix}{prefix}-1.png"
+            else:
+                img = f"tower/{prefix}-1.png"
         else:
             prefix = str(self.type.value)
             if self.level >= 11:
@@ -305,11 +324,10 @@ class Tower(pygame.sprite.Sprite):
         self.rect.topleft = (self.x * TILE_SIZE, self.y * TILE_SIZE)
 
     def can_attack(self, current_time):
-        effective_fire_rate = self.fire_rate
+        total_bonus = self.attack_speed_buff
         if self.game.weather == Weather.AURORA and self.game.temperature < 0:
-            temp_abs = abs(self.game.temperature)
-            speed_multiplier = 1 + temp_abs / 100
-            effective_fire_rate = self.fire_rate / speed_multiplier
+            total_bonus += abs(self.game.temperature)
+        effective_fire_rate = self.fire_rate * 100 / max(1, 100 + total_bonus)
         return current_time - self.last_shot >= effective_fire_rate
 
     def get_effective_range(self):
@@ -327,7 +345,7 @@ class Tower(pygame.sprite.Sprite):
             return []
         self.last_shot = current_time
 
-        if self.type == TowerType.PRODUCTION:
+        if self.type in (TowerType.PRODUCTION, TowerType.TIME):
             return []
 
         if self.type == TowerType.BOMB and self.is_nuclear:
@@ -462,7 +480,20 @@ class Tower(pygame.sprite.Sprite):
         return bullets
 
     def draw_range(self, surface):
-        if self.type != TowerType.PRODUCTION and not (self.type == TowerType.BOMB and self.is_nuclear):
+        if self.type == TowerType.SHIELD or self.type == TowerType.TIME:
+            if self.type == TowerType.SHIELD and self.level >= 11:
+                return
+            if self.level <= 5:
+                side = 384
+            elif self.level <= 10:
+                side = 640
+            else:
+                side = 896
+            cx, cy = self.rect.center
+            rect = pygame.Rect(0, 0, side, side)
+            rect.center = (cx, cy)
+            pygame.draw.rect(surface, (255, 255, 255, 50), rect, 2)
+        elif self.type != TowerType.PRODUCTION and not (self.type == TowerType.BOMB and self.is_nuclear):
             pygame.draw.circle(surface, (255, 255, 255, 50), self.rect.center, self.get_effective_range(), 2)
 
     def update_shield_tower(self):
