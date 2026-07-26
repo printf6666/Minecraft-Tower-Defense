@@ -19,6 +19,15 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
+def get_save_path():
+    save_dir = os.path.join(os.path.expanduser("~"), "AppData", "LocalLow", "Escoffier", "Minecraft-Tower-Defense")
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+    except Exception:
+        pass
+    return os.path.join(save_dir, "save.json")
+
+
 def grid_to_path(grid):
     cells = {(x, y) for y, row in enumerate(grid) for x, v in enumerate(row) if v}
     if not cells:
@@ -53,7 +62,7 @@ class Game:
         self.bullets = pygame.sprite.Group()
         self.damage_texts = pygame.sprite.Group()
         self.dragons = pygame.sprite.Group()
-        self.coins = 2500000
+        self.coins = 2560
         self.lives = 20
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
@@ -110,7 +119,7 @@ class Game:
 
         self.ui_manager = UIManager(self)
 
-    def _build_background(self, night_mode=False):
+    def _build_background(self, night_mode=False, gold_ore_positions=None):
         gw = GRID_WIDTH * TILE_SIZE
         gh = (GRID_HEIGHT + 1) * TILE_SIZE
         self.background_surface = pygame.Surface((gw, gh))
@@ -132,7 +141,10 @@ class Game:
                 if (x, y) not in path_set and (x, y) != self.end_point:
                     stone_tiles.append((x, y))
 
-        self.gold_ore_positions = set(random.sample(stone_tiles, min(5, len(stone_tiles))))
+        if gold_ore_positions is not None:
+            self.gold_ore_positions = gold_ore_positions
+        else:
+            self.gold_ore_positions = set(random.sample(stone_tiles, min(5, len(stone_tiles))))
 
         for x in range(GRID_WIDTH):
             for y in range(1, GRID_HEIGHT + 1):
@@ -400,6 +412,7 @@ class Game:
         for tt in self.towers:
             if tt.type != TowerType.TIME:
                 continue
+            n = tt.level * ((tt.level + 4) // 5)
             if tt.level <= 5:
                 half = 192
             elif tt.level <= 10:
@@ -412,16 +425,200 @@ class Game:
                     continue
                 ox, oy = other.rect.center
                 if abs(ox - cx) <= half and abs(oy - cy) <= half:
-                    other.attack_speed_buff += tt.level
+                    other.attack_speed_buff += n
+                    if other.type == TowerType.PRODUCTION:
+                        other.production_buff += n
         for t in self.towers:
             if t.type == TowerType.PRODUCTION:
                 mult = 2 if t.is_on_gold_ore else 1
-                gold_ps += t.level * mult * (1 + t.attack_speed_buff / 100)
+                gold_ps += t.level * mult * (1 + t.production_buff / 100)
         self.gold_per_second = gold_ps
 
     def spawn_damage_text(self, value, pos, color=RED, scale=1.4):
         text = DamageText(value, pos[0], pos[1], color=color, scale=scale)
         self.damage_texts.add(text)
+
+    def save_game(self):
+        try:
+            towers_data = []
+            for t in self.towers:
+                td = {
+                    "x": t.x, "y": t.y, "type": t.type.value, "level": t.level,
+                    "physical_branch": t.physical_branch, "wind_branch": t.wind_branch,
+                    "ice_branch": t.ice_branch, "flame_branch": t.flame_branch,
+                    "poison_branch": t.poison_branch, "bomb_branch": t.bomb_branch,
+                    "trident_branch": t.trident_branch, "teleport_branch": t.teleport_branch,
+                    "shield_branch": t.shield_branch,
+                    "bomb_subtype": t.bomb_subtype.value if hasattr(t, 'bomb_subtype') and t.bomb_subtype else None,
+                    "is_nuclear": getattr(t, 'is_nuclear', False),
+                    "has_shield": getattr(t, 'has_shield', False),
+                }
+                towers_data.append(td)
+            try:
+                seed_idx = SEED_PATHS.index(self.path)
+            except ValueError:
+                seed_idx = 0
+            data = {
+                "seed": seed_idx,
+                "gold": self.coins, "lives": self.lives, "wave": self.wave_manager.current_wave,
+                "temperature": self.temperature, "weather": self.weather.value,
+                "forecast_purchased": self.forecast_purchased,
+                "weather_forecast": [w.value for w in self.weather_forecast],
+                "gold_per_second": self.gold_per_second, "gold_per_wave": self.gold_per_wave,
+                "gold_profit_per_wave": self.gold_profit_per_wave,
+                "gold_ore_positions": [list(p) for p in self.gold_ore_positions],
+                "towers": towers_data,
+            }
+            with open(get_save_path(), "w") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            print(f"Save failed: {e}")
+
+    def _reset_state(self):
+        self.enemies.empty()
+        self.towers.empty()
+        self.bullets.empty()
+        self.damage_texts.empty()
+        self.dragons.empty()
+        self.coins = 2560
+        self.lives = 20
+        self.wave_manager = WaveManager()
+        self.selected_tower_type = None
+        self.selected_tower = None
+        self.show_range = False
+        self.enemies_killed = 0
+        self.game_time = 0
+        self.gold_per_second = 0
+        self.gold_per_wave = 0
+        self.gold_profit_per_wave = 0
+        self.last_global_production_time = pygame.time.get_ticks()
+        self.temperature = 30
+        self.weather = Weather.SUNNY
+        self.weather_particles = []
+        self.weather_banner_timer = 0
+        self.weather_banner_text = ""
+        self.dragon_breath_pools = []
+        self.lightning_effects = []
+        self.wind_explosions = []
+        self.ice_explosions = []
+        self.poison_splashes = []
+        self.wither_splashes = []
+        self.horizontal_lightning_effects = []
+        self.tnt_explosions = []
+        self.mushroom_explosions = []
+        self.shockwave_effects = []
+        self.thunderstorm_timer = 0
+        self.enemy_grid = {}
+        self.fog_timer = 0
+        self.fog_visible = False
+        self.weather_forecast = []
+        self.forecast_purchased = False
+        self.forecast_weather_idx = -1
+        self.pending_first_wave_weather = False
+        self.gold_ore_positions = set()
+        self.night_dark_timer = 0
+        self.herobrine_phase = 0
+        self.herobrine_spawned = False
+        self.herobrine = None
+        self.herobrine_summon_timer = 0
+        self.herobrine_summon_queue = []
+        self.command_block_timer = 0
+        self.command_blocks = []
+
+    def load_game(self):
+        new_path = get_save_path()
+        old_path = resource_path("save.json")
+        if not os.path.exists(new_path) and os.path.exists(old_path):
+            try:
+                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                with open(old_path) as src:
+                    data = src.read()
+                with open(new_path, "w") as dst:
+                    dst.write(data)
+            except Exception:
+                pass
+        try:
+            with open(new_path) as f:
+                data = json.load(f)
+        except Exception:
+            return False
+        self._reset_state()
+        seed_idx = data.get("seed", 0)
+        if 0 <= seed_idx < len(SEED_PATHS):
+            self.path = list(SEED_PATHS[seed_idx])
+        else:
+            self.path = list(SEED_PATHS[0])
+        self.start_point = self.path[0]
+        self.end_point = self.path[-1]
+        ore_positions = data.get("gold_ore_positions", [])
+        saved_ore = set(tuple(p) for p in ore_positions)
+        self._build_background(gold_ore_positions=saved_ore)
+        self.coins = data.get("gold", 2500)
+        self.lives = data.get("lives", 20)
+        self.temperature = data.get("temperature", 30)
+        self.weather = Weather(data.get("weather", Weather.SUNNY.value))
+        self.forecast_purchased = data.get("forecast_purchased", False)
+        self.gold_per_second = data.get("gold_per_second", 0)
+        self.gold_per_wave = data.get("gold_per_wave", 0)
+        self.gold_profit_per_wave = data.get("gold_profit_per_wave", 0.0)
+        raw_forecast = data.get("weather_forecast", [])
+        self.weather_forecast = [Weather(v) for v in raw_forecast]
+        wave_num = max(1, data.get("wave", 1))
+        self.wave_manager.current_wave = wave_num - 1
+        for td in data.get("towers", []):
+            ttype = TowerType(td["type"])
+            t = Tower(ttype, td["x"], td["y"], self)
+            while t.level < td["level"]:
+                t.upgrade()
+            t.physical_branch = td.get("physical_branch", 1)
+            t.wind_branch = td.get("wind_branch", 1)
+            t.ice_branch = td.get("ice_branch", 1)
+            t.flame_branch = td.get("flame_branch", 1)
+            t.poison_branch = td.get("poison_branch", 1)
+            t.bomb_branch = td.get("bomb_branch", 1)
+            t.trident_branch = td.get("trident_branch", 1)
+            t.teleport_branch = td.get("teleport_branch", 1)
+            t.shield_branch = td.get("shield_branch", 1)
+            if hasattr(t, 'bomb_subtype'):
+                sv = td.get("bomb_subtype")
+                t.bomb_subtype = BombSubType(sv) if sv is not None else BombSubType.SNOW
+            if hasattr(t, 'is_nuclear'):
+                t.is_nuclear = td.get("is_nuclear", False)
+            t.has_shield = td.get("has_shield", False)
+            if ttype == TowerType.TELEPORT:
+                t.recalculate_stats()
+            t.update_sprite()
+            self.towers.add(t)
+        base_temp = WEATHER_CONFIG[self.weather]["temp"]
+        self.temperature = base_temp
+        for t in self.towers:
+            if t.type in (TowerType.FLAME, TowerType.TRIDENT):
+                self.temperature += t.level
+            elif t.type == TowerType.ICE:
+                self.temperature -= t.level
+            elif t.type == TowerType.BOMB:
+                self.temperature += self.get_bomb_temp_effect(t)
+            elif t.type == TowerType.SHIELD and t.level >= 11:
+                if t.shield_branch == 1:
+                    self.temperature += t.level
+                elif t.shield_branch == 2:
+                    self.temperature -= t.level
+        self.temperature = max(-273, self.temperature)
+        self.wave_manager.start_new_wave()
+        self.forecast_weather_idx = self.wave_manager.current_wave if self.forecast_purchased else -1
+        self.state = GameState.PLAYING
+        self.pending_first_wave_weather = False
+        self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
+        self.weather_banner_timer = 180
+        if self.weather == Weather.ENDLESS_NIGHT:
+            self._build_background(night_mode=True, gold_ore_positions=saved_ore)
+            pygame.mixer.music.stop()
+            for bgm in assets.bgm_files:
+                if "Celestial Fury" in bgm or "The End" in bgm:
+                    pygame.mixer.music.load(assets.resource_path(bgm))
+                    pygame.mixer.music.play(-1)
+                    break
+        return True
 
     def add_dragon_breath(self, x, y, temperature, tower_level, stun_time):
         pool = DragonBreathPool(x, y, temperature, tower_level, stun_time, self)
@@ -656,6 +853,7 @@ class Game:
         self.weather_forecast = [random.choice(weathers) for _ in range(self.wave_manager.total_waves)]
 
     def select_weather(self):
+        self.save_game()
         self.fog_visible = False
         if self.wave_manager.current_wave == 50:
             self.weather = Weather.ENDLESS_NIGHT
@@ -908,6 +1106,16 @@ class Game:
                 self.temperature += self.get_bomb_temp_effect(t)
 
     def start_game(self):
+        if self.load_game():
+            return
+        try:
+            os.remove(get_save_path())
+        except Exception:
+            pass
+        try:
+            os.remove(resource_path("save.json"))
+        except Exception:
+            pass
         self.generate_weather_forecast()
         self.state = GameState.PLAYING
         self.wave_manager.start_new_wave()
@@ -916,6 +1124,10 @@ class Game:
         self.weather_banner_timer = 240
 
     def start_boss_fight(self):
+        try:
+            os.remove(get_save_path())
+        except Exception:
+            pass
         self.generate_weather_forecast()
         self.coins = 2500000
         self.state = GameState.PLAYING
@@ -929,6 +1141,10 @@ class Game:
         self.weather_banner_timer = 1440
 
     def reset_game(self):
+        try:
+            os.remove(get_save_path())
+        except Exception:
+            pass
         self.path = random.choice(SEED_PATHS)
         self.start_point = self.path[0]
         self.end_point = self.path[-1]
@@ -938,7 +1154,7 @@ class Game:
         self.bullets.empty()
         self.damage_texts.empty()
 
-        self.coins = 2500
+        self.coins = 2560
         self.lives = 20
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
