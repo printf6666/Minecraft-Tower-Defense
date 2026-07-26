@@ -141,13 +141,12 @@ def get_tower_info(game, tower):
             info = [f"毒箭 Lv{tower.level}", f"伤害:{tower.damage}",
                     f"中毒层数:{tower.level}层/次", "按 R 切换分支", f"攻击间隔:{tower.fire_rate / 60}s"]
     elif tower.type == TowerType.TIME:
-        n = tower.level * ((tower.level + 4) // 5)
         if tower.level >= 11:
-            info = [f"时间洪流怀表 Lv{tower.level}", f"攻速加成:{n}%", f"产量加成:{n}%", f"范围:7x7"]
+            info = [f"时间洪流怀表 Lv{tower.level}", f"攻速加成:{tower.level}%", f"范围:7x7"]
         elif tower.level >= 6:
-            info = [f"加速火把 Lv{tower.level}", f"攻速加成:{n}%", f"产量加成:{n}%", f"范围:5x5"]
+            info = [f"加速火把 Lv{tower.level}", f"攻速加成:{tower.level}%", f"范围:5x5"]
         else:
-            info = [f"时钟 Lv{tower.level}", f"攻速加成:{n}%", f"产量加成:{n}%", f"范围:3x3"]
+            info = [f"时钟 Lv{tower.level}", f"攻速加成:{ntower.level}%", f"范围:3x3"]
     elif tower.type == TowerType.SHIELD:
         if tower.level >= 11:
             if tower.shield_branch == 1:
@@ -190,13 +189,11 @@ def get_tower_info(game, tower):
             if tower.bomb_subtype == BombSubType.SNOW:
                 extra = "范围减速50%,持续12s"
             elif tower.bomb_subtype == BombSubType.ICE:
-                freeze_s = {6: 0.6, 7: 0.7, 8: 0.8, 9: 0.9, 10: 1.0}
-                extra = f"范围冰冻{freeze_s.get(tower.level, 0.6)}s"
+                extra = f"范围冰冻{tower.level * 0.1}s"
             elif tower.bomb_subtype == BombSubType.FLAME:
                 extra = "范围燃烧8s"
             elif tower.bomb_subtype == BombSubType.POISON:
-                stacks = {6: 12, 7: 14, 8: 16, 9: 18, 10: 20}
-                extra = f"范围中毒{stacks.get(tower.level, 12)}层"
+                extra = f"范围中毒{tower.level * 2}层"
             elif tower.bomb_subtype == BombSubType.WITHER_TNT:
                 extra = "范围凋零5s"
             info = [f"{sub_name} Lv{tower.level}", f"伤害:{tower.damage}",
