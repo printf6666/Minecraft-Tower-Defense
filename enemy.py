@@ -20,8 +20,8 @@ class Enemy(pygame.sprite.Sprite):
         if enemy_key == "HEROBRINE":
             self.max_health = config["health"]
             self.health = self.max_health
-            self.total_layers = 9
-            self.current_layer = 9
+            self.total_layers = 18
+            self.current_layer = 18
         else:
             self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
             self.health = self.max_health
@@ -66,7 +66,7 @@ class Enemy(pygame.sprite.Sprite):
             self.weather_slowed = True
 
         if game.weather == Weather.ENDLESS_NIGHT:
-            if self.enemy_type not in (EnemyType.GHOST, EnemyType.BOSS):
+            if self.enemy_type not in (EnemyType.GHOST, EnemyType.WITHER):
                 self.speed *= 0.5
                 self.base_speed = self.speed
                 self.weather_slowed = True
@@ -91,34 +91,13 @@ class Enemy(pygame.sprite.Sprite):
 
         self.image = assets.load_image(f"enemy/{config['image']}")
 
-        if enemy_key == "GHOST":
-            self.image = pygame.transform.scale(self.image, (200, 200))
-        elif enemy_key == "BOSS":
-            self.image = pygame.transform.scale(self.image, (280, 280))
-        elif enemy_key == "HEROBRINE":
-            pass
-        elif enemy_key in ("IRON_ARMORED", "GOLD_ARMORED", "DIAMOND_ARMORED", "NETHERITE_ARMORED"):
-            self.image = pygame.transform.scale(self.image, (100, 100))
-        elif enemy_key in ("NAUTILUS", "IRON_NAUTILUS", "GOLD_NAUTILUS", "DIAMOND_NAUTILUS", "NETHERITE_NAUTILUS"):
-            pass
-        elif enemy_key == "SLIMELING":
-            self.image = pygame.transform.scale(self.image, (64, 64))
-        elif enemy_key == "MAGMA_CUBE_SMALL":
-            self.image = pygame.transform.scale(self.image, (64, 64))
-        elif enemy_key == "NORMAL" or enemy_key == "FAST":
-            original_w = self.image.get_width()
-            original_h = self.image.get_height()
-            self.image = pygame.transform.scale(self.image, (original_w * 2, original_h * 2))
-        else:
-            self.image = pygame.transform.scale(self.image, (TILE_SIZE - 8, TILE_SIZE - 8))
-
         self.rect = self.image.get_rect()
         start_x, start_y = self.path[self.path_index]
         self.pos_x = start_x * TILE_SIZE + TILE_SIZE // 2
         self.pos_y = start_y * TILE_SIZE + TILE_SIZE // 2
         self.rect.center = (self.pos_x, self.pos_y)
 
-        if self.enemy_type in (EnemyType.GHOST, EnemyType.BOSS):
+        if self.enemy_type in (EnemyType.GHOST, EnemyType.WITHER):
             ex, ey = self.path[-1]
             self.ghost_target = (ex * TILE_SIZE + TILE_SIZE // 2, ey * TILE_SIZE + TILE_SIZE // 2)
 
@@ -235,7 +214,7 @@ class Enemy(pygame.sprite.Sprite):
             self.kill()
             return False
 
-        if self.enemy_type in (EnemyType.GHOST, EnemyType.BOSS):
+        if self.enemy_type in (EnemyType.GHOST, EnemyType.WITHER):
             tx, ty = self.ghost_target
             dx = tx - self.pos_x
             dy = ty - self.pos_y
@@ -360,7 +339,7 @@ class Enemy(pygame.sprite.Sprite):
                 self.current_layer -= 1
                 if self.current_layer > 0:
                     self.health = self.max_health
-                    phase_group = (9 - self.current_layer) % 3 + 1
+                    phase_group = (self.total_layers - self.current_layer) % 3 + 1
                     self.game.herobrine_phase = phase_group
                     if phase_group == 1:
                         for _ in range(5):
@@ -376,7 +355,7 @@ class Enemy(pygame.sprite.Sprite):
                         for _ in range(15):
                             self.game.herobrine_summon_queue.append(EnemyType.GHOST)
                         for _ in range(5):
-                            self.game.herobrine_summon_queue.append(EnemyType.BOSS)
+                            self.game.herobrine_summon_queue.append(EnemyType.WITHER)
                     return 0
             if self.enemy_type == EnemyType.SLIME:
                 for _ in range(3):

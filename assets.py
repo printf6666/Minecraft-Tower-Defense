@@ -34,7 +34,6 @@ tower_icons = []
 
 tnt_explosion_frames = []
 mushroom_cloud_frames = []
-contaminated_img = None
 
 icon0 = None
 icon1 = None

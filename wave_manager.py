@@ -90,7 +90,7 @@ class WaveManager:
             return EnemyType.GOLD_NAUTILUS
         rand = random.random()
         if self.is_boss_wave() and self.enemies_spawned == self.enemies_to_spawn:
-            return EnemyType.BOSS
+            return EnemyType.WITHER
         elif self.is_elite_wave() and rand < 0.3:
             return EnemyType.ELITE
         elif self.current_wave > 15 and rand < 0.10:

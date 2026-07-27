@@ -98,7 +98,7 @@ class EnemyType(Enum):
     FAST = 1
     TANK = 2
     ELITE = 3
-    BOSS = 4
+    WITHER = 4
     IRON_ARMORED = 5
     SLIME = 6
     SLIMELING = 7
@@ -159,8 +159,8 @@ ENEMY_TYPES = {
     "FAST": {"image": "fast.png", "speed": 3.5, "health": 100, "reward": 15},
     "TANK": {"image": "tank.png", "speed": 1.5, "health": 300, "reward": 30},
     "ELITE": {"image": "elite.png", "speed": 2.5, "health": 200, "reward": 40},
-    "BOSS": {"image": "boss.png", "speed": 2, "health": 800, "reward": 100},
-    "HEROBRINE": {"image": "herobrine.png", "speed": 3, "health": 5000000, "reward": 1600},
+    "WITHER": {"image": "boss.png", "speed": 2, "health": 800, "reward": 100},
+    "HEROBRINE": {"image": "herobrine.png", "speed": 3, "health": 5000000, "reward": 500},
     "IRON_ARMORED": {"image": "iron_armored.png", "speed": 1.2, "health": 250, "reward": 35},
     "SLIME": {"image": "slime.png", "speed": 2.0, "health": 180, "reward": 25},
     "SLIMELING": {"image": "slime.png", "speed": 3.0, "health": 90, "reward": 10},

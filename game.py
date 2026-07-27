@@ -851,7 +851,6 @@ class Game:
         self.weather_forecast = [random.choice(weathers) for _ in range(self.wave_manager.total_waves)]
 
     def select_weather(self):
-        self.save_game()
         self.fog_visible = False
         if self.wave_manager.current_wave == 50:
             self.weather = Weather.ENDLESS_NIGHT
@@ -877,6 +876,7 @@ class Game:
                 elif t.shield_branch == 2:
                     self.temperature -= t.level
         self.temperature = max(-273, self.temperature)
+        self.save_game()
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         if self.weather == Weather.ENDLESS_NIGHT and not self.herobrine_spawned:
             pygame.mixer.music.stop()
