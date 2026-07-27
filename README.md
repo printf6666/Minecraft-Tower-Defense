@@ -96,6 +96,6 @@
 ## 打包方式
 
 ```bash
-pyinstaller --onefile --noconsole --add-data "tower;tower" --add-data "debuff;debuff" --add-data "enemy;enemy" --add-data "bgm;bgm" --add-data "sound;sound" --add-data "font;font" --add-data "seed.json;." --name "MCTD" main.py
+pyinstaller --onefile --noconsole --add-data "tower;tower" --add-data "debuff;debuff" --add-data "enemy;enemy" --add-data "bgm;bgm" --add-data "sound;sound" --add-data "Minecraft.ttf" --add-data "seed.json;." --name "MCTD" main.py
 ```
 

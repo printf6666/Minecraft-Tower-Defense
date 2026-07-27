@@ -114,6 +114,7 @@ class EnemyType(Enum):
     MAGMA_CUBE = 17
     MAGMA_CUBE_SMALL = 18
     HEROBRINE = 19
+    WITCH = 20
 
 
 class Weather(Enum):
@@ -175,4 +176,5 @@ ENEMY_TYPES = {
     "NETHERITE_NAUTILUS": {"image": "netherite_nautilus.png", "speed": 1.2, "health": 300, "reward": 50},
     "MAGMA_CUBE": {"image": "magma_cube.png", "speed": 2.0, "health": 180, "reward": 25},
     "MAGMA_CUBE_SMALL": {"image": "magma_cube.png", "speed": 3.0, "health": 90, "reward": 10},
+    "WITCH": {"image": "witch.png", "speed": 1.5, "health": 130, "reward": 40},
 }

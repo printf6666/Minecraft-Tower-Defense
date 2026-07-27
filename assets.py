@@ -99,11 +99,11 @@ def init_assets():
     global explode_sound, level_up_sound
 
 
-    font_large = pygame.font.Font(resource_path("font/Minecraft.ttf"), 60)
-    font_medium = pygame.font.Font(resource_path("font/Minecraft.ttf"), 48)
-    font_small = pygame.font.Font(resource_path("font/Minecraft.ttf"), 36)
-    font_tower_level = pygame.font.Font(resource_path("font/Minecraft.ttf"), 28)
-    font_damage = pygame.font.Font(resource_path("font/Minecraft.ttf"), 36)
+    font_large = pygame.font.Font(resource_path("Minecraft.ttf"), 60)
+    font_medium = pygame.font.Font(resource_path("Minecraft.ttf"), 48)
+    font_small = pygame.font.Font(resource_path("Minecraft.ttf"), 36)
+    font_tower_level = pygame.font.Font(resource_path("Minecraft.ttf"), 28)
+    font_damage = pygame.font.Font(resource_path("Minecraft.ttf"), 36)
 
 
     icon_size = 100
