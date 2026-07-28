@@ -146,7 +146,7 @@ def get_tower_info(game, tower):
         elif tower.level >= 6:
             info = [f"加速火把 Lv{tower.level}", f"攻速加成:{tower.level}%", f"范围:5x5"]
         else:
-            info = [f"时钟 Lv{tower.level}", f"攻速加成:{ntower.level}%", f"范围:3x3"]
+            info = [f"时钟 Lv{tower.level}", f"攻速加成:{tower.level}%", f"范围:3x3"]
     elif tower.type == TowerType.SHIELD:
         if tower.level >= 11:
             if tower.shield_branch == 1:
