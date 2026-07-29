@@ -2,6 +2,7 @@ import pygame
 import math
 import assets
 from config import *
+from effects import CreeperExplosion
 from tower import WindExplosion
 
 
@@ -29,11 +30,18 @@ class Enemy(pygame.sprite.Sprite):
             self.current_layer = 1
             self.freeze_resistance = 1.0
             self.stun_resistance = 1.0
+        elif enemy_key in ("CREEPER", "CHARGED_CREEPER"):
+            self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
+            self.health = self.max_health
+            self.total_layers = 1
+            self.current_layer = 1
+            self.charged = enemy_key == "CHARGED_CREEPER"
         else:
             self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
             self.health = self.max_health
             self.total_layers = 1
             self.current_layer = 1
+        self.creeper_explode_timer = 900 if enemy_key in ("CREEPER", "CHARGED_CREEPER") else -1
         self.reward = config["reward"]
         self.base_speed = self.speed
 
@@ -160,6 +168,31 @@ class Enemy(pygame.sprite.Sprite):
             self.wither_time = duration
             self.wither_timer = 0
 
+    def on_lightning_hit(self):
+        if self.enemy_type == EnemyType.CREEPER and not self.charged:
+            self.charged = True
+            self.creeper_explode_timer //= 2
+            try:
+                self.image = assets.load_image("enemy/charged_creeper.png")
+            except Exception:
+                pass
+
+    def creeper_explode(self):
+        is_charged = self.charged or self.enemy_type == EnemyType.CHARGED_CREEPER
+        size = 5 if is_charged else 3
+        half = size // 2
+        cx = self.rect.centerx // TILE_SIZE
+        cy = self.rect.centery // TILE_SIZE
+        for t in list(self.game.towers):
+            if abs(t.x - cx) <= half and abs(t.y - cy) <= half:
+                if t.has_shield:
+                    t.has_shield = False
+                else:
+                    t.kill()
+        self.game.creeper_explosions.append(
+            CreeperExplosion(self.rect.centerx, self.rect.centery, self.game, charged=is_charged))
+        self.kill()
+
     def apply_speed(self, speed_factor, duration):
         self.speed = self.base_speed * speed_factor
         self.slow_time = duration
@@ -191,6 +224,12 @@ class Enemy(pygame.sprite.Sprite):
         if self.game.game_time - self.last_stun_time > 600:
             if self.enemy_type != EnemyType.WITCH:
                 self.stun_resistance = 0.0
+
+        if self.creeper_explode_timer > 0:
+            self.creeper_explode_timer -= 1
+            if self.creeper_explode_timer == 0:
+                self.creeper_explode()
+                return False
 
         if self.stun_time > 0:
             self.stun_time -= 1

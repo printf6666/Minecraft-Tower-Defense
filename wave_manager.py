@@ -93,6 +93,8 @@ class WaveManager:
             return EnemyType.WITHER
         elif self.is_elite_wave() and rand < 0.3:
             return EnemyType.ELITE
+        elif random.random() < 0.04:
+            return EnemyType.CREEPER
         elif self.current_wave > 15 and rand < 0.10:
             return EnemyType.SLIME
         elif self.current_wave > 15 and rand < 0.18:

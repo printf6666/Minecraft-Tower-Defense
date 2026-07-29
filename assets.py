@@ -119,9 +119,9 @@ def init_assets():
     tnt_explosion_frames.clear()
     for i in range(1, 6):
         try:
-            tnt_explosion_frames.append(load_image(f"tower/tnt{i}.png", (350, 350)))
+            tnt_explosion_frames.append(load_image(f"tower/tnt{i}.png", (384, 384)))
         except:
-            tnt_explosion_frames.append(pygame.Surface((350, 350)))
+            tnt_explosion_frames.append(pygame.Surface((384, 384)))
 
 
     global mushroom_cloud_frames

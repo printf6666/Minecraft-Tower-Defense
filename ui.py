@@ -281,6 +281,8 @@ class UIManager:
             effect.draw(self.game.screen)
         for explosion in self.game.tnt_explosions:
             explosion.draw(self.game.screen)
+        for explosion in self.game.creeper_explosions:
+            explosion.draw(self.game.screen)
         for sw in self.game.shockwave_effects:
             sw.draw(self.game.screen)
         for explosion in self.game.mushroom_explosions:
@@ -315,7 +317,7 @@ class UIManager:
             if self.game.forecast_purchased and 0 <= self.game.forecast_weather_idx < len(self.game.weather_forecast):
                 forecast_names = []
                 for i in range(3):
-                    idx = self.game.forecast_weather_idx + i + 1
+                    idx = self.game.forecast_weather_idx + i
                     if idx < len(self.game.weather_forecast):
                         forecast_names.append(WEATHER_CONFIG[self.game.weather_forecast[idx]]['name'])
                 label = f"天气预报:{','.join(forecast_names)}"

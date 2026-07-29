@@ -115,6 +115,8 @@ class EnemyType(Enum):
     MAGMA_CUBE_SMALL = 18
     HEROBRINE = 19
     WITCH = 20
+    CREEPER = 21
+    CHARGED_CREEPER = 22
 
 
 class Weather(Enum):
@@ -177,4 +179,6 @@ ENEMY_TYPES = {
     "MAGMA_CUBE": {"image": "magma_cube.png", "speed": 2.0, "health": 180, "reward": 25},
     "MAGMA_CUBE_SMALL": {"image": "magma_cube.png", "speed": 3.0, "health": 90, "reward": 10},
     "WITCH": {"image": "witch.png", "speed": 1.5, "health": 130, "reward": 40},
+    "CREEPER": {"image": "creeper.png", "speed": 2, "health": 100, "reward": 20},
+    "CHARGED_CREEPER": {"image": "charged_creeper.png", "speed": 2, "health": 100, "reward": 20},
 }

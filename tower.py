@@ -773,6 +773,7 @@ class Bullet(pygame.sprite.Sprite):
                     reward = e.take_damage(dmg, color=GOLD)
                     self.game.coins += reward
                     e.apply_burn(self.game.temperature, 240)
+                    e.on_lightning_hit()
             is_golden = self.tower_level >= 6
             self.game.add_lightning(enemy.rect.centerx, 800, is_golden)
             if self.tower_level >= 11:
@@ -787,6 +788,7 @@ class Bullet(pygame.sprite.Sprite):
                                 dmg = self.lightning_damage
                             reward = e.take_damage(dmg, color=GOLD)
                             self.game.coins += reward
+                            e.on_lightning_hit()
                     h_effect = HorizontalLightningEffect(1024, row * TILE_SIZE + TILE_SIZE // 2, not is_golden)
                     self.game.horizontal_lightning_effects.append(h_effect)
                 elif random.random() < 0.05:

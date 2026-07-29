@@ -346,3 +346,36 @@ class WitherSplash:
         s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
         pygame.draw.circle(s, (0, 0, 0, alpha), (self.radius, self.radius), self.radius)
         screen.blit(s, (self.x - self.radius, self.y - self.radius))
+
+
+class CreeperExplosion:
+    def __init__(self, x, y, game, charged=False):
+        self.x = x
+        self.y = y
+        self.game = game
+        self.charged = charged
+        self.frame = 0
+        self.frame_timer = 0
+        self.frame_duration = 6
+        self.max_frames = 5
+        self.done = False
+
+    def update(self):
+        if self.done:
+            return
+        self.frame_timer += 1
+        if self.frame_timer >= self.frame_duration:
+            self.frame_timer = 0
+            self.frame += 1
+            if self.frame >= self.max_frames:
+                self.done = True
+
+    def draw(self, screen):
+        if self.done or self.frame >= len(assets.tnt_explosion_frames):
+            return
+        img = assets.tnt_explosion_frames[self.frame]
+        target = 640 if self.charged else 384
+        if target != 384:
+            img = pygame.transform.smoothscale(img, (target, target))
+        rect = img.get_rect(center=(self.x, self.y))
+        screen.blit(img, rect)

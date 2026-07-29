@@ -90,6 +90,7 @@ class Game:
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []
+        self.creeper_explosions = []
         self.mushroom_explosions = []
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
@@ -784,6 +785,11 @@ class Game:
                 if explosion.done:
                     self.tnt_explosions.remove(explosion)
 
+            for explosion in self.creeper_explosions[:]:
+                explosion.update()
+                if explosion.done:
+                    self.creeper_explosions.remove(explosion)
+
             for explosion in self.mushroom_explosions[:]:
                 explosion.update()
                 if explosion.done:
@@ -811,6 +817,7 @@ class Game:
                                 reward = enemy.take_damage(50, color=GOLD)
                                 self.coins += reward
                                 enemy.apply_burn(self.temperature, 240)
+                                enemy.on_lightning_hit()
                         self.add_lightning((col + 0.5) * TILE_SIZE, 800, False)
 
             for enemy in list(self.enemies):
