@@ -185,7 +185,7 @@ class Enemy(pygame.sprite.Sprite):
         cy = self.rect.centery // TILE_SIZE
         for t in list(self.game.towers):
             if abs(t.x - cx) <= half and abs(t.y - cy) <= half:
-                if t.has_shield:
+                if getattr(t, 'has_shield', False):
                     t.has_shield = False
                 else:
                     t.kill()

@@ -117,6 +117,7 @@ class EnemyType(Enum):
     WITCH = 20
     CREEPER = 21
     CHARGED_CREEPER = 22
+    SPIDER = 23
 
 
 class Weather(Enum):
@@ -159,14 +160,14 @@ WEATHER_CONFIG = {
 
 ENEMY_TYPES = {
     "NORMAL": {"image": "normal.png", "speed": 2, "health": 100, "reward": 10},
-    "FAST": {"image": "fast.png", "speed": 3.5, "health": 100, "reward": 15},
+    "FAST": {"image": "fast.png", "speed": 3, "health": 100, "reward": 15},
     "TANK": {"image": "tank.png", "speed": 1.5, "health": 300, "reward": 30},
     "ELITE": {"image": "elite.png", "speed": 2.5, "health": 200, "reward": 40},
     "WITHER": {"image": "wither.png", "speed": 2, "health": 800, "reward": 100},
     "HEROBRINE": {"image": "herobrine.png", "speed": 3, "health": 5000000, "reward": 500},
     "IRON_ARMORED": {"image": "iron_armored.png", "speed": 1.2, "health": 250, "reward": 35},
-    "SLIME": {"image": "slime.png", "speed": 2.0, "health": 180, "reward": 25},
-    "SLIMELING": {"image": "slime.png", "speed": 3.0, "health": 90, "reward": 10},
+    "SLIME": {"image": "slime.png", "speed": 2, "health": 180, "reward": 25},
+    "SLIMELING": {"image": "slime.png", "speed": 3, "health": 90, "reward": 10},
     "GOLD_ARMORED": {"image": "gold_armored.png", "speed": 1.2, "health": 250, "reward": 35},
     "GHOST": {"image": "ghost.png", "speed": 3, "health": 100, "reward": 25},
     "DIAMOND_ARMORED": {"image": "diamond_armored.png", "speed": 1.2, "health": 300, "reward": 40},
@@ -181,4 +182,5 @@ ENEMY_TYPES = {
     "WITCH": {"image": "witch.png", "speed": 1.5, "health": 130, "reward": 40},
     "CREEPER": {"image": "creeper.png", "speed": 2, "health": 100, "reward": 20},
     "CHARGED_CREEPER": {"image": "charged_creeper.png", "speed": 2, "health": 100, "reward": 20},
+    "SPIDER": {"image": "spider.png", "speed": 4, "health": 100, "reward": 20},
 }

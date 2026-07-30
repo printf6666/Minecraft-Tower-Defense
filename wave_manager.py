@@ -95,6 +95,8 @@ class WaveManager:
             return EnemyType.ELITE
         elif random.random() < 0.04:
             return EnemyType.CREEPER
+        elif random.random() < 0.04:
+            return EnemyType.SPIDER
         elif self.current_wave > 15 and rand < 0.10:
             return EnemyType.SLIME
         elif self.current_wave > 15 and rand < 0.18:
