@@ -36,6 +36,13 @@ def get_tower_info(game, tower):
                 ice_dmg = {11: 30, 12: 60, 13: 90, 14: 120, 15: 150}
                 info = [f"唤龙冰晶石 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
                         f"2%召唤冰龙:{ice_dmg.get(tower.level,30)}倍温度+冰冻3s", f"攻击间隔:0.5s", "按R切换形态"]
+            elif tower.ice_branch == 3:
+                wall_duration = {11: 2, 12: 2.5, 13: 3, 14: 3.5, 15: 4}
+                wall_chance = {11: 2, 12: 2.5, 13: 3, 14: 3.5, 15: 4}
+                info = [f"冰墙 Lv{tower.level}", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
+                        f"子弹每经过1格道路{wall_chance.get(tower.level, 3)}%生成冰墙",
+                        f"冰墙持续:{wall_duration.get(tower.level, 2)}s(火雨天减半)",
+                        f"每道冰墙降低5度温度", "阻挡地面怪物", "按R切换形态"]
             else:
                 bonus_pct = 300 * (tower.level - 10)
                 info = [f"冰霜炸弹 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
@@ -231,6 +238,8 @@ class UIManager:
         self.game.screen.blit(self.game.background_surface, (0, 0))
 
         self.game.towers.draw(self.game.screen)
+        for wall in self.game.ice_walls:
+            wall.draw(self.game.screen)
         for cb in self.game.command_blocks:
             alpha = 255 if (cb['timer'] // 30) % 2 == 0 else 128
             img = assets.command_block_img.copy()

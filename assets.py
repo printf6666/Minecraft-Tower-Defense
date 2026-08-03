@@ -77,6 +77,7 @@ blackstone_img = None
 soul_sand_img = None
 gilded_blackstone_img = None
 command_block_img = None
+ice_wall_img = None
 
 ice_dragon_img = None
 fire_dragon_img = None
@@ -243,6 +244,13 @@ def init_assets():
     except:
         command_block_img = pygame.Surface(ts)
         command_block_img.fill((0, 0, 139))
+
+    global ice_wall_img
+    try:
+        ice_wall_img = load_image("tower/ice_wall.png", ts)
+    except:
+        ice_wall_img = pygame.Surface(ts)
+        ice_wall_img.fill((150, 200, 255))
 
     global ice_dragon_img, fire_dragon_img, electric_dragon_img
     try:

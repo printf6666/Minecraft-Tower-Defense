@@ -3,11 +3,14 @@ import random
 import math
 import assets
 from config import *
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, IceWall
 from dragons import Dragon
 
 MAP_CENTER_X = GRID_WIDTH * TILE_SIZE // 2
 MAP_CENTER_Y = (1 + GRID_HEIGHT) * TILE_SIZE // 2
+
+ICE_WALL_CHANCE = {11: 0.02, 12: 0.025, 13: 0.03, 14: 0.035, 15: 0.04}
+ICE_WALL_DURATION = {11: 2, 12: 2.5, 13: 3, 14: 3.5, 15: 4}
 
 
 class Tower(pygame.sprite.Sprite):
@@ -254,6 +257,8 @@ class Tower(pygame.sprite.Sprite):
             if self.level >= 11:
                 if self.ice_branch == 2:
                     img = f"tower/{prefix}{prefix}{prefix}-2.png"
+                elif self.ice_branch == 3:
+                    img = f"tower/{prefix}{prefix}{prefix}-3.png"
                 else:
                     img = f"tower/{prefix}{prefix}{prefix}-1.png"
             elif self.level >= 6:
@@ -502,16 +507,14 @@ class Tower(pygame.sprite.Sprite):
 
         self.shield_timer += 1
 
+        interval = (95 - self.level * 5) * 60
+
         if self.level >= 11:
-            interval = 30 * 60
             range_size = GRID_WIDTH
         elif self.level >= 6:
-            interval = 60 * 60
             range_size = 5
         else:
-            interval = 90 * 60
             range_size = 3
-
         if self.shield_timer >= interval:
             self.shield_timer = 0
             towers_without_shield = []
@@ -572,12 +575,16 @@ class Bullet(pygame.sprite.Sprite):
         self.poison_stacks = 0
         self.physical_branch = 1
 
+        self.last_tile = (int(x) // TILE_SIZE, int(y) // TILE_SIZE)
+
         prefix = str(self.tower_type.value)
         if self.tower_level >= 11:
             if self.tower_type == TowerType.WIND and self.wind_branch == 2:
                 img = f"tower/{prefix}{prefix}{prefix}-2.png"
             elif self.tower_type == TowerType.ICE and self.ice_branch == 2:
                 img = f"tower/{prefix}{prefix}{prefix}-2.png"
+            elif self.tower_type == TowerType.ICE and self.ice_branch == 3:
+                img = f"tower/{prefix}{prefix}{prefix}-3.png"
             elif self.tower_type == TowerType.FLAME and self.flame_branch == 2:
                 img = f"tower/{prefix}{prefix}{prefix}-2.png"
             elif self.tower_type == TowerType.POISON:
@@ -653,6 +660,14 @@ class Bullet(pygame.sprite.Sprite):
             self.kill()
             return
 
+        if self.tower_type == TowerType.ICE and self.tower_level >= 11 and self.ice_branch == 3:
+            col = int(self.x) // TILE_SIZE
+            row = int(self.y) // TILE_SIZE
+            if (col, row) != self.last_tile:
+                self.last_tile = (col, row)
+                if random.random() < ICE_WALL_CHANCE.get(self.tower_level, 0.03):
+                    self.spawn_ice_wall(col, row)
+
         col = int(self.x) // TILE_SIZE
         row = int(self.y) // TILE_SIZE
         grid = self.game.enemy_grid
@@ -662,6 +677,25 @@ class Bullet(pygame.sprite.Sprite):
                     if self.rect.colliderect(enemy.rect):
                         self.on_hit(enemy)
                         return
+
+    def spawn_ice_wall(self, col, row):
+        if col < 0 or col >= GRID_WIDTH or row < 1 or row > GRID_HEIGHT:
+            return
+        if (col, row) not in self.game.path:
+            return
+        if (col, row) == self.game.start_point or (col, row) == self.game.end_point:
+            return
+        if self.game.get_tower_at(col, row):
+            return
+        for wall in self.game.ice_walls:
+            if wall.x == col and wall.y == row:
+                return
+        duration = ICE_WALL_DURATION.get(self.tower_level, 2) * 60
+        if self.game.weather == Weather.FIRE_RAIN:
+            duration //= 2
+        wall = IceWall(col, row, self.game)
+        wall.duration = duration
+        self.game.ice_walls.append(wall)
 
     def get_damage_color(self):
         if self.tower_type == TowerType.PHYSICAL:

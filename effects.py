@@ -348,6 +348,28 @@ class WitherSplash:
         screen.blit(s, (self.x - self.radius, self.y - self.radius))
 
 
+class IceWall:
+    def __init__(self, x, y, game):
+        self.x = x
+        self.y = y
+        self.game = game
+        self.timer = 0
+        self.duration = 0
+        self.rect = pygame.Rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+        self.image = assets.ice_wall_img
+        game.temperature = max(-273, game.temperature - 5)
+
+    def update(self):
+        self.timer += 1
+        if self.timer >= self.duration:
+            self.game.destroy_ice_wall(self)
+            return False
+        return True
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.x * TILE_SIZE, self.y * TILE_SIZE))
+
+
 class CreeperExplosion:
     def __init__(self, x, y, game, charged=False):
         self.x = x

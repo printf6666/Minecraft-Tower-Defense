@@ -189,6 +189,9 @@ class Enemy(pygame.sprite.Sprite):
                     t.has_shield = False
                 else:
                     t.kill()
+        for wall in list(self.game.ice_walls):
+            if abs(wall.x - cx) <= half and abs(wall.y - cy) <= half:
+                self.game.destroy_ice_wall(wall)
         self.game.creeper_explosions.append(
             CreeperExplosion(self.rect.centerx, self.rect.centery, self.game, charged=is_charged))
         self.kill()
@@ -289,6 +292,10 @@ class Enemy(pygame.sprite.Sprite):
             self.pos_y += (dy / dist) * self.speed
             self.rect.center = (self.pos_x, self.pos_y)
             return False
+
+        for wall in self.game.ice_walls:
+            if self.rect.colliderect(wall.rect):
+                return False
 
         if self.path_index >= len(self.path) - 1:
             self.game.lives -= 1

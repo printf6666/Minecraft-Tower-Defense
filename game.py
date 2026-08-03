@@ -110,6 +110,7 @@ class Game:
 
         self.command_block_timer = 0
         self.command_blocks = []
+        self.ice_walls = []
 
         self.path = random.choice(SEED_PATHS)
         self.start_point = self.path[0]
@@ -296,7 +297,7 @@ class Game:
                         self.selected_tower.wind_branch = 3 - self.selected_tower.wind_branch
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.ICE and self.selected_tower.level >= 11:
-                        self.selected_tower.ice_branch = 3 - self.selected_tower.ice_branch
+                        self.selected_tower.ice_branch = self.selected_tower.ice_branch % 3 + 1
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.FLAME and self.selected_tower.level >= 11:
                         self.selected_tower.flame_branch = 3 - self.selected_tower.flame_branch
@@ -367,6 +368,11 @@ class Game:
                 return tower.level
             else:
                 return 0
+
+    def destroy_ice_wall(self, wall):
+        if wall in self.ice_walls:
+            self.ice_walls.remove(wall)
+            self.temperature += 5
 
     def trigger_shield_burst(self, broken_tower):
         for tower in self.towers:
@@ -523,6 +529,7 @@ class Game:
         self.herobrine_summon_queue = []
         self.command_block_timer = 0
         self.command_blocks = []
+        self.ice_walls = []
 
     def load_game(self):
         new_path = get_save_path()
@@ -717,24 +724,29 @@ class Game:
                         self.weather_banner_text = "HIM释放会爆炸的命令方块了!"
                         self.weather_banner_timer = 180
 
-                for cb in list(self.command_blocks):
-                    cb['timer'] += 1
-                    if cb['timer'] >= cb['max_timer']:
-                        self.command_blocks.remove(cb)
-                        for tower in list(self.towers):
-                            dx = abs(tower.x - cb['x'])
-                            dy = abs(tower.y - cb['y'])
-                            if dx <= 1 and dy <= 1:
-                                if getattr(tower, 'has_shield', False):
-                                    tower.has_shield = False
-                                    self.trigger_shield_burst(tower)
-                                else:
-                                    tower.kill()
-                                    self.towers.remove(tower)
-                        explosion = TNTExplosion(cb['x'] * TILE_SIZE + TILE_SIZE // 2,
-                                                 cb['y'] * TILE_SIZE + TILE_SIZE // 2,
-                                                 0, 0, None, self)
-                        self.tnt_explosions.append(explosion)
+                        for cb in list(self.command_blocks):
+                            cb['timer'] += 1
+                            if cb['timer'] >= cb['max_timer']:
+                                self.command_blocks.remove(cb)
+                                for tower in list(self.towers):
+                                    dx = abs(tower.x - cb['x'])
+                                    dy = abs(tower.y - cb['y'])
+                                    if dx <= 1 and dy <= 1:
+                                        if getattr(tower, 'has_shield', False):
+                                            tower.has_shield = False
+                                            self.trigger_shield_burst(tower)
+                                        else:
+                                            tower.kill()
+                                            self.towers.remove(tower)
+                                for wall in list(self.ice_walls):
+                                    dx = abs(wall.x - cb['x'])
+                                    dy = abs(wall.y - cb['y'])
+                                    if dx <= 1 and dy <= 1:
+                                        self.destroy_ice_wall(wall)
+                                explosion = TNTExplosion(cb['x'] * TILE_SIZE + TILE_SIZE // 2,
+                                                         cb['y'] * TILE_SIZE + TILE_SIZE // 2,
+                                                         0, 0, None, self)
+                                self.tnt_explosions.append(explosion)
 
             if self.wave_manager.current_wave == 50:
                 if not pygame.mixer.music.get_busy():
@@ -789,6 +801,10 @@ class Game:
                 explosion.update()
                 if explosion.done:
                     self.creeper_explosions.remove(explosion)
+
+            for wall in self.ice_walls[:]:
+                if not wall.update():
+                    pass
 
             for explosion in self.mushroom_explosions[:]:
                 explosion.update()
