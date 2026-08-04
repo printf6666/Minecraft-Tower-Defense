@@ -9,7 +9,7 @@ from dragons import Dragon
 MAP_CENTER_X = GRID_WIDTH * TILE_SIZE // 2
 MAP_CENTER_Y = (1 + GRID_HEIGHT) * TILE_SIZE // 2
 
-ICE_WALL_CHANCE = {11: 0.02, 12: 0.025, 13: 0.03, 14: 0.035, 15: 0.04}
+ICE_WALL_CHANCE = 0.04
 ICE_WALL_DURATION = {11: 2, 12: 2.5, 13: 3, 14: 3.5, 15: 4}
 
 
@@ -665,7 +665,7 @@ class Bullet(pygame.sprite.Sprite):
             row = int(self.y) // TILE_SIZE
             if (col, row) != self.last_tile:
                 self.last_tile = (col, row)
-                if random.random() < ICE_WALL_CHANCE.get(self.tower_level, 0.03):
+                if random.random() < ICE_WALL_CHANCE:
                     self.spawn_ice_wall(col, row)
 
         col = int(self.x) // TILE_SIZE
