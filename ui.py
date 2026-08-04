@@ -38,10 +38,9 @@ def get_tower_info(game, tower):
                         f"2%召唤冰龙:{ice_dmg.get(tower.level,30)}倍温度+冰冻3s", f"攻击间隔:0.5s", "按R切换形态"]
             elif tower.ice_branch == 3:
                 wall_duration = {11: 2, 12: 2.5, 13: 3, 14: 3.5, 15: 4}
-                wall_chance = {11: 2, 12: 2.5, 13: 3, 14: 3.5, 15: 4}
                 info = [f"冰墙 Lv{tower.level}", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
-                        f"子弹每经过1格道路{wall_chance.get(tower.level, 3)}%生成冰墙",
-                        f"冰墙持续:{wall_duration.get(tower.level, 2)}s(火雨天减半)",
+                        f"子弹经过的道路4%生成冰墙",
+                        f"冰墙持续:{wall_duration.get(tower.level, 2)}s",
                         f"每道冰墙降低5度温度", "阻挡地面怪物", "按R切换形态"]
             else:
                 bonus_pct = 300 * (tower.level - 10)
