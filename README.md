@@ -1,6 +1,6 @@
 # 我的世界塔防战
 
-基于 Pygame + Python 实现的非minecraft官方的同人二创塔防游戏。
+基于 Pygame + Python 实现的非Minecraft官方的同人二创塔防游戏。
 
 ## 炮塔一览
 
