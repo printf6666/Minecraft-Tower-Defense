@@ -83,7 +83,62 @@ class GameState(Enum):
     GAME_OVER = 3
     VICTORY = 4
     PAUSED = 5
+    SHOP = 6
 
+class Enchantment(Enum):
+    BALANCED = 0
+    PHYSICAL = 1
+    ICE = 2
+    FLAME = 3
+    TRIDENT = 4
+    WIND = 5
+    POISON = 6
+    BOMB = 7
+    SOLAR = 8
+    PLUTO = 9
+    POISON_CONTRACT = 10
+    BURN = 11
+    FIRE_RAIN = 12
+    FROZEN_DEEP = 13
+    DRAGON_LEGEND = 14
+    ENDLESS_GREED = 15
+    RAIN_FIRE = 16
+    SHATTER = 17
+
+ENCHANTMENT_DATA = {
+    Enchantment.BALANCED: {"name": "均衡强化", "desc": "所有伤害+5%", "cost": 100},
+    Enchantment.PHYSICAL: {"name": "物理强化", "desc": "物理伤害+15%", "cost": 100},
+    Enchantment.ICE: {"name": "冰系强化", "desc": "冰系伤害+20%", "cost": 100},
+    Enchantment.FLAME: {"name": "火系强化", "desc": "火系伤害+20%", "cost": 100},
+    Enchantment.TRIDENT: {"name": "电系强化", "desc": "电系伤害+20%", "cost": 100},
+    Enchantment.WIND: {"name": "风系强化", "desc": "风系伤害+20%", "cost": 100},
+    Enchantment.POISON: {"name": "毒系强化", "desc": "毒系伤害+20%", "cost": 100},
+    Enchantment.BOMB: {"name": "爆炸强化", "desc": "爆炸伤害+20%", "cost": 100},
+    Enchantment.SOLAR: {"name": "人造太阳", "desc": "温度提高8度", "cost": 100},
+    Enchantment.PLUTO: {"name": "人造月亮", "desc": "温度降低5度", "cost": 100},
+    Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "中毒的敌人被击败时有10%概率使全局中毒基础伤害永久提高1点", "cost": 300},
+    Enchantment.BURN: {"name": "高温燃烧", "desc": "燃烧伤害翻倍", "cost": 200},
+    Enchantment.FIRE_RAIN: {"name": "燃烧天际", "desc": "火雨出现概率大幅提升", "cost": 400},
+    Enchantment.FROZEN_DEEP: {"name": "冰冻三尺", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹爆炸半径+12.5%，冰墙存在时间翻倍", "cost": 400},
+    Enchantment.DRAGON_LEGEND: {"name": "龙族传说", "desc": "同时存在冰龙塔、火龙塔、电龙塔时，龙伤害翻倍且移动速度+75%", "cost": 600},
+    Enchantment.ENDLESS_GREED: {"name": "无尽贪婪", "desc": "集齐六件无尽炮塔后，其子弹5%概率爆炸：范围1%最大生命伤害并获得500金币", "cost": 1000},
+    Enchantment.RAIN_FIRE: {"name": "水火相容", "desc": "雨天/雷暴/酸雨可以点燃敌人", "cost": 200},
+    Enchantment.SHATTER: {"name": "粉碎", "desc": "破甲易伤增加至40%", "cost": 600},
+}
+
+ENCHANTMENT_ORDER = [
+    Enchantment.BALANCED, Enchantment.PHYSICAL, Enchantment.ICE, Enchantment.FLAME, Enchantment.TRIDENT,
+    Enchantment.WIND, Enchantment.POISON, Enchantment.BOMB, Enchantment.SOLAR, Enchantment.PLUTO,
+    Enchantment.POISON_CONTRACT, Enchantment.BURN, Enchantment.FIRE_RAIN, Enchantment.FROZEN_DEEP,
+    Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.SHATTER,
+]
+
+ENCHANT_BOX_WIDTH = 512
+ENCHANT_BOX_HEIGHT = 384
+ENCHANT_BOX_Y = INFO_BORDER_Y - ENCHANT_BOX_HEIGHT
+ENCHANT_ICON_SIZE = 80
+ENCHANT_ICON_GAP = 20
+ENCHANT_ICONS_PER_ROW = 5
 class BombSubType(Enum):
     SNOW = 1
     ICE = 2

@@ -1,7 +1,7 @@
 import pygame
 import sys
 import os
-from config import TowerType
+from config import TowerType, Enchantment, ENCHANT_ICON_SIZE, TILE_SIZE
 
 ASSET_CACHE = {}
 
@@ -49,6 +49,9 @@ icon10 = None
 
 gold_img = None
 emerald_img = None
+
+enchantment_icons = {}
+trader_img = None
 
 BUFF_SIZE = 32
 buff_icons = {}
@@ -141,6 +144,20 @@ def init_assets():
 
     gold_img = load_image("tower/2-1.png", (64, 64))
     emerald_img = load_image("tower/emerald.png", (80, 80))
+
+    global enchantment_icons, trader_img
+    enchantment_icons.clear()
+    for ench in Enchantment:
+        try:
+            enchantment_icons[ench] = load_image(f"enchantment/{ench.value}.png", (ENCHANT_ICON_SIZE, ENCHANT_ICON_SIZE))
+        except:
+            s = pygame.Surface((ENCHANT_ICON_SIZE, ENCHANT_ICON_SIZE))
+            s.fill((80, 80, 80))
+            enchantment_icons[ench] = s
+    try:
+        trader_img = load_image("tower/trader.png")
+    except:
+        trader_img = None
 
     buff_icons["burn"] = load_image("debuff/burn.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["slow"] = load_image("debuff/slow.png", (BUFF_SIZE, BUFF_SIZE))

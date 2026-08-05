@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 import assets
 from config import *
 from effects import CreeperExplosion
@@ -129,9 +130,9 @@ class Enemy(pygame.sprite.Sprite):
             return
         if self.game.temperature <= 0:
             return
-        rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
-        if self.game.weather in rain_weathers:
-            return
+        if self.game.weather in (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN):
+            if Enchantment.RAIN_FIRE not in self.game.enchantments:
+                return
         if self.game.weather == Weather.ENDLESS_NIGHT:
             damage *= 2
         self.burn_damage = max(self.burn_damage, damage)
@@ -247,14 +248,17 @@ class Enemy(pygame.sprite.Sprite):
         if self.burn_time > 0:
             self.burn_time -= 1
             if self.burn_time % 30 == 0:
-                reward = self.take_damage(self.burn_damage, color=YELLOW, scale=1.0)
+                dmg = self.burn_damage
+                if Enchantment.BURN in self.game.enchantments:
+                    dmg *= 2
+                reward = self.take_damage(int(dmg), color=YELLOW, scale=1.0)
                 self.game.coins += reward
 
         if self.poison_stacks > 0:
             self.poison_timer += 1
             if self.poison_timer >= 75:
                 self.poison_timer = 0
-                reward = self.take_damage(10 + self.poison_stacks, color=GREEN, scale=1.0)
+                reward = self.take_damage(self.game.poison_base_damage + self.poison_stacks, color=GREEN, scale=1.0)
                 self.game.coins += reward
 
         if self.wither_time > 0:
@@ -394,7 +398,7 @@ class Enemy(pygame.sprite.Sprite):
             if self.enemy_type in (EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED) and not self.broken:
                 final_dmg *= 0.2
             if self.broken:
-                final_dmg *= 1.2
+                final_dmg *= 1.4 if Enchantment.SHATTER in self.game.enchantments else 1.2
         final_dmg = int(final_dmg)
         self.health -= final_dmg
 
@@ -446,6 +450,9 @@ class Enemy(pygame.sprite.Sprite):
                                    t.damage, t.wind_knockback, self.game)
                 self.game.wind_explosions.append(exp)
                 self.wind_mark_tower = None
+            if self.poison_stacks > 0 and Enchantment.POISON_CONTRACT in self.game.enchantments:
+                if random.random() < 0.10:
+                    self.game.poison_base_damage += 1
             self.kill()
             return self.reward
         return 0

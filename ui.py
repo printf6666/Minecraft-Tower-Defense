@@ -275,6 +275,8 @@ class UIManager:
             effect.draw(self.game.screen)
         for explosion in self.game.wind_explosions:
             explosion.draw(self.game.screen)
+        for explosion in self.game.endless_greed_explosions:
+            explosion.draw(self.game.screen)
         for exp in self.game.ice_explosions:
             exp.draw(self.game.screen)
         for splash in self.game.poison_splashes:
@@ -306,8 +308,8 @@ class UIManager:
         self.game.screen.blit(assets.emerald_img, (345, 0))
         self.game.screen.blit(assets.font_medium.render(str(self.game.emeralds), True, GREEN), (420, 16))
         self.game.screen.blit(
-            assets.font_medium.render(f"波数:{self.game.wave_manager.current_wave}/{self.game.wave_manager.total_waves}", True, WHITE),
-            (520, 16))
+            assets.font_medium.render(f"波数:{self.game.wave_manager.current_wave}", True, WHITE),
+            (560, 16))
         weather_name = WEATHER_CONFIG[self.game.weather]["name"]
         weather_color = WEATHER_CONFIG[self.game.weather]["color"]
         self.game.screen.blit(assets.font_medium.render(f"天气:{weather_name}  温度:{self.game.temperature}", True, weather_color), (1570, 16))
@@ -365,6 +367,17 @@ class UIManager:
             for i, info in enumerate(infos):
                 self.game.screen.blit(assets.font_small.render(info, True, WHITE),
                                      (INFO_BORDER_X + 20, INFO_BORDER_Y + 20 + i * 32))
+        pygame.draw.rect(self.game.screen, INFO_BORDER_COLOR,
+                         (INFO_BORDER_X, ENCHANT_BOX_Y, ENCHANT_BOX_WIDTH, ENCHANT_BOX_HEIGHT), INFO_BORDER_WIDTH)
+        for rect, ench, cnt in self.get_enchant_icon_rects():
+            self.game.screen.blit(assets.enchantment_icons[ench], rect.topleft)
+            if cnt > 1:
+                badge = assets.font_tower_level.render(str(cnt), True, WHITE)
+                pygame.draw.rect(self.game.screen, (0, 0, 0),
+                                 (rect.right - badge.get_width() - 8, rect.bottom - badge.get_height() - 8,
+                                  badge.get_width() + 8, badge.get_height() + 8))
+                self.game.screen.blit(badge, (rect.right - badge.get_width() - 4, rect.bottom - badge.get_height() - 4))
+
         pygame.draw.rect(self.game.screen, RESTART_BTN_COLOR,
                          (RESTART_BTN_X, RESTART_BTN_Y, RESTART_BTN_WIDTH, RESTART_BTN_HEIGHT))
         restart_text = assets.font_small.render("重新开始", True, WHITE)
@@ -378,6 +391,95 @@ class UIManager:
         instructions = ["操作说明:", "0~9,X选择炮塔", "U升级 S出售", "R切换分支 E升5级", "ESC暂停"]
         for i, text in enumerate(instructions):
             self.game.screen.blit(assets.font_small.render(text, True, WHITE), (2156, 1144 + i * 48))
+
+    def get_enchant_icon_rects(self):
+        rects = []
+        counts = {}
+        for ench in self.game.enchantments:
+            counts[ench] = counts.get(ench, 0) + 1
+        for i, (ench, cnt) in enumerate(counts.items()):
+            col = i % ENCHANT_ICONS_PER_ROW
+            row = i // ENCHANT_ICONS_PER_ROW
+            x = INFO_BORDER_X + INFO_PADDING + col * (ENCHANT_ICON_SIZE + ENCHANT_ICON_GAP)
+            y = ENCHANT_BOX_Y + INFO_PADDING + row * (ENCHANT_ICON_SIZE + ENCHANT_ICON_GAP)
+            rects.append((pygame.Rect(x, y, ENCHANT_ICON_SIZE, ENCHANT_ICON_SIZE), ench, cnt))
+        return rects
+
+    def wrap_text(self, text, font, max_width):
+        lines = []
+        while text:
+            line = text
+            while line and font.render(line, True, (0, 0, 0)).get_width() > max_width:
+                line = line[:-1]
+            if not line:
+                break
+            lines.append(line)
+            text = text[len(line):]
+        return lines
+
+    def get_shop_slots(self):
+        panel = pygame.Rect(SCREEN_WIDTH // 2 - 600, 150, 1200, 1150)
+        offers = self.game.shop_offers
+        if not offers:
+            return []
+        slot_w = 340
+        slot_h = 420
+        gap = 24
+        total_w = len(offers) * slot_w + (len(offers) - 1) * gap
+        start_x = panel.x + (panel.w - total_w) // 2
+        y = panel.y + 110
+        return [(pygame.Rect(start_x + i * (slot_w + gap), y, slot_w, slot_h), ench)
+                for i, ench in enumerate(offers)]
+
+    def get_shop_continue_rect(self):
+        panel = pygame.Rect(SCREEN_WIDTH // 2 - 600, 150, 1200, 1150)
+        return pygame.Rect(panel.right - 260, panel.bottom - 90, 220, 60)
+
+    def draw_shop(self):
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        self.game.screen.blit(overlay, (0, 0))
+        panel = pygame.Rect(SCREEN_WIDTH // 2 - 600, 150, 1200, 1150)
+        pygame.draw.rect(self.game.screen, (45, 45, 45), panel)
+        pygame.draw.rect(self.game.screen, WHITE, panel, 4)
+        title = assets.font_large.render("流浪商人商店", True, WHITE)
+        self.game.screen.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 20))
+        emerald_text = assets.font_medium.render(f"绿宝石:{self.game.emeralds}", True, GREEN)
+        self.game.screen.blit(emerald_text, (panel.right - emerald_text.get_width() - 30, panel.y + 30))
+
+        if assets.trader_img:
+            tw, th = assets.trader_img.get_size()
+            tx = panel.right + 40
+            ty = panel.y + (panel.height - th) // 2
+            pygame.draw.rect(self.game.screen, WHITE, (tx - 6, ty - 6, tw + 12, th + 12), 3)
+            self.game.screen.blit(assets.trader_img, (tx, ty))
+
+        for rect, ench in self.get_shop_slots():
+            ench_data = ENCHANTMENT_DATA[ench]
+            cnt = self.game.enchantments.count(ench)
+            affordable = self.game.emeralds >= ench_data["cost"]
+            pygame.draw.rect(self.game.screen, (70, 70, 70) if affordable else (45, 45, 45), rect)
+            pygame.draw.rect(self.game.screen, (255, 215, 0) if affordable else (100, 100, 100), rect, 2)
+            icon = pygame.transform.smoothscale(assets.enchantment_icons[ench], (120, 120))
+            self.game.screen.blit(icon, (rect.centerx - 60, rect.y + 20))
+            name_surf = assets.font_tower_level.render(ench_data["name"], True, WHITE)
+            self.game.screen.blit(name_surf, (rect.centerx - name_surf.get_width() // 2, rect.y + 155))
+            status = assets.font_tower_level.render(f"{ench_data['cost']} 绿宝石", True, GREEN if affordable else (200, 80, 80))
+            self.game.screen.blit(status, (rect.centerx - status.get_width() // 2, rect.y + 200))
+            desc_lines = self.wrap_text(ench_data["desc"], assets.font_tower_level, rect.width - 40)
+            for li, line in enumerate(desc_lines):
+                desc_surf = assets.font_tower_level.render(line, True, (180, 180, 180))
+                self.game.screen.blit(desc_surf, (rect.centerx - desc_surf.get_width() // 2, rect.y + 250 + li * 34))
+
+        if not self.game.shop_offers:
+            empty_text = assets.font_medium.render("已拥有全部附魔", True, (200, 200, 200))
+            self.game.screen.blit(empty_text, (panel.centerx - empty_text.get_width() // 2, panel.y + 280))
+
+        cont_rect = self.get_shop_continue_rect()
+        pygame.draw.rect(self.game.screen, (60, 130, 60), cont_rect)
+        cont_text = assets.font_small.render("继续", True, WHITE)
+        self.game.screen.blit(cont_text, (cont_rect.centerx - cont_text.get_width() // 2,
+                                          cont_rect.y + (cont_rect.height - cont_text.get_height()) // 2))
 
     def draw_weather_particles(self):
         for p in self.game.weather_particles:

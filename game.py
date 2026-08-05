@@ -8,7 +8,7 @@ import assets
 from config import *
 from enemy import Enemy, DamageText
 from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
 from dragons import Dragon
@@ -85,6 +85,7 @@ class Game:
         self.dragon_breath_pools = []
         self.lightning_effects = []
         self.wind_explosions = []
+        self.endless_greed_explosions = []
         self.ice_explosions = []
         self.poison_splashes = []
         self.wither_splashes = []
@@ -111,6 +112,11 @@ class Game:
         self.command_block_timer = 0
         self.command_blocks = []
         self.ice_walls = []
+
+        self.enchantments = []
+        self.poison_base_damage = 10
+        self.shop_offers = []
+        self.shop_offers_wave = -1
 
         self.path = random.choice(SEED_PATHS)
         self.start_point = self.path[0]
@@ -170,12 +176,16 @@ class Game:
             row = e.rect.centery // TILE_SIZE
             self.enemy_grid.setdefault((col, row), []).append(e)
 
+    def quit_game(self):
+        if self.state == GameState.SHOP:
+            self.save_game()
+        pygame.quit()
+        sys.exit()
+
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                import sys
-                sys.exit()
+                self.quit_game()
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
@@ -188,9 +198,7 @@ class Game:
 
                     if (EXIT_BTN_X <= mouse_x <= EXIT_BTN_X + EXIT_BTN_WIDTH and
                             EXIT_BTN_Y <= mouse_y <= EXIT_BTN_Y + EXIT_BTN_HEIGHT):
-                        pygame.quit()
-                        import sys
-                        sys.exit()
+                        self.quit_game()
 
                     grid_x = mouse_x // TILE_SIZE
                     grid_y = mouse_y // TILE_SIZE
@@ -199,9 +207,7 @@ class Game:
                         if 900 <= mouse_x <= 1660 and 840 <= mouse_y <= 920:
                             self.start_game()
                         elif 900 <= mouse_x <= 1660 and 1020 <= mouse_y <= 1100:
-                            pygame.quit()
-                            import sys
-                            sys.exit()
+                            self.quit_game()
 
                     elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION):
                         clicked_tower = self.get_tower_at(grid_x, grid_y)
@@ -214,6 +220,16 @@ class Game:
                             self.show_range = False
                             if self.selected_tower_type and self.can_build_tower(grid_x, grid_y):
                                 self.build_tower(grid_x, grid_y, self.selected_tower_type)
+
+                    elif self.state == GameState.SHOP:
+                        bought = False
+                        for rect, ench in self.ui_manager.get_shop_slots():
+                            if rect.collidepoint(mouse_x, mouse_y):
+                                self.buy_enchantment(ench)
+                                bought = True
+                                break
+                        if not bought and self.ui_manager.get_shop_continue_rect().collidepoint(mouse_x, mouse_y):
+                            self.close_shop()
 
                     elif self.state in (GameState.GAME_OVER, GameState.VICTORY):
                         if 900 <= mouse_x <= 1660 and 850 <= mouse_y <= 930:
@@ -344,6 +360,8 @@ class Game:
                         elif self.state == GameState.PAUSED:
                             self.state = self.pre_pause_state
                             self.pre_pause_state = None
+                        elif self.state == GameState.SHOP:
+                            self.close_shop()
                         else:
                             self.selected_tower = None
                             self.selected_tower_type = None
@@ -461,6 +479,8 @@ class Game:
                 "weather_forecast": [w.value for w in self.weather_forecast],
                 "gold_per_second": self.gold_per_second, "gold_per_wave": self.gold_per_wave,
                 "emerald_per_wave": self.emerald_per_wave,
+                "enchantments": [e.value for e in self.enchantments],
+                "poison_base_damage": self.poison_base_damage,
                 "gold_ore_positions": [list(p) for p in self.gold_ore_positions],
                 "towers": towers_data,
             }
@@ -495,6 +515,7 @@ class Game:
         self.dragon_breath_pools = []
         self.lightning_effects = []
         self.wind_explosions = []
+        self.endless_greed_explosions = []
         self.ice_explosions = []
         self.poison_splashes = []
         self.wither_splashes = []
@@ -520,6 +541,10 @@ class Game:
         self.command_block_timer = 0
         self.command_blocks = []
         self.ice_walls = []
+        self.enchantments = []
+        self.poison_base_damage = 10
+        self.shop_offers = []
+        self.shop_offers_wave = -1
 
     def load_game(self):
         new_path = get_save_path()
@@ -557,6 +582,8 @@ class Game:
         self.gold_per_second = data.get("gold_per_second", 0)
         self.gold_per_wave = data.get("gold_per_wave", 0)
         self.emerald_per_wave = data.get("emerald_per_wave", 0)
+        self.enchantments = [Enchantment(v) for v in data.get("enchantments", [])]
+        self.poison_base_damage = data.get("poison_base_damage", 10)
         raw_forecast = data.get("weather_forecast", [])
         self.weather_forecast = [Weather(v) for v in raw_forecast]
         wave_num = max(1, data.get("wave", 1))
@@ -601,6 +628,7 @@ class Game:
             elif t.type == TowerType.SHIELD and t.level >= 11:
                 if t.shield_branch == 2:
                     self.temperature -= t.level
+        self.temperature += self.enchantment_temp_bonus()
         self.temperature = max(-273, self.temperature)
         self.wave_manager.start_new_wave()
         self.forecast_weather_idx = self.wave_manager.current_wave if self.forecast_purchased else -1
@@ -629,6 +657,110 @@ class Game:
     def apply_production_bonus(self):
         self.coins += 5 * self.gold_per_wave * self.wave_manager.current_wave
         self.emeralds += self.emerald_per_wave
+
+    def get_enchant_damage_multiplier(self, tower_type):
+        bonus = 0
+        bonus += 5 * self.enchantments.count(Enchantment.BALANCED)
+        type_map = {
+            Enchantment.PHYSICAL: (TowerType.PHYSICAL, TowerType.TELEPORT),
+            Enchantment.ICE: (TowerType.ICE,),
+            Enchantment.FLAME: (TowerType.FLAME,),
+            Enchantment.TRIDENT: (TowerType.TRIDENT,),
+            Enchantment.WIND: (TowerType.WIND,),
+            Enchantment.POISON: (TowerType.POISON,),
+            Enchantment.BOMB: (TowerType.BOMB,),
+        }
+        for ench, types in type_map.items():
+            if tower_type in types:
+                if ench == Enchantment.PHYSICAL:
+                    bonus += 15 * self.enchantments.count(ench)
+                else:
+                    bonus += 20 * self.enchantments.count(ench)
+        return 1.0 + bonus / 100.0
+
+    def enchantment_temp_bonus(self):
+        bonus = 0
+        bonus += 8 * self.enchantments.count(Enchantment.SOLAR)
+        bonus -= 5 * self.enchantments.count(Enchantment.PLUTO)
+        return bonus
+
+    def frost_combo_active(self):
+        if Enchantment.FROZEN_DEEP not in self.enchantments:
+            return False
+        has_bomb = any(t.type == TowerType.ICE and t.level >= 11 and t.ice_branch == 1 for t in self.towers)
+        has_wall = any(t.type == TowerType.ICE and t.level >= 11 and t.ice_branch == 3 for t in self.towers)
+        return has_bomb and has_wall
+
+    def dragon_legend_active(self):
+        if Enchantment.DRAGON_LEGEND not in self.enchantments:
+            return False
+        has_ice = any(t.type == TowerType.ICE and t.level >= 11 and t.ice_branch == 2 for t in self.towers)
+        has_fire = any(t.type == TowerType.FLAME and t.level >= 11 and t.flame_branch == 2 for t in self.towers)
+        has_electric = any(t.type == TowerType.TRIDENT and t.level >= 11 and t.trident_branch == 2 for t in self.towers)
+        return has_ice and has_fire and has_electric
+
+    def endless_greed_active(self):
+        if Enchantment.ENDLESS_GREED not in self.enchantments:
+            return False
+        has_t1 = any(t.type == TowerType.PHYSICAL and t.level >= 11 and t.physical_branch == 1 for t in self.towers)
+        has_t2 = any(t.type == TowerType.PHYSICAL and t.level >= 11 and t.physical_branch == 2 for t in self.towers)
+        has_e1 = any(t.type == TowerType.TELEPORT and t.level >= 11 and t.teleport_branch == 1 for t in self.towers)
+        has_e2 = any(t.type == TowerType.TELEPORT and t.level >= 11 and t.teleport_branch == 2 for t in self.towers)
+        has_w1 = any(t.type == TowerType.WIND and t.level >= 11 and t.wind_branch == 1 for t in self.towers)
+        has_tr1 = any(t.type == TowerType.TRIDENT and t.level >= 11 and t.trident_branch == 1 for t in self.towers)
+        return has_t1 and has_t2 and has_e1 and has_e2 and has_w1 and has_tr1
+
+    def endless_greed_explode(self, x, y):
+        self.coins += 500
+        exp = EndlessGreedExplosion(x, y, self)
+        self.endless_greed_explosions.append(exp)
+
+    def _shop_pool(self):
+        return [e for e in ENCHANTMENT_ORDER if e.value < 10 or e not in self.enchantments]
+
+    def open_shop(self):
+        if self.shop_offers_wave != self.wave_manager.current_wave or not self.shop_offers:
+            self.reroll_shop()
+        self.state = GameState.SHOP
+        self.save_game()
+
+    def reroll_shop(self):
+        pool = self._shop_pool()
+        self.shop_offers = random.sample(pool, min(3, len(pool)))
+        self.shop_offers_wave = self.wave_manager.current_wave
+
+    def close_shop(self):
+        self.state = GameState.PLAYING
+        self.forecast_purchased = False
+        self.wave_manager.start_new_wave()
+        self.wave_manager.wave_timer = 0
+        self.select_weather()
+        self.weather_banner_timer = 180
+
+    def buy_enchantment(self, ench):
+        if ench.value >= 10 and ench in self.enchantments:
+            return
+        cost = ENCHANTMENT_DATA[ench]["cost"]
+        if self.emeralds < cost:
+            return
+        self.emeralds -= cost
+        self.enchantments.append(ench)
+        if ench in self.shop_offers:
+            self.shop_offers.remove(ench)
+        if ench == Enchantment.SOLAR:
+            self.temperature += 8
+        elif ench == Enchantment.PLUTO:
+            self.temperature -= 5
+        elif ench == Enchantment.FIRE_RAIN:
+            self.convert_future_waves_to_fire_rain()
+        self.save_game()
+
+    def convert_future_waves_to_fire_rain(self):
+        for wave_num in range(self.wave_manager.current_wave + 1, self.wave_manager.total_waves + 1):
+            idx = wave_num - 1
+            if 0 <= idx < len(self.weather_forecast):
+                if random.random() < 0.5:
+                    self.weather_forecast[idx] = Weather.FIRE_RAIN
 
     def update(self):
         if self.state == GameState.PAUSED:
@@ -698,7 +830,7 @@ class Game:
                 self.command_block_timer += 1
                 initial_delay = 45 * 60
                 interval = 30 * 60
-                if self.command_block_timer >= initial_delay and (self.command_block_timer - initial_delay) % interval == 0:
+                if self.wave_manager.current_wave == 50 and self.command_block_timer >= initial_delay and (self.command_block_timer - initial_delay) % interval == 0:
                     towers_list = list(self.towers)
                     if towers_list:
                         target_tower = random.choice(towers_list)
@@ -761,6 +893,10 @@ class Game:
             for explosion in self.wind_explosions[:]:
                 if not explosion.update():
                     self.wind_explosions.remove(explosion)
+
+            for explosion in self.endless_greed_explosions[:]:
+                if not explosion.update():
+                    self.endless_greed_explosions.remove(explosion)
 
             for exp in self.ice_explosions[:]:
                 if not exp.update():
@@ -834,6 +970,8 @@ class Game:
                 self.apply_production_bonus()
                 if self.wave_manager.is_game_complete(self.enemies):
                     self.state = GameState.VICTORY
+                elif self.wave_manager.current_wave % 4 == 0:
+                    self.open_shop()
                 else:
                     self.forecast_purchased = False
                     self.wave_manager.start_new_wave()
@@ -858,19 +996,25 @@ class Game:
                     Weather.THUNDERSTORM, Weather.TAILWIND, Weather.HEADWIND,
                     Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD, Weather.MAGNETIC_STORM,
                     Weather.FIRE_RAIN, Weather.AURORA]
-        self.weather_forecast = [random.choice(weathers) for _ in range(self.wave_manager.total_waves)]
+        self.weather_forecast = []
+        for i in range(self.wave_manager.total_waves):
+            pool = list(weathers)
+            if i + 1 > 50:
+                pool.append(Weather.ENDLESS_NIGHT)
+            self.weather_forecast.append(random.choice(pool))
 
     def select_weather(self):
         self.fog_visible = False
         if self.wave_manager.current_wave == 50:
             self.weather = Weather.ENDLESS_NIGHT
-            self._build_background(night_mode=True)
         else:
             wave_idx = self.wave_manager.current_wave - 1
             if 0 <= wave_idx < len(self.weather_forecast):
                 self.weather = self.weather_forecast[wave_idx]
             else:
                 self.weather = Weather.SUNNY
+        self._build_background(night_mode=(self.weather == Weather.ENDLESS_NIGHT),
+                               gold_ore_positions=self.gold_ore_positions)
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
         for t in self.towers:
@@ -883,6 +1027,7 @@ class Game:
             elif t.type == TowerType.SHIELD and t.level >= 11:
                 if t.shield_branch == 2:
                     self.temperature -= t.level
+        self.temperature += self.enchantment_temp_bonus()
         self.temperature = max(-273, self.temperature)
         self.save_game()
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
@@ -1072,6 +1217,9 @@ class Game:
             self.ui_manager.draw_menu()
         elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION, GameState.PAUSED):
             self.ui_manager.draw_game()
+        elif self.state == GameState.SHOP:
+            self.ui_manager.draw_game()
+            self.ui_manager.draw_shop()
         elif self.state == GameState.GAME_OVER:
             self.ui_manager.draw_game_over()
         elif self.state == GameState.VICTORY:
@@ -1164,6 +1312,7 @@ class Game:
         self.dragon_breath_pools = []
         self.lightning_effects = []
         self.wind_explosions = []
+        self.endless_greed_explosions = []
         self.ice_explosions = []
         self.poison_splashes = []
         self.wither_splashes = []

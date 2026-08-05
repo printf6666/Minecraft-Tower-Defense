@@ -30,12 +30,42 @@ class WindExplosion:
         screen.blit(s, (self.x - self.radius, self.y - self.radius))
 
 
+class EndlessGreedExplosion:
+    def __init__(self, x, y, game):
+        self.x = x
+        self.y = y
+        self.game = game
+        self.duration = 10
+        self.radius = 64
+        for enemy in game.enemies:
+            if enemy.health <= 0:
+                continue
+            dx = enemy.rect.centerx - x
+            dy = enemy.rect.centery - y
+            if (dx * dx + dy * dy) <= self.radius * self.radius:
+                pct_dmg = max(1, int(enemy.max_health * 0.01))
+                reward = enemy.take_damage(pct_dmg, color=BLACK, scale=0.6)
+                game.coins += reward
+
+    def update(self):
+        self.duration -= 1
+        return self.duration > 0
+
+    def draw(self, screen):
+        alpha = int(120 * self.duration / 10)
+        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, (0, 0, 0, alpha), (self.radius, self.radius), self.radius)
+        screen.blit(s, (int(self.x - self.radius), int(self.y - self.radius)))
+
+
 class IceExplosion:
     def __init__(self, x, y, damage, freeze_time, game):
         self.x = x
         self.y = y
         self.duration = 6
         self.radius = 128
+        if game.frost_combo_active():
+            self.radius = int(self.radius * 1.125)
         for enemy in game.enemies:
             if enemy.health <= 0:
                 continue
@@ -250,6 +280,7 @@ class MushroomExplosion:
 
         if bomb_branch == 1:
             final_damage = (20000 + 100 * game.temperature) * (tower_level - 10)
+            final_damage = int(final_damage * game.get_enchant_damage_multiplier(TowerType.BOMB))
             for enemy in game.enemies:
                 if enemy.health <= 0:
                     continue

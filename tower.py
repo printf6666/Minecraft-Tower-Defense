@@ -639,7 +639,8 @@ class Bullet(pygame.sprite.Sprite):
         if self.tower_type == TowerType.TELEPORT and self.teleport_branch == 2:
             dmg = random.randint(0, self.damage * 2)
 
-        return int(dmg)
+        mult = self.game.get_enchant_damage_multiplier(self.tower_type)
+        return int(dmg * mult)
 
     def calculate_lightning_damage(self):
         ldmg = self.lightning_damage
@@ -694,6 +695,8 @@ class Bullet(pygame.sprite.Sprite):
         duration = ICE_WALL_DURATION.get(self.tower_level, 2) * 60
         if self.game.weather == Weather.FIRE_RAIN:
             duration //= 2
+        if self.game.frost_combo_active():
+            duration *= 2
         wall = IceWall(col, row, self.game)
         wall.duration = duration
         self.game.ice_walls.append(wall)
@@ -717,10 +720,11 @@ class Bullet(pygame.sprite.Sprite):
 
     def on_hit(self, enemy):
         final_dmg = self.calculate_final_damage()
+        mult = self.game.get_enchant_damage_multiplier(self.tower_type)
 
         if self.tower_type == TowerType.ICE and self.tower_level >= 11 and self.ice_branch == 1 and enemy.freeze_time > 0:
             bonus = int(abs(self.game.temperature) * 3 * (self.tower_level - 10))
-            final_dmg += bonus
+            final_dmg += int(bonus * mult)
 
         if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11 and self.teleport_branch == 1:
             hp_ratios = {11: 0.004, 12: 0.008, 13: 0.012, 14: 0.016, 15: 0.02}
@@ -729,12 +733,18 @@ class Bullet(pygame.sprite.Sprite):
 
         if enemy.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED) and self.tower_level >= 6:
             if self.tower_type in (TowerType.PHYSICAL, TowerType.TRIDENT):
-                final_dmg = self.damage
+                final_dmg = int(self.damage * mult)
 
         color = self.get_damage_color()
         reward = enemy.take_damage(final_dmg, color=color)
         self.game.coins += reward
         self.apply_effects(enemy)
+        if self.game.endless_greed_active():
+            is_greed = self.tower_type in (TowerType.PHYSICAL, TowerType.TELEPORT) or \
+                (self.tower_type == TowerType.WIND and self.wind_branch == 1) or \
+                (self.tower_type == TowerType.TRIDENT and self.trident_branch == 1)
+            if is_greed and random.random() < 0.05:
+                self.game.endless_greed_explode(self.x, self.y)
         self.kill()
 
     def apply_effects(self, enemy):
@@ -907,8 +917,9 @@ class BombBullet(pygame.sprite.Sprite):
                         return
 
     def explode(self):
+        mult = self.game.get_enchant_damage_multiplier(TowerType.BOMB)
         explosion = TNTExplosion(self.rect.centerx, self.rect.centery,
-                                 self.damage, self.tower_level, self.bomb_subtype, self.game)
+                                 int(self.damage * mult), self.tower_level, self.bomb_subtype, self.game)
         self.game.tnt_explosions.append(explosion)
 
 

@@ -41,6 +41,8 @@ class Dragon(pygame.sprite.Sprite):
 
         self.path_idx = len(self.path) - 1
         self.speed = 8
+        if game.dragon_legend_active():
+            self.speed = 14
         self.target_x = None
         self.target_y = None
         self.update_target()
@@ -112,6 +114,8 @@ class Dragon(pygame.sprite.Sprite):
 
     def deal_damage(self, enemy):
         multiplier = self.damage_multiplier.get(self.tower_level, 30)
+        if self.game.dragon_legend_active():
+            multiplier *= 2
         if self.dragon_type == "ice":
             damage = multiplier * abs(self.game.temperature)
             color = ICE_BLUE
