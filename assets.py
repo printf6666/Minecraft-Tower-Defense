@@ -48,7 +48,7 @@ icon9 = None
 icon10 = None
 
 gold_img = None
-heart_img = None
+emerald_img = None
 
 BUFF_SIZE = 32
 buff_icons = {}
@@ -91,7 +91,7 @@ teleport_sound = None
 def init_assets():
     global font_large, font_medium, font_small, font_tower_level, font_damage
     global icon0, icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9, icon10, tower_icons, buff_icons
-    global gold_img, heart_img, clock_img
+    global gold_img, clock_img, emerald_img
     global white_lightning_frames, golden_lightning_frames
     global white_lightning_h_frames, golden_lightning_h_frames
     global bgm_files, bgm_index
@@ -140,7 +140,7 @@ def init_assets():
         pass
 
     gold_img = load_image("tower/2-1.png", (64, 64))
-    heart_img = load_image("tower/heart.png", (128, 128))
+    emerald_img = load_image("tower/emerald.png", (80, 80))
 
     buff_icons["burn"] = load_image("debuff/burn.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["slow"] = load_image("debuff/slow.png", (BUFF_SIZE, BUFF_SIZE))

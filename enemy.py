@@ -99,7 +99,7 @@ class Enemy(pygame.sprite.Sprite):
         self.poison_stacks = 0
         self.poison_timer = 0
         if game.weather == Weather.ACID_RAIN:
-            self.poison_stacks = 10
+            self.apply_poison(10)
         if game.weather == Weather.MAGNETIC_STORM:
             if self.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED,
                                    EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
@@ -254,7 +254,7 @@ class Enemy(pygame.sprite.Sprite):
             self.poison_timer += 1
             if self.poison_timer >= 75:
                 self.poison_timer = 0
-                reward = self.take_damage(self.poison_stacks, color=GREEN, scale=1.0)
+                reward = self.take_damage(10 + self.poison_stacks, color=GREEN, scale=1.0)
                 self.game.coins += reward
 
         if self.wither_time > 0:
@@ -285,7 +285,6 @@ class Enemy(pygame.sprite.Sprite):
             dy = ty - self.pos_y
             dist = (dx * dx + dy * dy) ** 0.5
             if dist < self.speed:
-                self.game.lives -= 4 if self.enemy_type == EnemyType.GHOST else 8
                 self.kill()
                 return True
             self.pos_x += (dx / dist) * self.speed
@@ -298,7 +297,6 @@ class Enemy(pygame.sprite.Sprite):
                 return False
 
         if self.path_index >= len(self.path) - 1:
-            self.game.lives -= 1
             self.kill()
             return True
 

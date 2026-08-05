@@ -150,7 +150,8 @@ class Tower(pygame.sprite.Sprite):
             multiplier = 2 if self.is_on_gold_ore else 1
             self.game.gold_per_second += multiplier
             if self.level >= 6: self.game.gold_per_wave += multiplier
-            if self.level >= 11: self.game.gold_profit_per_wave += 0.001 * multiplier
+            if self.level >= 11:
+                self.game.emerald_per_wave += EMERALD_PER_WAVE_BY_LEVEL.get(self.level, 3) - EMERALD_PER_WAVE_BY_LEVEL.get(self.level - 1, 0)
         if self.type == TowerType.PHYSICAL:
             self.damage += 15
             self.range += TILE_SIZE // 2
@@ -777,7 +778,7 @@ class Bullet(pygame.sprite.Sprite):
                     elif debuff == 'speed':
                         enemy.apply_speed(0.5, 999999)
                     elif debuff == 'poison':
-                        enemy.apply_poison(100)
+                        enemy.apply_poison(1)
                     elif debuff == 'wither':
                         enemy.apply_wither(999999)
                     elif debuff == 'broken':

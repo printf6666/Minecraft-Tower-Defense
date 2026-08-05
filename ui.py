@@ -23,8 +23,8 @@ def get_tower_info(game, tower):
             info = [f"箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
     elif tower.type == TowerType.PRODUCTION:
         if tower.level >= 11:
-            info = [f"无尽矿 Lv{tower.level}", f"全局产量:{game.gold_per_second}/s",
-                    f"全局每波产出:{5 * game.gold_per_wave}*当前波数", f"全局每波利息:{round(100 * game.gold_profit_per_wave, 1)}%", "放置在金矿石上时产出+100%"]
+            info = [f"绿宝石块 Lv{tower.level}", f"全局产量:{game.gold_per_second}/s",
+                    f"全局每波产出:{5 * game.gold_per_wave}*当前波数", f"每波获得{game.emerald_per_wave}颗绿宝石"]
         elif tower.level >= 6:
             info = [f"下界合金矿 Lv{tower.level}", f"全局每波产出:{5 * game.gold_per_wave}*当前波数",
                     f"全局产量:{game.gold_per_second}/s", "放置在金矿石上时产出+100%"]
@@ -156,18 +156,14 @@ def get_tower_info(game, tower):
     elif tower.type == TowerType.SHIELD:
         if tower.level >= 11:
             if tower.shield_branch == 1:
-                dmg_mult = (tower.level - 10) * 36
-                info = [f"火焰盾 Lv{tower.level}",
-                        f"护盾破碎:全屏{dmg_mult}倍温度伤害", "使所有敌人永久燃烧", "按 R 切换分支"]
+                gold_amt = (tower.level - 10) * 1000
+                info = [f"贪婪盾 Lv{tower.level}",
+                        f"护盾破碎:造成金币1%伤害", f"获得{gold_amt}金币", "按 R 切换分支"]
             elif tower.shield_branch == 2:
                 dmg_mult = (tower.level - 10) * 30
                 info = [f"寒冰盾 Lv{tower.level}",
                         f"护盾破碎:全屏{dmg_mult}倍温度伤害", "使所有敌人冰冻3秒", "按 R 切换分支"]
             elif tower.shield_branch == 3:
-                gold_amt = (tower.level - 10) * 1000
-                info = [f"贪婪盾 Lv{tower.level}",
-                        f"护盾破碎:造成金币1%伤害", f"获得{gold_amt}金币", "按 R 切换分支"]
-            elif tower.shield_branch == 4:
                 dmg_mult = (tower.level - 10) * 25
                 info = [f"雷盾 Lv{tower.level}",
                         f"护盾破碎:全屏{dmg_mult}倍温度伤害", "击晕全场1秒并永久燃烧", "按 R 切换分支"]
@@ -307,8 +303,8 @@ class UIManager:
         pygame.draw.line(self.game.screen, WHITE, (0, 80), (SCREEN_WIDTH, 80), 4)
         self.game.screen.blit(assets.gold_img, (0, 8))
         self.game.screen.blit(assets.font_medium.render(str(int(self.game.coins)), True, GOLD), (70, 16))
-        self.game.screen.blit(assets.heart_img, (320, -25))
-        self.game.screen.blit(assets.font_medium.render(str(self.game.lives), True, RED), (420, 16))
+        self.game.screen.blit(assets.emerald_img, (345, 0))
+        self.game.screen.blit(assets.font_medium.render(str(self.game.emeralds), True, GREEN), (420, 16))
         self.game.screen.blit(
             assets.font_medium.render(f"波数:{self.game.wave_manager.current_wave}/{self.game.wave_manager.total_waves}", True, WHITE),
             (520, 16))

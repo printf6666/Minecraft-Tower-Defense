@@ -63,7 +63,7 @@ class Game:
         self.damage_texts = pygame.sprite.Group()
         self.dragons = pygame.sprite.Group()
         self.coins = 2560
-        self.lives = 20
+        self.emeralds = 0
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
         self.selected_tower = None
@@ -72,7 +72,7 @@ class Game:
         self.game_time = 0
         self.gold_per_second = 0
         self.gold_per_wave = 0
-        self.gold_profit_per_wave = 0
+        self.emerald_per_wave = 0
         self.last_global_production_time = pygame.time.get_ticks()
         self.temperature = 30
         self.weather = Weather.SUNNY
@@ -310,7 +310,7 @@ class Game:
                         self.selected_tower.recalculate_stats()
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
-                        self.selected_tower.shield_branch = self.selected_tower.shield_branch % 4 + 1
+                        self.selected_tower.shield_branch = self.selected_tower.shield_branch % 3 + 1
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_s and self.selected_tower:
                         cost_map = {ttype: cost for ttype, name, cost, key in TOWER_DATA}
@@ -323,7 +323,7 @@ class Game:
                             if level >= 6:
                                 self.gold_per_wave -= (level - 5) * multiplier
                             if level >= 11:
-                                self.gold_profit_per_wave -= (level - 10) * 0.001 * multiplier
+                                self.emerald_per_wave -= EMERALD_PER_WAVE_BY_LEVEL.get(level, 3)
                         if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT):
                             self.temperature -= self.selected_tower.level
                         elif self.selected_tower.type == TowerType.ICE:
@@ -332,12 +332,8 @@ class Game:
                             old_temp_effect = self.get_bomb_temp_effect(self.selected_tower)
                             self.temperature -= old_temp_effect
                         elif self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
-                            if self.selected_tower.shield_branch == 1:
-                                self.temperature -= self.selected_tower.level
-                            elif self.selected_tower.shield_branch == 2:
+                            if self.selected_tower.shield_branch == 2:
                                 self.temperature += self.selected_tower.level
-                            elif self.selected_tower.shield_branch == 4:
-                                pass
                         self.temperature = max(-273, self.temperature)
                         self.selected_tower.kill()
                         self.selected_tower = None
@@ -378,11 +374,10 @@ class Game:
         for tower in self.towers:
             if tower.type == TowerType.SHIELD and tower.level >= 11:
                 if tower.shield_branch == 1:
-                    damage = (tower.level - 10) * 36 * abs(self.temperature)
+                    damage = int(self.coins * 0.01)
                     for enemy in self.enemies:
-                        enemy.take_damage(damage, color=(255, 100, 0))
-                        enemy.burn_time = float('inf')
-                        enemy.burn_damage = max(enemy.burn_damage, self.temperature)
+                        enemy.take_damage(damage, color=(255, 215, 0))
+                    self.coins += (tower.level - 10) * 1000
                 elif tower.shield_branch == 2:
                     damage = (tower.level - 10) * 30 * abs(self.temperature)
                     for enemy in self.enemies:
@@ -390,11 +385,6 @@ class Game:
                         enemy.freeze_resistance = 0
                         enemy.freeze_time = max(enemy.freeze_time, 3 * 60)
                 elif tower.shield_branch == 3:
-                    damage = int(self.coins * 0.01)
-                    for enemy in self.enemies:
-                        enemy.take_damage(damage, color=(255, 215, 0))
-                    self.coins += (tower.level - 10) * 1000
-                elif tower.shield_branch == 4:
                     damage = (tower.level - 10) * 25 * abs(self.temperature)
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=(255, 255, 0))
@@ -465,12 +455,12 @@ class Game:
                 seed_idx = 0
             data = {
                 "seed": seed_idx,
-                "gold": self.coins, "lives": self.lives, "wave": self.wave_manager.current_wave,
+                "gold": self.coins, "emeralds": self.emeralds, "wave": self.wave_manager.current_wave,
                 "temperature": self.temperature, "weather": self.weather.value,
                 "forecast_purchased": self.forecast_purchased,
                 "weather_forecast": [w.value for w in self.weather_forecast],
                 "gold_per_second": self.gold_per_second, "gold_per_wave": self.gold_per_wave,
-                "gold_profit_per_wave": self.gold_profit_per_wave,
+                "emerald_per_wave": self.emerald_per_wave,
                 "gold_ore_positions": [list(p) for p in self.gold_ore_positions],
                 "towers": towers_data,
             }
@@ -486,7 +476,7 @@ class Game:
         self.damage_texts.empty()
         self.dragons.empty()
         self.coins = 2560
-        self.lives = 20
+        self.emeralds = 0
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
         self.selected_tower = None
@@ -495,7 +485,7 @@ class Game:
         self.game_time = 0
         self.gold_per_second = 0
         self.gold_per_wave = 0
-        self.gold_profit_per_wave = 0
+        self.emerald_per_wave = 0
         self.last_global_production_time = pygame.time.get_ticks()
         self.temperature = 30
         self.weather = Weather.SUNNY
@@ -560,13 +550,13 @@ class Game:
         saved_ore = set(tuple(p) for p in ore_positions)
         self._build_background(gold_ore_positions=saved_ore)
         self.coins = data.get("gold", 2500)
-        self.lives = data.get("lives", 20)
+        self.emeralds = data.get("emeralds", 0)
         self.temperature = data.get("temperature", 30)
         self.weather = Weather(data.get("weather", Weather.SUNNY.value))
         self.forecast_purchased = data.get("forecast_purchased", False)
         self.gold_per_second = data.get("gold_per_second", 0)
         self.gold_per_wave = data.get("gold_per_wave", 0)
-        self.gold_profit_per_wave = data.get("gold_profit_per_wave", 0.0)
+        self.emerald_per_wave = data.get("emerald_per_wave", 0)
         raw_forecast = data.get("weather_forecast", [])
         self.weather_forecast = [Weather(v) for v in raw_forecast]
         wave_num = max(1, data.get("wave", 1))
@@ -585,6 +575,10 @@ class Game:
             t.trident_branch = td.get("trident_branch", 1)
             t.teleport_branch = td.get("teleport_branch", 1)
             t.shield_branch = td.get("shield_branch", 1)
+            if t.shield_branch == 3:
+                t.shield_branch = 1
+            elif t.shield_branch == 4:
+                t.shield_branch = 3
             if hasattr(t, 'bomb_subtype'):
                 sv = td.get("bomb_subtype")
                 t.bomb_subtype = BombSubType(sv) if sv is not None else BombSubType.SNOW
@@ -605,9 +599,7 @@ class Game:
             elif t.type == TowerType.BOMB:
                 self.temperature += self.get_bomb_temp_effect(t)
             elif t.type == TowerType.SHIELD and t.level >= 11:
-                if t.shield_branch == 1:
-                    self.temperature += t.level
-                elif t.shield_branch == 2:
+                if t.shield_branch == 2:
                     self.temperature -= t.level
         self.temperature = max(-273, self.temperature)
         self.wave_manager.start_new_wave()
@@ -636,7 +628,7 @@ class Game:
 
     def apply_production_bonus(self):
         self.coins += 5 * self.gold_per_wave * self.wave_manager.current_wave
-        self.coins += int(self.coins * self.gold_profit_per_wave)
+        self.emeralds += self.emerald_per_wave
 
     def update(self):
         if self.state == GameState.PAUSED:
@@ -653,13 +645,8 @@ class Game:
             for enemy in self.enemies:
                 reached_end = enemy.update()
                 if reached_end:
-                    if enemy.enemy_type == EnemyType.HEROBRINE:
-                        self.lives -= 50
-                    else:
-                        self.lives -= 1
                     enemy.kill()
-                    if self.lives <= 0:
-                        self.state = GameState.GAME_OVER
+                    self.state = GameState.GAME_OVER
 
             self._build_enemy_grid()
 
@@ -894,9 +881,7 @@ class Game:
             elif t.type == TowerType.BOMB:
                 self.temperature += self.get_bomb_temp_effect(t)
             elif t.type == TowerType.SHIELD and t.level >= 11:
-                if t.shield_branch == 1:
-                    self.temperature += t.level
-                elif t.shield_branch == 2:
+                if t.shield_branch == 2:
                     self.temperature -= t.level
         self.temperature = max(-273, self.temperature)
         self.save_game()
@@ -992,7 +977,8 @@ class Game:
                         if t.type == TowerType.PRODUCTION:
                             multiplier = 2 if t.is_on_gold_ore else 1
                             if old_level >= 6: self.gold_per_wave -= multiplier
-                            if old_level >= 11: self.gold_profit_per_wave -= 0.001 * multiplier
+                            if old_level >= 11:
+                                self.emerald_per_wave -= EMERALD_PER_WAVE_BY_LEVEL.get(old_level, 3) - EMERALD_PER_WAVE_BY_LEVEL.get(t.level, 0)
                         t.update_sprite()
                     else:
                         if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
@@ -1159,7 +1145,7 @@ class Game:
         self.damage_texts.empty()
 
         self.coins = 2560
-        self.lives = 20
+        self.emeralds = 0
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
         self.selected_tower = None
@@ -1168,7 +1154,7 @@ class Game:
         self.game_time = 0
         self.gold_per_second = 0
         self.gold_per_wave = 0
-        self.gold_profit_per_wave = 0
+        self.emerald_per_wave = 0
         self.last_global_production_time = pygame.time.get_ticks()
         self.temperature = 30
         self.weather = Weather.SUNNY

@@ -91,6 +91,8 @@ class BombSubType(Enum):
     POISON = 4
     WITHER_TNT = 5
 
+EMERALD_PER_WAVE_BY_LEVEL = {11: 1, 12: 1, 13: 2, 14: 2, 15: 3}
+
 
 
 class EnemyType(Enum):
@@ -140,7 +142,7 @@ class Weather(Enum):
 
 
 WEATHER_CONFIG = {
-    Weather.ACID_RAIN: {"name": "酸雨", "temp": 5, "desc": "酸雨：敌人中毒，炮塔等级-1，中毒伤害翻倍", "color": (0, 255, 0)},
+    Weather.ACID_RAIN: {"name": "酸雨", "temp": 5, "desc": "酸雨：敌人中毒，炮塔等级-1，中毒层数翻倍", "color": (0, 255, 0)},
     Weather.EXTREME_HEAT: {"name": "酷暑", "temp": 40, "desc": "酷暑：温度较高，火焰伤害提升", "color": (255, 69, 0)},
     Weather.SUNNY: {"name": "晴天", "temp": 30, "desc": "晴天：温度适中", "color": (255, 255, 255)},
     Weather.CLOUDY: {"name": "多云", "temp": 20, "desc": "多云：温度较低", "color": (180, 180, 180)},
