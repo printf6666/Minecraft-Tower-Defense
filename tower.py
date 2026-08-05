@@ -340,6 +340,8 @@ class Tower(pygame.sprite.Sprite):
         if self.type == TowerType.BOMB and self.is_nuclear:
             return 0
         r = self.range
+        if Enchantment.TELESCOPE in self.game.enchantments and self.range > 0:
+            r += TILE_SIZE
         if self.game.weather == Weather.TAILWIND:
             r += int(self.range * 0.5)
         if self.game.weather == Weather.HEADWIND:
@@ -625,6 +627,8 @@ class Bullet(pygame.sprite.Sprite):
         dmg = self.damage
         if self.tower_type == TowerType.PHYSICAL and self.tower_level >= 6:
             dmg += int(self.game.coins * 0.01)
+        if self.tower_type == TowerType.PHYSICAL and Enchantment.FIRE_ARROW in self.game.enchantments:
+            dmg += 100
 
         if self.tower_type == TowerType.TRIDENT:
             if self.tower_level >= 6:
@@ -733,7 +737,8 @@ class Bullet(pygame.sprite.Sprite):
 
         if enemy.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED) and self.tower_level >= 6:
             if self.tower_type in (TowerType.PHYSICAL, TowerType.TRIDENT):
-                final_dmg = int(self.damage * mult)
+                bonus = 100 if (self.tower_type == TowerType.PHYSICAL and Enchantment.FIRE_ARROW in self.game.enchantments) else 0
+                final_dmg = int((self.damage + bonus) * mult)
 
         color = self.get_damage_color()
         reward = enemy.take_damage(final_dmg, color=color)
@@ -803,6 +808,8 @@ class Bullet(pygame.sprite.Sprite):
                     enemy.rect.centerx, enemy.rect.centery,
                     self.game.temperature, self.tower_level, self.stun_time)
         if self.tower_type == TowerType.PHYSICAL:
+            if Enchantment.FIRE_ARROW in self.game.enchantments:
+                enemy.apply_burn(self.game.temperature, 4 * 60)
             if self.tower_level >= 11 and not enemy.broken and self.physical_branch == 1:
                 enemy.broken = True
         if self.tower_type == TowerType.TRIDENT:

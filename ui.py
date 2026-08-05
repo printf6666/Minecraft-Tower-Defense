@@ -314,7 +314,7 @@ class UIManager:
         weather_color = WEATHER_CONFIG[self.game.weather]["color"]
         self.game.screen.blit(assets.font_medium.render(f"天气:{weather_name}  温度:{self.game.temperature}", True, weather_color), (1570, 16))
 
-        if self.game.wave_manager.current_wave < 47:
+        if self.game.wave_manager.current_wave < 97:
             can_buy = self.game.state == GameState.PLAYING and not self.game.forecast_purchased
             can_afford = self.game.coins >= 100 * self.game.wave_manager.current_wave
             btn_color = FORECAST_BTN_COLOR if can_buy and can_afford else FORECAST_BTN_COLOR_DISABLED

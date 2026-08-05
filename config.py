@@ -104,6 +104,9 @@ class Enchantment(Enum):
     ENDLESS_GREED = 15
     RAIN_FIRE = 16
     SHATTER = 17
+    LAVA = 18
+    TELESCOPE = 19
+    FIRE_ARROW = 20
 
 ENCHANTMENT_DATA = {
     Enchantment.BALANCED: {"name": "均衡强化", "desc": "所有伤害+5%", "cost": 100},
@@ -124,6 +127,9 @@ ENCHANTMENT_DATA = {
     Enchantment.ENDLESS_GREED: {"name": "无尽贪婪", "desc": "集齐六件无尽炮塔后，其子弹5%概率爆炸：范围1%最大生命伤害并获得500金币", "cost": 1000},
     Enchantment.RAIN_FIRE: {"name": "水火相容", "desc": "雨天/雷暴/酸雨可以点燃敌人", "cost": 200},
     Enchantment.SHATTER: {"name": "粉碎", "desc": "破甲易伤增加至40%", "cost": 600},
+    Enchantment.LAVA: {"name": "岩浆", "desc": "每5秒提高1温度，每波开始时重置", "cost": 400},
+    Enchantment.TELESCOPE: {"name": "望远镜", "desc": "所有炮塔基础射程增加1格", "cost": 200},
+    Enchantment.FIRE_ARROW: {"name": "火矢", "desc": "箭矢伤害+100（受均衡强化/物理强化二次增伤），附带燃烧4秒", "cost": 200},
 }
 
 ENCHANTMENT_ORDER = [
@@ -131,10 +137,11 @@ ENCHANTMENT_ORDER = [
     Enchantment.WIND, Enchantment.POISON, Enchantment.BOMB, Enchantment.SOLAR, Enchantment.PLUTO,
     Enchantment.POISON_CONTRACT, Enchantment.BURN, Enchantment.FIRE_RAIN, Enchantment.FROZEN_DEEP,
     Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.SHATTER,
+    Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.FIRE_ARROW,
 ]
 
 ENCHANT_BOX_WIDTH = 512
-ENCHANT_BOX_HEIGHT = 384
+ENCHANT_BOX_HEIGHT = 404
 ENCHANT_BOX_Y = INFO_BORDER_Y - ENCHANT_BOX_HEIGHT
 ENCHANT_ICON_SIZE = 80
 ENCHANT_ICON_GAP = 20

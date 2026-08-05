@@ -75,6 +75,7 @@ class Game:
         self.emerald_per_wave = 0
         self.last_global_production_time = pygame.time.get_ticks()
         self.temperature = 30
+        self.lava_timer = 0
         self.weather = Weather.SUNNY
         self.weather_particles = []
         self.weather_banner_timer = 0
@@ -237,7 +238,7 @@ class Game:
 
                     if (FORECAST_BTN_X <= mouse_x <= FORECAST_BTN_X + FORECAST_BTN_WIDTH and
                             FORECAST_BTN_Y <= mouse_y <= FORECAST_BTN_Y + FORECAST_BTN_HEIGHT):
-                        if self.state == GameState.PLAYING and not self.forecast_purchased and self.wave_manager.current_wave < 47 and self.coins >= 100 * self.wave_manager.current_wave:
+                        if self.state == GameState.PLAYING and not self.forecast_purchased and self.wave_manager.current_wave < 97 and self.coins >= 100 * self.wave_manager.current_wave:
                             self.coins -= 100 * self.wave_manager.current_wave
                             self.forecast_purchased = True
                             self.forecast_weather_idx = self.wave_manager.current_wave
@@ -508,6 +509,7 @@ class Game:
         self.emerald_per_wave = 0
         self.last_global_production_time = pygame.time.get_ticks()
         self.temperature = 30
+        self.lava_timer = 0
         self.weather = Weather.SUNNY
         self.weather_particles = []
         self.weather_banner_timer = 0
@@ -773,6 +775,11 @@ class Game:
                     self.weather_banner_timer = 180
                 self.pending_first_wave_weather = False
             self.global_production()
+            if Enchantment.LAVA in self.enchantments:
+                self.lava_timer += 1
+                if self.lava_timer >= 5 * 60:
+                    self.lava_timer = 0
+                    self.temperature += 1
 
             for enemy in self.enemies:
                 reached_end = enemy.update()
@@ -843,29 +850,29 @@ class Game:
                         self.weather_banner_text = "HIM释放会爆炸的命令方块了!"
                         self.weather_banner_timer = 180
 
-                        for cb in list(self.command_blocks):
-                            cb['timer'] += 1
-                            if cb['timer'] >= cb['max_timer']:
-                                self.command_blocks.remove(cb)
-                                for tower in list(self.towers):
-                                    dx = abs(tower.x - cb['x'])
-                                    dy = abs(tower.y - cb['y'])
-                                    if dx <= 1 and dy <= 1:
-                                        if getattr(tower, 'has_shield', False):
-                                            tower.has_shield = False
-                                            self.trigger_shield_burst(tower)
-                                        else:
-                                            tower.kill()
-                                            self.towers.remove(tower)
-                                for wall in list(self.ice_walls):
-                                    dx = abs(wall.x - cb['x'])
-                                    dy = abs(wall.y - cb['y'])
-                                    if dx <= 1 and dy <= 1:
-                                        self.destroy_ice_wall(wall)
-                                explosion = TNTExplosion(cb['x'] * TILE_SIZE + TILE_SIZE // 2,
-                                                         cb['y'] * TILE_SIZE + TILE_SIZE // 2,
-                                                         0, 0, None, self)
-                                self.tnt_explosions.append(explosion)
+                for cb in list(self.command_blocks):
+                    cb['timer'] += 1
+                    if cb['timer'] >= cb['max_timer']:
+                        self.command_blocks.remove(cb)
+                        for tower in list(self.towers):
+                            dx = abs(tower.x - cb['x'])
+                            dy = abs(tower.y - cb['y'])
+                            if dx <= 1 and dy <= 1:
+                                if getattr(tower, 'has_shield', False):
+                                    tower.has_shield = False
+                                    self.trigger_shield_burst(tower)
+                                else:
+                                    tower.kill()
+                                    self.towers.remove(tower)
+                        for wall in list(self.ice_walls):
+                            dx = abs(wall.x - cb['x'])
+                            dy = abs(wall.y - cb['y'])
+                            if dx <= 1 and dy <= 1:
+                                self.destroy_ice_wall(wall)
+                        explosion = TNTExplosion(cb['x'] * TILE_SIZE + TILE_SIZE // 2,
+                                                 cb['y'] * TILE_SIZE + TILE_SIZE // 2,
+                                                 0, 0, None, self)
+                        self.tnt_explosions.append(explosion)
 
             if self.wave_manager.current_wave == 50:
                 if not pygame.mixer.music.get_busy():
@@ -1005,6 +1012,7 @@ class Game:
 
     def select_weather(self):
         self.fog_visible = False
+        self.lava_timer = 0
         if self.wave_manager.current_wave == 50:
             self.weather = Weather.ENDLESS_NIGHT
         else:
@@ -1305,6 +1313,7 @@ class Game:
         self.emerald_per_wave = 0
         self.last_global_production_time = pygame.time.get_ticks()
         self.temperature = 30
+        self.lava_timer = 0
         self.weather = Weather.SUNNY
         self.weather_particles = []
         self.weather_banner_timer = 0
