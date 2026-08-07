@@ -34,6 +34,8 @@ tower_icons = []
 
 tnt_explosion_frames = []
 mushroom_cloud_frames = []
+endless_greed_frames = []
+ice_explosion_frames = []
 
 icon0 = None
 icon1 = None
@@ -100,6 +102,7 @@ def init_assets():
     global bgm_files, bgm_index
     global stone_img, dirt_img, start_img, house_img, gold_ore_img
     global tnt_explosion_frames, mushroom_cloud_frames, contaminated_img
+    global ice_explosion_frames
     global explode_sound, level_up_sound
 
 
@@ -127,20 +130,29 @@ def init_assets():
         except:
             tnt_explosion_frames.append(pygame.Surface((384, 384)))
 
+    ice_explosion_frames.clear()
+    for i in range(17):
+        try:
+            ice_explosion_frames.append(load_image(f"tower/ice_explosion{i:02d}.png"))
+        except:
+            pass
 
-    global mushroom_cloud_frames
+
+    global mushroom_cloud_frames, endless_greed_frames
     mushroom_cloud_frames.clear()
-    try:
-        sheet = load_image("tower/mushroom_cloud.png")
-        fw = sheet.get_width() // 5
-        fh = sheet.get_height() // 2
-        for row in range(2):
-            for col in range(5):
-                frame = sheet.subsurface((col * fw, row * fh, fw, fh))
-                frame = pygame.transform.smoothscale(frame, (800, 1000))
-                mushroom_cloud_frames.append(frame)
-    except:
-        pass
+    sheet = load_image("tower/mushroom_cloud.png")
+    fw = sheet.get_width() // 5
+    fh = sheet.get_height() // 2
+    for row in range(2):
+        for col in range(5):
+            frame = sheet.subsurface((col * fw, row * fh, fw, fh))
+            frame = pygame.transform.smoothscale(frame, (800, 1000))
+            mushroom_cloud_frames.append(frame)
+
+
+    endless_greed_frames.clear()
+    for n in range(1, 21):
+        endless_greed_frames.append(load_image(f"tower/star{n:02d}.png"))
 
     gold_img = load_image("tower/2-1.png", (64, 64))
     emerald_img = load_image("tower/emerald.png", (80, 80))

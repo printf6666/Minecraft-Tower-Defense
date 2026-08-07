@@ -14,6 +14,9 @@ def get_tower_info(game, tower):
         if tower.level >= 11:
             if tower.physical_branch == 2:
                 info = [f"天堂陨落长弓 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"将当前金币的1%作为伤害加成", f"12方向散射", "按 R 切换分支"]
+            elif tower.physical_branch == 3:
+                info = [f"地狱升华之弩 Lv{tower.level}", "发射黑色射线", "秒杀离终点最近的敌人",
+                        "对BOSS造成5%最大生命伤害", f"攻击间隔:{(19 - tower.level)}s", "按 R 切换分支"]
             else:
                 info = [f"时空撕裂之矢 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s",
                         f"将当前金币的1%作为伤害加成", f"破甲:受伤永久增加20%", "按 R 切换分支"]
@@ -112,9 +115,9 @@ def get_tower_info(game, tower):
                         f"子弹命中释放竖向闪电:{dmg_map.get(tower.level,2500)}", "按 R 切换分支", f"攻击间隔:0.5s"]
             else:
                 per_px = {11: 8, 12: 10, 13: 12, 14: 14, 15: 16}
-                stun_s = {11: 0.1, 12: 0.2, 13: 0.3, 14: 0.4, 15: 0.5}
                 info = [f"山崩地裂之锤 Lv{tower.level}", f"伤害:{tower.damage}+{per_px.get(tower.level,8)}/px",
-                        f"击退:{tower.wind_knockback}px", f"击晕:{stun_s.get(tower.level,0.1)}s", "按 R 切换分支", f"攻击间隔:0.5s"]
+                        f"击退:{tower.wind_knockback}px", "最大距离命中:额外25%当前生命伤害",
+                        "按 R 切换分支", f"攻击间隔:0.5s"]
         elif tower.level >= 6:
             info = [f"重锤 Lv{tower.level}", f"伤害:{tower.damage}", f"击退:{tower.wind_knockback}px",
                     f"蓄风印记", f"攻击间隔:0.5s"]
@@ -177,12 +180,12 @@ def get_tower_info(game, tower):
                 info = [f"凋零核弹 Lv{tower.level}",
                         f"伤害:{(tower.level - 10)*2}%最大生命+{(tower.level - 10)*2000}固定",
                         f"击晕:2s", f"凋零:10s",
-                        f"射程:全屏", f"攻击间隔:20s", "按 R 切换形态"]
+                        f"射程:全屏", f"攻击间隔:35s", "按 R 切换形态"]
             else:
-                dmg = (20000 + 100 * game.temperature) * (tower.level - 10)
+                dmg = (40000 + 400 * game.temperature) * (tower.level - 10)
                 info = [f"核弹 Lv{tower.level}", f"伤害:{dmg}(受温度影响)",
                         f"击晕:2s", f"中毒:{tower.level * 10}层",
-                        f"射程:全屏", f"攻击间隔:20s", "按 R 切换形态"]
+                        f"射程:全屏", f"攻击间隔:35s", "按 R 切换形态"]
         elif tower.level >= 6:
             sub_names = {BombSubType.SNOW: "雪TNT", BombSubType.ICE: "冰TNT",
                          BombSubType.FLAME: "火焰TNT", BombSubType.POISON: "毒TNT",
@@ -241,6 +244,10 @@ class UIManager:
             img.set_alpha(alpha)
             self.game.screen.blit(img, (cb['x'] * TILE_SIZE, cb['y'] * TILE_SIZE))
         self.game.enemies.draw(self.game.screen)
+        for enemy in self.game.enemies:
+            if enemy.lich_shield > 0:
+                img = enemy.lich_shield_broken_image if enemy.lich_shield_broken_visual else enemy.lich_shield_image
+                self.game.screen.blit(img, img.get_rect(center=enemy.rect.center))
         self.game.bullets.draw(self.game.screen)
         for dragon in self.game.dragons:
             dragon.draw(self.game.screen)
@@ -250,6 +257,15 @@ class UIManager:
             if getattr(tower, 'has_shield', False):
                 self.game.screen.blit(assets.shield_img,
                                      (tower.x * TILE_SIZE, tower.y * TILE_SIZE))
+            elif tower.in_pulse():
+                img = assets.shield_img
+                scale = 1.0 + 0.1 * math.cos(2 * math.pi * tower.shield_pulse_timer / 30)
+                w, h = img.get_size()
+                scaled = pygame.transform.smoothscale(img, (max(1, int(w * scale)), max(1, int(h * scale))))
+                alpha = int(255 * (0.6 + 0.4 * tower.shield_pulse_timer / 480))
+                scaled.set_alpha(alpha)
+                self.game.screen.blit(scaled, scaled.get_rect(
+                    center=(tower.x * TILE_SIZE + TILE_SIZE // 2, tower.y * TILE_SIZE + TILE_SIZE // 2)))
         for enemy in self.game.enemies:
             enemy.draw_health_bar(self.game.screen)
 
@@ -279,6 +295,8 @@ class UIManager:
             explosion.draw(self.game.screen)
         for exp in self.game.ice_explosions:
             exp.draw(self.game.screen)
+        for ray in self.game.hell_rays:
+            ray.draw(self.game.screen)
         for splash in self.game.poison_splashes:
             splash.draw(self.game.screen)
         for splash in self.game.wither_splashes:
@@ -320,12 +338,8 @@ class UIManager:
             btn_color = FORECAST_BTN_COLOR if can_buy and can_afford else FORECAST_BTN_COLOR_DISABLED
             pygame.draw.rect(self.game.screen, btn_color,
                              (FORECAST_BTN_X, FORECAST_BTN_Y, FORECAST_BTN_WIDTH, FORECAST_BTN_HEIGHT))
-            if self.game.forecast_purchased and 0 <= self.game.forecast_weather_idx < len(self.game.weather_forecast):
-                forecast_names = []
-                for i in range(3):
-                    idx = self.game.forecast_weather_idx + i
-                    if idx < len(self.game.weather_forecast):
-                        forecast_names.append(WEATHER_CONFIG[self.game.weather_forecast[idx]]['name'])
+            if self.game.forecast_purchased and len(self.game.weather_forecast) >= 3:
+                forecast_names = [WEATHER_CONFIG[w]['name'] for w in self.game.weather_forecast[:3]]
                 label = f"天气预报:{','.join(forecast_names)}"
             else:
                 label = f"天气预报:花费{100*self.game.wave_manager.current_wave}金"
@@ -344,17 +358,14 @@ class UIManager:
         bar_right = INFO_BORDER_X - 40
         start_x = bar_left + (bar_right - bar_left - total_w) // 2
         positions = {}
-        for i, (ttype, name, cost, key) in enumerate(self.game.TOWER_DATA):
-            ix = start_x + i * step
-            iy = SCREEN_HEIGHT - 114
-            keys = (1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 'X')
-            self.game.screen.blit(assets.tower_icons[ttype.value], (ix, iy))
-            num_surf = assets.font_tower_level.render(str(keys[i]), True, YELLOW)
-            self.game.screen.blit(num_surf, (ix + 2, iy + 2))
-            price_surf = assets.font_tower_level.render(str(cost), True, GOLD)
-            self.game.screen.blit(price_surf, (ix + icon_size - price_surf.get_width() - 2,
-                                              iy + icon_size - price_surf.get_height() - 2))
-            positions[ttype] = (ix, iy)
+        for rect, ttype, key_label in self.get_tower_icon_rects():
+            self.game.screen.blit(assets.tower_icons[ttype.value], rect.topleft)
+            num_surf = assets.font_tower_level.render(key_label, True, YELLOW)
+            self.game.screen.blit(num_surf, (rect.x + 2, rect.y + 2))
+            price_surf = assets.font_tower_level.render(str(self.get_tower_cost(ttype)), True, GOLD)
+            self.game.screen.blit(price_surf, (rect.right - price_surf.get_width() - 2,
+                                              rect.bottom - price_surf.get_height() - 2))
+            positions[ttype] = (rect.x, rect.y)
         if self.game.selected_tower_type in positions:
             x, y = positions[self.game.selected_tower_type]
             hl = 110
@@ -405,6 +416,28 @@ class UIManager:
             rects.append((pygame.Rect(x, y, ENCHANT_ICON_SIZE, ENCHANT_ICON_SIZE), ench, cnt))
         return rects
 
+    def get_tower_icon_rects(self):
+        icon_size = 100
+        gap = 64
+        step = icon_size + gap
+        total_w = len(self.game.TOWER_DATA) * step - gap
+        bar_left = 60
+        bar_right = INFO_BORDER_X - 40
+        start_x = bar_left + (bar_right - bar_left - total_w) // 2
+        iy = SCREEN_HEIGHT - 114
+        keys = (1, 2, 3, 4, 5, 6, 7, 8, 9, 0, '-')
+        rects = []
+        for i, (ttype, name, cost, key) in enumerate(self.game.TOWER_DATA):
+            ix = start_x + i * step
+            rects.append((pygame.Rect(ix, iy, icon_size, icon_size), ttype, str(keys[i])))
+        return rects
+
+    def get_tower_cost(self, ttype):
+        for t, name, cost, key in self.game.TOWER_DATA:
+            if t == ttype:
+                return cost
+        return 0
+
     def wrap_text(self, text, font, max_width):
         lines = []
         while text:
@@ -434,6 +467,10 @@ class UIManager:
     def get_shop_continue_rect(self):
         panel = pygame.Rect(SCREEN_WIDTH // 2 - 600, 150, 1200, 1150)
         return pygame.Rect(panel.right - 260, panel.bottom - 90, 220, 60)
+
+    def get_shop_refresh_rect(self):
+        panel = pygame.Rect(SCREEN_WIDTH // 2 - 600, 150, 1200, 1150)
+        return pygame.Rect(panel.x + 40, panel.bottom - 90, 220, 60)
 
     def draw_shop(self):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -474,6 +511,13 @@ class UIManager:
         if not self.game.shop_offers:
             empty_text = assets.font_medium.render("已拥有全部附魔", True, (200, 200, 200))
             self.game.screen.blit(empty_text, (panel.centerx - empty_text.get_width() // 2, panel.y + 280))
+
+        refresh_rect = self.get_shop_refresh_rect()
+        can_refresh = self.game.emeralds >= 20
+        pygame.draw.rect(self.game.screen, (130, 110, 40) if can_refresh else (60, 60, 60), refresh_rect)
+        refresh_text = assets.font_small.render(f"刷新 (20绿宝石)", True, WHITE if can_refresh else (140, 140, 140))
+        self.game.screen.blit(refresh_text, (refresh_rect.centerx - refresh_text.get_width() // 2,
+                                             refresh_rect.y + (refresh_rect.height - refresh_text.get_height()) // 2))
 
         cont_rect = self.get_shop_continue_rect()
         pygame.draw.rect(self.game.screen, (60, 130, 60), cont_rect)

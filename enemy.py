@@ -24,13 +24,11 @@ class Enemy(pygame.sprite.Sprite):
             self.health = self.max_health
             self.total_layers = 18
             self.current_layer = 18
-        elif enemy_key == "WITCH":
+        elif enemy_key == "LICH":
             self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
             self.health = self.max_health
             self.total_layers = 1
             self.current_layer = 1
-            self.freeze_resistance = 1.0
-            self.stun_resistance = 1.0
         elif enemy_key in ("CREEPER", "CHARGED_CREEPER"):
             self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
             self.health = self.max_health
@@ -45,6 +43,14 @@ class Enemy(pygame.sprite.Sprite):
         self.creeper_explode_timer = 900 if enemy_key in ("CREEPER", "CHARGED_CREEPER") else -1
         self.reward = config["reward"]
         self.base_speed = self.speed
+        self.lich_shield = 100 if enemy_key == "LICH" else 0
+        self.lich_shield_broken_visual = False
+        if enemy_key == "LICH":
+            self.lich_shield_image = assets.load_image("enemy/lich_shield_full.png")
+            self.lich_shield_broken_image = assets.load_image("enemy/lich_shield_broken.png")
+        else:
+            self.lich_shield_image = None
+            self.lich_shield_broken_image = None
 
         self.stun_time = 0
         self.freeze_time = 0
@@ -61,7 +67,6 @@ class Enemy(pygame.sprite.Sprite):
         self.weather_slowed = False
         self.freeze_resistance = 0.0
         self.stun_resistance = 0.0
-        self.witch_heal_timer = 0
         self.last_freeze_time = -9999
         self.last_stun_time = -9999
         rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN)
@@ -139,16 +144,14 @@ class Enemy(pygame.sprite.Sprite):
         self.burn_time = max(self.burn_time, duration)
 
     def apply_stun(self, duration):
-        if self.enemy_type == EnemyType.WITCH:
-            return
         effective = int(duration * (1.0 - self.stun_resistance))
         self.stun_time = max(self.stun_time, effective)
         self.stun_resistance = min(0.90, self.stun_resistance + 0.10)
         self.last_stun_time = self.game.game_time
 
     def apply_freeze(self, duration):
-        if self.enemy_type == EnemyType.WITCH:
-            return
+        if self.game.temperature < 0:
+            duration = int(duration * (1 + abs(self.game.temperature) / 60))
         effective = int(duration * (1.0 - self.freeze_resistance))
         self.freeze_time = max(self.freeze_time, effective)
         self.freeze_resistance = min(0.90, self.freeze_resistance + 0.10)
@@ -186,8 +189,10 @@ class Enemy(pygame.sprite.Sprite):
         cy = self.rect.centery // TILE_SIZE
         for t in list(self.game.towers):
             if abs(t.x - cx) <= half and abs(t.y - cy) <= half:
+                if t.in_pulse():
+                    continue
                 if getattr(t, 'has_shield', False):
-                    t.has_shield = False
+                    t.break_shield()
                 else:
                     t.kill()
         for wall in list(self.game.ice_walls):
@@ -223,11 +228,9 @@ class Enemy(pygame.sprite.Sprite):
             return False
 
         if self.game.game_time - self.last_freeze_time > 600:
-            if self.enemy_type != EnemyType.WITCH:
-                self.freeze_resistance = 0.0
+            self.freeze_resistance = 0.0
         if self.game.game_time - self.last_stun_time > 600:
-            if self.enemy_type != EnemyType.WITCH:
-                self.stun_resistance = 0.0
+            self.stun_resistance = 0.0
 
         if self.creeper_explode_timer > 0:
             self.creeper_explode_timer -= 1
@@ -251,6 +254,8 @@ class Enemy(pygame.sprite.Sprite):
                 dmg = self.burn_damage
                 if Enchantment.BURN in self.game.enchantments:
                     dmg *= 2
+                if Enchantment.BLAZE_POWDER in self.game.enchantments:
+                    dmg *= 1.3
                 reward = self.take_damage(int(dmg), color=YELLOW, scale=1.0)
                 self.game.coins += reward
 
@@ -269,15 +274,6 @@ class Enemy(pygame.sprite.Sprite):
                 dmg = int(self.max_health * 0.01)
                 reward = self.take_damage(dmg, color=(100, 0, 100), scale=1.0, ignore_armor=True)
                 self.game.coins += reward
-
-        if self.enemy_type == EnemyType.WITCH:
-            self.witch_heal_timer += 1
-            if self.witch_heal_timer >= 150:
-                self.witch_heal_timer = 0
-                for e in self.game.enemies:
-                    if e.health > 0 and e.max_health > 0:
-                        heal = max(1, int(e.max_health * 0.01))
-                        e.health = min(e.max_health, e.health + heal)
 
         if self.health <= 0:
             self.kill()
@@ -389,6 +385,11 @@ class Enemy(pygame.sprite.Sprite):
         if self.health <= 0:
             return 0
 
+        if self.lich_shield > 0:
+            self.lich_shield -= 1
+            self._update_lich_shield_image()
+            return 0
+
         if ignore_armor:
             final_dmg = damage
         else:
@@ -398,7 +399,7 @@ class Enemy(pygame.sprite.Sprite):
             if self.enemy_type in (EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED) and not self.broken:
                 final_dmg *= 0.2
             if self.broken:
-                final_dmg *= 1.4 if Enchantment.SHATTER in self.game.enchantments else 1.2
+                final_dmg *= 1.2
         final_dmg = int(final_dmg)
         self.health -= final_dmg
 
@@ -446,8 +447,9 @@ class Enemy(pygame.sprite.Sprite):
                     self.game.enemies.add(child)
             if self.wind_mark_tower is not None:
                 t = self.wind_mark_tower
+                exp_dmg = 5000 if Enchantment.WIND_BURST in self.game.enchantments else t.damage
                 exp = WindExplosion(self.rect.centerx, self.rect.centery,
-                                   t.damage, t.wind_knockback, self.game)
+                                   exp_dmg, t.wind_knockback, self.game)
                 self.game.wind_explosions.append(exp)
                 self.wind_mark_tower = None
             if self.poison_stacks > 0 and Enchantment.POISON_CONTRACT in self.game.enchantments:
@@ -456,6 +458,12 @@ class Enemy(pygame.sprite.Sprite):
             self.kill()
             return self.reward
         return 0
+
+    def _update_lich_shield_image(self):
+        if self.enemy_type != EnemyType.LICH:
+            return
+        if self.lich_shield < 50 and not self.lich_shield_broken_visual:
+            self.lich_shield_broken_visual = True
 
     def draw_health_bar(self, screen):
         if self.health <= 0:

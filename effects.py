@@ -1,3 +1,5 @@
+import math
+import random
 import pygame
 import assets
 from config import *
@@ -35,8 +37,9 @@ class EndlessGreedExplosion:
         self.x = x
         self.y = y
         self.game = game
-        self.duration = 10
-        self.radius = 64
+        self.frame_index = 0
+        self.frame_accum = 0
+        self.radius = 128
         for enemy in game.enemies:
             if enemy.health <= 0:
                 continue
@@ -44,47 +47,86 @@ class EndlessGreedExplosion:
             dy = enemy.rect.centery - y
             if (dx * dx + dy * dy) <= self.radius * self.radius:
                 pct_dmg = max(1, int(enemy.max_health * 0.01))
-                reward = enemy.take_damage(pct_dmg, color=BLACK, scale=0.6)
+                reward = enemy.take_damage(pct_dmg, color=WHITE, scale=1.0)
                 game.coins += reward
+
+    def update(self):
+        self.frame_accum += 1
+        if self.frame_accum >= 3:
+            self.frame_accum = 0
+            self.frame_index += 1
+        return self.frame_index < len(assets.endless_greed_frames)
+
+    def draw(self, surface):
+        if self.frame_index >= len(assets.endless_greed_frames):
+            return
+        img = assets.endless_greed_frames[self.frame_index]
+        surface.blit(img, img.get_rect(center=(self.x, self.y)))
+
+
+class HellRay:
+    def __init__(self, x1, y1, x2, y2):
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.duration = 12
 
     def update(self):
         self.duration -= 1
         return self.duration > 0
 
     def draw(self, screen):
-        alpha = int(120 * self.duration / 10)
-        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
-        pygame.draw.circle(s, (0, 0, 0, alpha), (self.radius, self.radius), self.radius)
-        screen.blit(s, (int(self.x - self.radius), int(self.y - self.radius)))
+        if self.duration <= 0:
+            return
+        t = self.duration / 12
+        sx = min(self.x1, self.x2)
+        sy = min(self.y1, self.y2)
+        s = pygame.Surface((abs(self.x2 - self.x1) + 4, abs(self.y2 - self.y1) + 4), pygame.SRCALPHA)
+        s.set_alpha(int(255 * t))
+        pygame.draw.line(s, (0, 0, 0),
+                         (self.x1 - sx + 2, self.y1 - sy + 2),
+                         (self.x2 - sx + 2, self.y2 - sy + 2),
+                         max(2, int(10 * t)))
+        screen.blit(s, (sx - 2, sy - 2))
 
 
 class IceExplosion:
     def __init__(self, x, y, damage, freeze_time, game):
         self.x = x
         self.y = y
-        self.duration = 6
-        self.radius = 128
-        if game.frost_combo_active():
-            self.radius = int(self.radius * 1.125)
+        self.game = game
+        self.w = 282
+        self.h = 320
+        self.frames = []
+        for img in assets.ice_explosion_frames:
+            if img.get_width() != self.w or img.get_height() != self.h:
+                img = pygame.transform.smoothscale(img, (self.w, self.h))
+            self.frames.append(img)
+        self.frame_index = 0
+        self.frame_accum = 0
         for enemy in game.enemies:
             if enemy.health <= 0:
                 continue
             dx = enemy.rect.centerx - x
             dy = enemy.rect.centery - y
-            if (dx * dx + dy * dy) <= self.radius * self.radius:
+            if abs(dx) <= self.w // 2 and abs(dy) <= self.h // 2:
                 reward = enemy.take_damage(damage, color=ICE_BLUE, scale=0.8)
                 game.coins += reward
                 enemy.apply_freeze(freeze_time)
 
     def update(self):
-        self.duration -= 1
-        return self.duration > 0
+        self.frame_accum += 1
+        if self.frame_accum >= 3:
+            self.frame_accum = 0
+            self.frame_index += 1
+        return self.frame_index < len(self.frames)
 
     def draw(self, screen):
-        alpha = int(80 * self.duration / 6)
-        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
-        pygame.draw.circle(s, (100, 150, 255, alpha), (self.radius, self.radius), self.radius)
-        screen.blit(s, (self.x - self.radius, self.y - self.radius))
+        if self.frame_index >= len(self.frames):
+            return
+        img = self.frames[self.frame_index]
+        screen.blit(img, img.get_rect(center=(self.x, self.y)))
 
 
 class DragonBreathPool:
@@ -279,7 +321,7 @@ class MushroomExplosion:
             assets.explode_sound.play()
 
         if bomb_branch == 1:
-            final_damage = (20000 + 100 * game.temperature) * (tower_level - 10)
+            final_damage = (40000 + 400 * game.temperature) * (tower_level - 10)
             final_damage = int(final_damage * game.get_enchant_damage_multiplier(TowerType.BOMB))
             for enemy in game.enemies:
                 if enemy.health <= 0:
@@ -287,10 +329,11 @@ class MushroomExplosion:
                 reward = enemy.take_damage(final_damage, color=RED, scale=1.2)
                 game.coins += reward
                 enemy.apply_stun(120)
-                enemy.apply_poison(tower_level * 10)
         else:
             percent_damage = [0.02, 0.04, 0.06, 0.08, 0.1][tower_level - 11]
             fixed_damage = [2000, 4000, 6000, 8000, 10000][tower_level - 11]
+            if Enchantment.WITHER_ROSE in game.enchantments:
+                percent_damage += 0.008
             for enemy in game.enemies:
                 if enemy.health <= 0:
                     continue

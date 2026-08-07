@@ -18,8 +18,9 @@ class WaveManager:
     def start_new_wave(self):
         self.current_wave += 1
         self.enemies_spawned = 0
+        self.lich_count = self.calculate_lich_count()
         if self.current_wave == 50:
-            self.enemies_to_spawn = 1
+            self.enemies_to_spawn = 1 + self.lich_count
             self.gold_armored_count = 0
             self.ghost_count = 0
             self.gold_nautilus_count = 0
@@ -27,10 +28,11 @@ class WaveManager:
             self.gold_armored_count = self.calculate_gold_armored_count()
             self.ghost_count = self.calculate_ghost_count()
             self.gold_nautilus_count = self.calculate_gold_nautilus_count()
-            self.enemies_to_spawn = self.calculate_enemies_to_spawn() + self.gold_armored_count + self.ghost_count + self.gold_nautilus_count
+            self.enemies_to_spawn = self.calculate_enemies_to_spawn() + self.gold_armored_count + self.ghost_count + self.gold_nautilus_count + self.lich_count
         self.gold_armored_spawned = 0
         self.ghost_spawned = 0
         self.gold_nautilus_spawned = 0
+        self.lich_spawned = 0
         self.spawn_timer = 0
         self.wave_timer = self.wave_preparation_time
 
@@ -57,6 +59,11 @@ class WaveManager:
             return (self.current_wave - 10) // 5
         return 0
 
+    def calculate_lich_count(self):
+        if self.current_wave >= 30 and self.current_wave % 10 == 0:
+            return 1
+        return 0
+
     def is_elite_wave(self):
         return self.current_wave % self.elite_wave_interval == 0 and self.current_wave > 0
 
@@ -77,6 +84,9 @@ class WaveManager:
         return None
 
     def select_enemy_type(self):
+        if self.lich_spawned < self.lich_count:
+            self.lich_spawned += 1
+            return EnemyType.LICH
         if self.current_wave == 50:
             return EnemyType.HEROBRINE
         if self.gold_armored_spawned < self.gold_armored_count:
@@ -102,7 +112,7 @@ class WaveManager:
         elif self.current_wave > 15 and rand < 0.18:
             return EnemyType.MAGMA_CUBE
         elif self.current_wave >= 15 and rand < 0.08:
-            return EnemyType.WITCH
+            return EnemyType.LICH
         elif self.current_wave > 8 and rand < 0.15:
             return EnemyType.IRON_ARMORED
         elif self.current_wave > 12 and rand < 0.25:

@@ -25,7 +25,7 @@ TOWER_DATA = [
     (TowerType.POISON,     "毒系", 175,  pygame.K_8),
     (TowerType.BOMB,       "TNT", 500,  pygame.K_9),
     (TowerType.SHIELD,     "盾塔", 225,  pygame.K_0),
-    (TowerType.TIME,       "时间", 125,  pygame.K_x)
+    (TowerType.TIME,       "时间", 125,  pygame.K_MINUS)
     ]
 
 SCREEN_WIDTH = 2560
@@ -94,19 +94,20 @@ class Enchantment(Enum):
     WIND = 5
     POISON = 6
     BOMB = 7
-    SOLAR = 8
-    PLUTO = 9
+    DENSE = 8
+    WIND_BURST = 9
     POISON_CONTRACT = 10
     BURN = 11
-    FIRE_RAIN = 12
+    BLAZE_POWDER = 12
     FROZEN_DEEP = 13
     DRAGON_LEGEND = 14
     ENDLESS_GREED = 15
     RAIN_FIRE = 16
-    SHATTER = 17
+    WITHER_ROSE = 17
     LAVA = 18
     TELESCOPE = 19
     FIRE_ARROW = 20
+    PULSE_SHIELD = 21
 
 ENCHANTMENT_DATA = {
     Enchantment.BALANCED: {"name": "均衡强化", "desc": "所有伤害+5%", "cost": 100},
@@ -117,35 +118,38 @@ ENCHANTMENT_DATA = {
     Enchantment.WIND: {"name": "风系强化", "desc": "风系伤害+20%", "cost": 100},
     Enchantment.POISON: {"name": "毒系强化", "desc": "毒系伤害+20%", "cost": 100},
     Enchantment.BOMB: {"name": "爆炸强化", "desc": "爆炸伤害+20%", "cost": 100},
-    Enchantment.SOLAR: {"name": "人造太阳", "desc": "温度提高8度", "cost": 100},
-    Enchantment.PLUTO: {"name": "人造月亮", "desc": "温度降低5度", "cost": 100},
-    Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "中毒的敌人被击败时有10%概率使全局中毒基础伤害永久提高1点", "cost": 300},
+    Enchantment.DENSE: {"name": "致密", "desc": "重锤获得距离增伤，伤害+2/px", "cost": 200},
+    Enchantment.WIND_BURST: {"name": "风爆", "desc": "蓄风印记爆炸伤害固定为5000点", "cost": 200},
+    Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "中毒的敌人被击败时有10%概率使全局中毒基础伤害永久提高1点", "cost": 400},
     Enchantment.BURN: {"name": "高温燃烧", "desc": "燃烧伤害翻倍", "cost": 200},
-    Enchantment.FIRE_RAIN: {"name": "燃烧天际", "desc": "火雨出现概率大幅提升", "cost": 400},
-    Enchantment.FROZEN_DEEP: {"name": "冰冻三尺", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹爆炸半径+12.5%，冰墙存在时间翻倍", "cost": 400},
+    Enchantment.BLAZE_POWDER: {"name": "烈焰粉", "desc": "敌人永远燃烧，燃烧伤害+30%", "cost": 400},
+    Enchantment.FROZEN_DEEP: {"name": "冰冻三尺", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹冻结时长+0.5秒，冰墙存在时间翻倍", "cost": 400},
     Enchantment.DRAGON_LEGEND: {"name": "龙族传说", "desc": "同时存在冰龙塔、火龙塔、电龙塔时，龙伤害翻倍且移动速度+75%", "cost": 600},
-    Enchantment.ENDLESS_GREED: {"name": "无尽贪婪", "desc": "集齐六件无尽炮塔后，其子弹5%概率爆炸：范围1%最大生命伤害并获得500金币", "cost": 1000},
+    Enchantment.ENDLESS_GREED: {"name": "无尽贪婪", "desc": "集齐七件无尽炮塔后，其子弹5%概率爆炸，造成1%最大生命伤害并获得500金币", "cost": 1600},
     Enchantment.RAIN_FIRE: {"name": "水火相容", "desc": "雨天/雷暴/酸雨可以点燃敌人", "cost": 200},
-    Enchantment.SHATTER: {"name": "粉碎", "desc": "破甲易伤增加至40%", "cost": 600},
-    Enchantment.LAVA: {"name": "岩浆", "desc": "每5秒提高1温度，每波开始时重置", "cost": 400},
+    Enchantment.WITHER_ROSE: {"name": "凋零玫瑰", "desc": "凋零核弹伤害额外附加0.8%最大生命", "cost": 1600},
+    Enchantment.LAVA: {"name": "岩浆桶", "desc": "每5秒提高1温度，每波开始时重置", "cost": 200},
     Enchantment.TELESCOPE: {"name": "望远镜", "desc": "所有炮塔基础射程增加1格", "cost": 200},
-    Enchantment.FIRE_ARROW: {"name": "火矢", "desc": "箭矢伤害+100（受均衡强化/物理强化二次增伤），附带燃烧4秒", "cost": 200},
+    Enchantment.FIRE_ARROW: {"name": "火矢", "desc": "箭矢伤害*2，附带燃烧4秒", "cost": 200},
+    Enchantment.PULSE_SHIELD: {"name": "脉冲护盾", "desc": "护盾被击碎后进入脉冲状态8秒，期间免疫所有伤害", "cost": 800},
 }
 
 ENCHANTMENT_ORDER = [
     Enchantment.BALANCED, Enchantment.PHYSICAL, Enchantment.ICE, Enchantment.FLAME, Enchantment.TRIDENT,
-    Enchantment.WIND, Enchantment.POISON, Enchantment.BOMB, Enchantment.SOLAR, Enchantment.PLUTO,
-    Enchantment.POISON_CONTRACT, Enchantment.BURN, Enchantment.FIRE_RAIN, Enchantment.FROZEN_DEEP,
-    Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.SHATTER,
-    Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.FIRE_ARROW,
+    Enchantment.WIND, Enchantment.POISON, Enchantment.BOMB, Enchantment.DENSE, Enchantment.WIND_BURST,
+    Enchantment.POISON_CONTRACT, Enchantment.BURN, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
+    Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.WITHER_ROSE,
+    Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.FIRE_ARROW, Enchantment.PULSE_SHIELD,
 ]
 
+NON_REPEATABLE_ENCHANTMENTS = {Enchantment.DENSE, Enchantment.WIND_BURST}
+
 ENCHANT_BOX_WIDTH = 512
-ENCHANT_BOX_HEIGHT = 404
+ENCHANT_BOX_HEIGHT = 432
 ENCHANT_BOX_Y = INFO_BORDER_Y - ENCHANT_BOX_HEIGHT
-ENCHANT_ICON_SIZE = 80
-ENCHANT_ICON_GAP = 20
-ENCHANT_ICONS_PER_ROW = 5
+ENCHANT_ICON_SIZE = 72
+ENCHANT_ICON_GAP = 8
+ENCHANT_ICONS_PER_ROW = 6
 class BombSubType(Enum):
     SNOW = 1
     ICE = 2
@@ -178,7 +182,7 @@ class EnemyType(Enum):
     MAGMA_CUBE = 17
     MAGMA_CUBE_SMALL = 18
     HEROBRINE = 19
-    WITCH = 20
+    LICH = 20
     CREEPER = 21
     CHARGED_CREEPER = 22
     SPIDER = 23
@@ -243,7 +247,7 @@ ENEMY_TYPES = {
     "NETHERITE_NAUTILUS": {"image": "netherite_nautilus.png", "speed": 1.2, "health": 300, "reward": 50},
     "MAGMA_CUBE": {"image": "magma_cube.png", "speed": 2.0, "health": 180, "reward": 25},
     "MAGMA_CUBE_SMALL": {"image": "magma_cube.png", "speed": 3.0, "health": 90, "reward": 10},
-    "WITCH": {"image": "witch.png", "speed": 1.5, "health": 130, "reward": 40},
+    "LICH": {"image": "lich.png", "speed": 3, "health": 500, "reward": 40},
     "CREEPER": {"image": "creeper.png", "speed": 2, "health": 100, "reward": 20},
     "CHARGED_CREEPER": {"image": "charged_creeper.png", "speed": 2, "health": 100, "reward": 20},
     "SPIDER": {"image": "spider.png", "speed": 4, "health": 100, "reward": 20},

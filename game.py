@@ -13,6 +13,13 @@ from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
 from dragons import Dragon
 
+WEATHER_FORECAST_POOL = [
+    Weather.ACID_RAIN, Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
+    Weather.THUNDERSTORM, Weather.TAILWIND, Weather.HEADWIND,
+    Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD, Weather.MAGNETIC_STORM,
+    Weather.FIRE_RAIN, Weather.AURORA,
+]
+
 
 def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
@@ -62,8 +69,8 @@ class Game:
         self.bullets = pygame.sprite.Group()
         self.damage_texts = pygame.sprite.Group()
         self.dragons = pygame.sprite.Group()
-        self.coins = 2560
-        self.emeralds = 0
+        self.coins = 2500
+        self.emeralds = 100
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
         self.selected_tower = None
@@ -88,6 +95,7 @@ class Game:
         self.wind_explosions = []
         self.endless_greed_explosions = []
         self.ice_explosions = []
+        self.hell_rays = []
         self.poison_splashes = []
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
@@ -101,7 +109,6 @@ class Game:
         self.fog_visible = False
         self.weather_forecast = []
         self.forecast_purchased = False
-        self.forecast_weather_idx = -1
 
         self.night_dark_timer = 0
         self.herobrine_phase = 0
@@ -211,16 +218,26 @@ class Game:
                             self.quit_game()
 
                     elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION):
-                        clicked_tower = self.get_tower_at(grid_x, grid_y)
-                        if clicked_tower:
-                            self.selected_tower = clicked_tower
-                            self.selected_tower_type = None
-                            self.show_range = True
-                        else:
+                        icon_clicked = None
+                        for rect, ttype, key_label in self.ui_manager.get_tower_icon_rects():
+                            if rect.collidepoint(mouse_x, mouse_y):
+                                icon_clicked = ttype
+                                break
+                        if icon_clicked is not None:
                             self.selected_tower = None
+                            self.selected_tower_type = icon_clicked
                             self.show_range = False
-                            if self.selected_tower_type and self.can_build_tower(grid_x, grid_y):
-                                self.build_tower(grid_x, grid_y, self.selected_tower_type)
+                        else:
+                            clicked_tower = self.get_tower_at(grid_x, grid_y)
+                            if clicked_tower:
+                                self.selected_tower = clicked_tower
+                                self.selected_tower_type = None
+                                self.show_range = True
+                            else:
+                                self.selected_tower = None
+                                self.show_range = False
+                                if self.selected_tower_type and self.can_build_tower(grid_x, grid_y):
+                                    self.build_tower(grid_x, grid_y, self.selected_tower_type)
 
                     elif self.state == GameState.SHOP:
                         bought = False
@@ -231,6 +248,8 @@ class Game:
                                 break
                         if not bought and self.ui_manager.get_shop_continue_rect().collidepoint(mouse_x, mouse_y):
                             self.close_shop()
+                        elif self.ui_manager.get_shop_refresh_rect().collidepoint(mouse_x, mouse_y):
+                            self.refresh_shop()
 
                     elif self.state in (GameState.GAME_OVER, GameState.VICTORY):
                         if 900 <= mouse_x <= 1660 and 850 <= mouse_y <= 930:
@@ -241,11 +260,11 @@ class Game:
                         if self.state == GameState.PLAYING and not self.forecast_purchased and self.wave_manager.current_wave < 97 and self.coins >= 100 * self.wave_manager.current_wave:
                             self.coins -= 100 * self.wave_manager.current_wave
                             self.forecast_purchased = True
-                            self.forecast_weather_idx = self.wave_manager.current_wave
-                            if self.forecast_weather_idx < len(self.weather_forecast):
-                                w = self.weather_forecast[self.forecast_weather_idx]
-                                self.weather_banner_text = f"下波天气：{WEATHER_CONFIG[w]['desc']}"
-                                self.weather_banner_timer = 120
+                            if not self.weather_forecast:
+                                self.weather_forecast = [self._generate_weather_for_wave(w) for w in range(1, 4)]
+                            w = self.weather_forecast[0]
+                            self.weather_banner_text = f"下波天气：{WEATHER_CONFIG[w]['desc']}"
+                            self.weather_banner_timer = 120
 
             elif event.type == pygame.KEYDOWN:
                 for ttype, name, cost, key in TOWER_DATA:
@@ -308,7 +327,7 @@ class Game:
                         self.selected_tower.poison_branch = self.selected_tower.poison_branch % max_branch + 1
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.PHYSICAL and self.selected_tower.level >= 11:
-                        self.selected_tower.physical_branch = 3 - self.selected_tower.physical_branch
+                        self.selected_tower.physical_branch = self.selected_tower.physical_branch % 3 + 1
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.WIND and self.selected_tower.level >= 11:
                         self.selected_tower.wind_branch = 3 - self.selected_tower.wind_branch
@@ -496,8 +515,8 @@ class Game:
         self.bullets.empty()
         self.damage_texts.empty()
         self.dragons.empty()
-        self.coins = 2560
-        self.emeralds = 0
+        self.coins = 2500
+        self.emeralds = 100
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
         self.selected_tower = None
@@ -519,6 +538,7 @@ class Game:
         self.wind_explosions = []
         self.endless_greed_explosions = []
         self.ice_explosions = []
+        self.hell_rays = []
         self.poison_splashes = []
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
@@ -531,7 +551,6 @@ class Game:
         self.fog_visible = False
         self.weather_forecast = []
         self.forecast_purchased = False
-        self.forecast_weather_idx = -1
         self.pending_first_wave_weather = False
         self.gold_ore_positions = set()
         self.night_dark_timer = 0
@@ -587,7 +606,18 @@ class Game:
         self.enchantments = [Enchantment(v) for v in data.get("enchantments", [])]
         self.poison_base_damage = data.get("poison_base_damage", 10)
         raw_forecast = data.get("weather_forecast", [])
-        self.weather_forecast = [Weather(v) for v in raw_forecast]
+        if data.get("forecast_start") is None and len(raw_forecast) == 3:
+            queue = []
+            for v in raw_forecast:
+                try:
+                    queue.append(Weather(v))
+                except ValueError:
+                    queue.append(Weather.SUNNY)
+            self.weather_forecast = queue
+            self.forecast_purchased = data.get("forecast_purchased", False)
+        else:
+            self.weather_forecast = []
+            self.forecast_purchased = False
         wave_num = max(1, data.get("wave", 1))
         self.wave_manager.current_wave = wave_num - 1
         for td in data.get("towers", []):
@@ -633,7 +663,6 @@ class Game:
         self.temperature += self.enchantment_temp_bonus()
         self.temperature = max(-273, self.temperature)
         self.wave_manager.start_new_wave()
-        self.forecast_weather_idx = self.wave_manager.current_wave if self.forecast_purchased else -1
         self.state = GameState.PLAYING
         self.pending_first_wave_weather = False
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
@@ -681,10 +710,7 @@ class Game:
         return 1.0 + bonus / 100.0
 
     def enchantment_temp_bonus(self):
-        bonus = 0
-        bonus += 8 * self.enchantments.count(Enchantment.SOLAR)
-        bonus -= 5 * self.enchantments.count(Enchantment.PLUTO)
-        return bonus
+        return 0
 
     def frost_combo_active(self):
         if Enchantment.FROZEN_DEEP not in self.enchantments:
@@ -706,11 +732,12 @@ class Game:
             return False
         has_t1 = any(t.type == TowerType.PHYSICAL and t.level >= 11 and t.physical_branch == 1 for t in self.towers)
         has_t2 = any(t.type == TowerType.PHYSICAL and t.level >= 11 and t.physical_branch == 2 for t in self.towers)
+        has_t3 = any(t.type == TowerType.PHYSICAL and t.level >= 11 and t.physical_branch == 3 for t in self.towers)
         has_e1 = any(t.type == TowerType.TELEPORT and t.level >= 11 and t.teleport_branch == 1 for t in self.towers)
         has_e2 = any(t.type == TowerType.TELEPORT and t.level >= 11 and t.teleport_branch == 2 for t in self.towers)
         has_w1 = any(t.type == TowerType.WIND and t.level >= 11 and t.wind_branch == 1 for t in self.towers)
         has_tr1 = any(t.type == TowerType.TRIDENT and t.level >= 11 and t.trident_branch == 1 for t in self.towers)
-        return has_t1 and has_t2 and has_e1 and has_e2 and has_w1 and has_tr1
+        return has_t1 and has_t2 and has_t3 and has_e1 and has_e2 and has_w1 and has_tr1
 
     def endless_greed_explode(self, x, y):
         self.coins += 500
@@ -718,7 +745,9 @@ class Game:
         self.endless_greed_explosions.append(exp)
 
     def _shop_pool(self):
-        return [e for e in ENCHANTMENT_ORDER if e.value < 10 or e not in self.enchantments]
+        return [e for e in ENCHANTMENT_ORDER
+                if (e.value >= 10 or e in NON_REPEATABLE_ENCHANTMENTS) and e not in self.enchantments
+                or (e.value < 10 and e not in NON_REPEATABLE_ENCHANTMENTS)]
 
     def open_shop(self):
         if self.shop_offers_wave != self.wave_manager.current_wave or not self.shop_offers:
@@ -731,6 +760,13 @@ class Game:
         self.shop_offers = random.sample(pool, min(3, len(pool)))
         self.shop_offers_wave = self.wave_manager.current_wave
 
+    def refresh_shop(self):
+        if self.emeralds < 20:
+            return
+        self.emeralds -= 20
+        self.reroll_shop()
+        self.save_game()
+
     def close_shop(self):
         self.state = GameState.PLAYING
         self.forecast_purchased = False
@@ -740,7 +776,7 @@ class Game:
         self.weather_banner_timer = 180
 
     def buy_enchantment(self, ench):
-        if ench.value >= 10 and ench in self.enchantments:
+        if (ench.value >= 10 or ench in NON_REPEATABLE_ENCHANTMENTS) and ench in self.enchantments:
             return
         cost = ENCHANTMENT_DATA[ench]["cost"]
         if self.emeralds < cost:
@@ -749,20 +785,7 @@ class Game:
         self.enchantments.append(ench)
         if ench in self.shop_offers:
             self.shop_offers.remove(ench)
-        if ench == Enchantment.SOLAR:
-            self.temperature += 8
-        elif ench == Enchantment.PLUTO:
-            self.temperature -= 5
-        elif ench == Enchantment.FIRE_RAIN:
-            self.convert_future_waves_to_fire_rain()
         self.save_game()
-
-    def convert_future_waves_to_fire_rain(self):
-        for wave_num in range(self.wave_manager.current_wave + 1, self.wave_manager.total_waves + 1):
-            idx = wave_num - 1
-            if 0 <= idx < len(self.weather_forecast):
-                if random.random() < 0.5:
-                    self.weather_forecast[idx] = Weather.FIRE_RAIN
 
     def update(self):
         if self.state == GameState.PAUSED:
@@ -786,6 +809,10 @@ class Game:
                 if reached_end:
                     enemy.kill()
                     self.state = GameState.GAME_OVER
+
+            if Enchantment.BLAZE_POWDER in self.enchantments:
+                for enemy in self.enemies:
+                    enemy.apply_burn(self.temperature, 999999)
 
             self._build_enemy_grid()
 
@@ -858,8 +885,10 @@ class Game:
                             dx = abs(tower.x - cb['x'])
                             dy = abs(tower.y - cb['y'])
                             if dx <= 1 and dy <= 1:
+                                if tower.in_pulse():
+                                    continue
                                 if getattr(tower, 'has_shield', False):
-                                    tower.has_shield = False
+                                    tower.break_shield()
                                     self.trigger_shield_burst(tower)
                                 else:
                                     tower.kill()
@@ -908,6 +937,10 @@ class Game:
             for exp in self.ice_explosions[:]:
                 if not exp.update():
                     self.ice_explosions.remove(exp)
+
+            for ray in self.hell_rays[:]:
+                if not ray.update():
+                    self.hell_rays.remove(ray)
 
             for splash in self.poison_splashes[:]:
                 if not splash.update():
@@ -998,29 +1031,23 @@ class Game:
                             self.herobrine_summon_queue.append(EnemyType.MAGMA_CUBE)
 
 
-    def generate_weather_forecast(self):
-        weathers = [Weather.ACID_RAIN, Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
-                    Weather.THUNDERSTORM, Weather.TAILWIND, Weather.HEADWIND,
-                    Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD, Weather.MAGNETIC_STORM,
-                    Weather.FIRE_RAIN, Weather.AURORA]
-        self.weather_forecast = []
-        for i in range(self.wave_manager.total_waves):
-            pool = list(weathers)
-            if i + 1 > 50:
-                pool.append(Weather.ENDLESS_NIGHT)
-            self.weather_forecast.append(random.choice(pool))
+    def _generate_weather_for_wave(self, wave_num):
+        if wave_num == 50:
+            return Weather.ENDLESS_NIGHT
+        pool = list(WEATHER_FORECAST_POOL)
+        if wave_num > 50:
+            pool.append(Weather.ENDLESS_NIGHT)
+        return random.choice(pool)
 
     def select_weather(self):
         self.fog_visible = False
         self.lava_timer = 0
+        if not self.weather_forecast:
+            self.weather_forecast = [self._generate_weather_for_wave(w) for w in range(1, 4)]
+        self.weather = self.weather_forecast.pop(0)
         if self.wave_manager.current_wave == 50:
             self.weather = Weather.ENDLESS_NIGHT
-        else:
-            wave_idx = self.wave_manager.current_wave - 1
-            if 0 <= wave_idx < len(self.weather_forecast):
-                self.weather = self.weather_forecast[wave_idx]
-            else:
-                self.weather = Weather.SUNNY
+        self.weather_forecast.append(self._generate_weather_for_wave(self.wave_manager.current_wave + 3))
         self._build_background(night_mode=(self.weather == Weather.ENDLESS_NIGHT),
                                gold_ore_positions=self.gold_ore_positions)
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
@@ -1053,8 +1080,10 @@ class Game:
             destroyed = []
             for t in self.towers:
                 if t.level >= 1:
+                    if t.in_pulse():
+                        continue
                     if getattr(t, 'has_shield', False):
-                        t.has_shield = False
+                        t.break_shield()
                         self.trigger_shield_burst(t)
                         continue
                     old_level = t.level
@@ -1279,7 +1308,7 @@ class Game:
             os.remove(resource_path("save.json"))
         except Exception:
             pass
-        self.generate_weather_forecast()
+        self.weather_forecast = []
         self.state = GameState.PLAYING
         self.wave_manager.start_new_wave()
         self.pending_first_wave_weather = True
@@ -1300,8 +1329,8 @@ class Game:
         self.bullets.empty()
         self.damage_texts.empty()
 
-        self.coins = 2560
-        self.emeralds = 0
+        self.coins = 2500
+        self.emeralds = 100
         self.wave_manager = WaveManager()
         self.selected_tower_type = None
         self.selected_tower = None
@@ -1323,6 +1352,7 @@ class Game:
         self.wind_explosions = []
         self.endless_greed_explosions = []
         self.ice_explosions = []
+        self.hell_rays = []
         self.poison_splashes = []
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
@@ -1335,8 +1365,11 @@ class Game:
         self.fog_visible = False
         self.weather_forecast = []
         self.forecast_purchased = False
-        self.forecast_weather_idx = -1
         self.pending_first_wave_weather = False
+        self.enchantments = []
+        self.poison_base_damage = 10
+        self.shop_offers = []
+        self.shop_offers_wave = -1
         self.start_game()
 
     def run(self):
