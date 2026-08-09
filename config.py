@@ -108,6 +108,8 @@ class Enchantment(Enum):
     TELESCOPE = 19
     FIRE_ARROW = 20
     PULSE_SHIELD = 21
+    RESONANCE_STORM = 22
+    EMBER_REBIRTH = 23
 
 ENCHANTMENT_DATA = {
     Enchantment.BALANCED: {"name": "均衡强化", "desc": "所有伤害+5%", "cost": 100},
@@ -120,18 +122,20 @@ ENCHANTMENT_DATA = {
     Enchantment.BOMB: {"name": "爆炸强化", "desc": "爆炸伤害+20%", "cost": 100},
     Enchantment.DENSE: {"name": "致密", "desc": "重锤获得距离增伤，伤害+2/px", "cost": 200},
     Enchantment.WIND_BURST: {"name": "风爆", "desc": "蓄风印记爆炸伤害固定为5000点", "cost": 200},
-    Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "中毒的敌人被击败时有10%概率使全局中毒基础伤害永久提高1点", "cost": 400},
+    Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "同时存在剧毒环刃与九头蛇毒箭时，中毒敌人被击败有6%概率爆炸，对周围敌人造成900伤害并击晕5秒，基础毒伤永久+1", "cost": 400},
     Enchantment.BURN: {"name": "高温燃烧", "desc": "燃烧伤害翻倍", "cost": 200},
     Enchantment.BLAZE_POWDER: {"name": "烈焰粉", "desc": "敌人永远燃烧，燃烧伤害+30%", "cost": 400},
     Enchantment.FROZEN_DEEP: {"name": "冰冻三尺", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹冻结时长+0.5秒，冰墙存在时间翻倍", "cost": 400},
     Enchantment.DRAGON_LEGEND: {"name": "龙族传说", "desc": "同时存在冰龙塔、火龙塔、电龙塔时，龙伤害翻倍且移动速度+75%", "cost": 600},
-    Enchantment.ENDLESS_GREED: {"name": "无尽贪婪", "desc": "集齐七件无尽炮塔后，其子弹5%概率爆炸，造成1%最大生命伤害并获得500金币", "cost": 1600},
+    Enchantment.ENDLESS_GREED: {"name": "无尽贪婪", "desc": "集齐七种无尽炮塔后，其子弹5%概率爆炸，造成1%最大生命伤害并获得500金币", "cost": 1600},
     Enchantment.RAIN_FIRE: {"name": "水火相容", "desc": "雨天/雷暴/酸雨可以点燃敌人", "cost": 200},
-    Enchantment.WITHER_ROSE: {"name": "凋零玫瑰", "desc": "凋零核弹伤害额外附加0.8%最大生命", "cost": 1600},
+    Enchantment.WITHER_ROSE: {"name": "凋零玫瑰", "desc": "凋零核弹伤害额外附加0.8%最大生命", "cost": 800},
     Enchantment.LAVA: {"name": "岩浆桶", "desc": "每5秒提高1温度，每波开始时重置", "cost": 200},
-    Enchantment.TELESCOPE: {"name": "望远镜", "desc": "所有炮塔基础射程增加1格", "cost": 200},
+    Enchantment.TELESCOPE: {"name": "望远镜", "desc": "所有炮塔射程增加1格", "cost": 200},
     Enchantment.FIRE_ARROW: {"name": "火矢", "desc": "箭矢伤害*2，附带燃烧4秒", "cost": 200},
     Enchantment.PULSE_SHIELD: {"name": "脉冲护盾", "desc": "护盾被击碎后进入脉冲状态8秒，期间免疫所有伤害", "cost": 800},
+    Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，雷神之锤每攻击120次，所有雷盾反击一次并引爆所有蓄风印记", "cost": 1600},
+    Enchantment.EMBER_REBIRTH: {"name": "余烬重生", "desc": "同时存在满级龙息塔与8座满级核弹塔时，点击龙息塔按Q花费5万金币献祭：塔消失、全场核弹立即冷却齐射，巨型陨石从天而降、着地时对全场敌人造成1000000007伤害。献祭花费逐次翻倍", "cost": 3200},
 }
 
 ENCHANTMENT_ORDER = [
@@ -140,6 +144,8 @@ ENCHANTMENT_ORDER = [
     Enchantment.POISON_CONTRACT, Enchantment.BURN, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
     Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.WITHER_ROSE,
     Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.FIRE_ARROW, Enchantment.PULSE_SHIELD,
+    Enchantment.RESONANCE_STORM,
+    Enchantment.EMBER_REBIRTH,
 ]
 
 NON_REPEATABLE_ENCHANTMENTS = {Enchantment.DENSE, Enchantment.WIND_BURST}
@@ -174,18 +180,13 @@ class EnemyType(Enum):
     GHOST = 9
     DIAMOND_ARMORED = 10
     NETHERITE_ARMORED = 11
-    NAUTILUS = 12
-    IRON_NAUTILUS = 13
-    GOLD_NAUTILUS = 14
-    DIAMOND_NAUTILUS = 15
-    NETHERITE_NAUTILUS = 16
-    MAGMA_CUBE = 17
-    MAGMA_CUBE_SMALL = 18
-    HEROBRINE = 19
-    LICH = 20
-    CREEPER = 21
-    CHARGED_CREEPER = 22
-    SPIDER = 23
+    MAGMA_CUBE = 12
+    MAGMA_CUBE_SMALL = 13
+    HEROBRINE = 14
+    LICH = 15
+    CREEPER = 16
+    CHARGED_CREEPER = 17
+    SPIDER = 18
 
 
 class Weather(Enum):
@@ -240,11 +241,6 @@ ENEMY_TYPES = {
     "GHOST": {"image": "ghost.png", "speed": 3, "health": 100, "reward": 25},
     "DIAMOND_ARMORED": {"image": "diamond_armored.png", "speed": 1.2, "health": 300, "reward": 40},
     "NETHERITE_ARMORED": {"image": "netherite_armored.png", "speed": 1.2, "health": 300, "reward": 50},
-    "NAUTILUS": {"image": "nautilus.png", "speed": 2, "health": 100, "reward": 10},
-    "IRON_NAUTILUS": {"image": "iron_nautilus.png", "speed": 1.2, "health": 250, "reward": 35},
-    "GOLD_NAUTILUS": {"image": "gold_nautilus.png", "speed": 1.2, "health": 250, "reward": 35},
-    "DIAMOND_NAUTILUS": {"image": "diamond_nautilus.png", "speed": 1.2, "health": 300, "reward": 40},
-    "NETHERITE_NAUTILUS": {"image": "netherite_nautilus.png", "speed": 1.2, "health": 300, "reward": 50},
     "MAGMA_CUBE": {"image": "magma_cube.png", "speed": 2.0, "health": 180, "reward": 25},
     "MAGMA_CUBE_SMALL": {"image": "magma_cube.png", "speed": 3.0, "health": 90, "reward": 10},
     "LICH": {"image": "lich.png", "speed": 3, "health": 500, "reward": 40},

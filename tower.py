@@ -134,6 +134,7 @@ class Tower(pygame.sprite.Sprite):
             self.upgrade_cost = 750
             self.bomb_subtype = BombSubType.SNOW
             self.is_nuclear = False
+            self.ember_salvo = False
         elif self.type == TowerType.TIME:
             self.range = 0
             self.damage = 0
@@ -354,18 +355,21 @@ class Tower(pygame.sprite.Sprite):
     def attack(self, current_time):
         if not self.can_attack(current_time):
             return []
+        prev_last_shot = self.last_shot
         self.last_shot = current_time
 
         if self.type in (TowerType.PRODUCTION, TowerType.TIME):
             return []
 
         if self.type == TowerType.BOMB and self.is_nuclear:
-            if self.game.enemies:
+            if self.game.enemies or self.ember_salvo:
+                self.ember_salvo = False
                 missile = NuclearMissile(self.rect.centerx, self.rect.centery,
                                          MAP_CENTER_X, MAP_CENTER_Y,
                                          self.damage, self.level, self.game,
                                          self.bomb_branch)
                 return [missile]
+            self.last_shot = prev_last_shot
             return []
 
         check_range = self.get_effective_range() + TILE_SIZE // 2
@@ -391,22 +395,11 @@ class Tower(pygame.sprite.Sprite):
 
         if self.type == TowerType.PHYSICAL and self.physical_branch == 3 and self.level >= 11:
             er = check_range
-            end_x = self.game.path[-1][0] * TILE_SIZE + TILE_SIZE // 2
-            end_y = self.game.path[-1][1] * TILE_SIZE + TILE_SIZE // 2
-            best = None
-            best_d = None
-            for e in self.game.enemies:
-                if e.health <= 0:
-                    continue
-                dx = e.rect.centerx - self.rect.centerx
-                dy = e.rect.centery - self.rect.centery
-                if (dx * dx + dy * dy) > er * er:
-                    continue
-                d = (e.rect.centerx - end_x) ** 2 + (e.rect.centery - end_y) ** 2
-                if best_d is None or d < best_d:
-                    best_d = d
-                    best = e
-            if best is not None:
+            targets = [e for e in self.game.enemies
+                       if e.health > 0
+                       and (e.rect.centerx - self.rect.centerx) ** 2 + (e.rect.centery - self.rect.centery) ** 2 <= er * er]
+            if targets:
+                best = random.choice(targets)
                 if best.enemy_type == EnemyType.HEROBRINE:
                     dmg = int(best.max_health * 0.05)
                 else:
@@ -487,6 +480,12 @@ class Tower(pygame.sprite.Sprite):
                 else:
                     bullet.poison_stacks = self.level
             bullets.append(bullet)
+
+        if self.type == TowerType.WIND and self.level >= 11 and self.wind_branch == 2:
+            self.game.resonance_counter += 1
+            if self.game.resonance_counter >= 120:
+                self.game.resonance_counter = 0
+                self.game.trigger_resonance_storm()
 
         if self.type == TowerType.ICE and self.level >= 11 and self.ice_branch == 2:
             if random.random() < 0.02:
@@ -794,12 +793,6 @@ class Bullet(pygame.sprite.Sprite):
             if self.max_distance - self.traveled <= self.speed:
                 final_dmg += int(enemy.health * 0.25)
 
-        if enemy.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED) and self.tower_level >= 6:
-            if self.tower_type in (TowerType.PHYSICAL, TowerType.TRIDENT):
-                final_dmg = int(self.damage * mult)
-                if self.tower_type == TowerType.PHYSICAL and Enchantment.FIRE_ARROW in self.game.enchantments:
-                    final_dmg *= 2
-
         color = self.get_damage_color()
         reward = enemy.take_damage(final_dmg, color=color)
         self.game.coins += reward
@@ -887,8 +880,6 @@ class Bullet(pygame.sprite.Sprite):
                 e_col = e.rect.centerx // TILE_SIZE
                 if e_col == col and e.health > 0:
                     dmg = lightning_dmg
-                    if e.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED):
-                        dmg = self.lightning_damage
                     reward = e.take_damage(dmg, color=GOLD)
                     self.game.coins += reward
                     e.apply_burn(self.game.temperature, 240)
@@ -903,8 +894,6 @@ class Bullet(pygame.sprite.Sprite):
                         e_row = e.rect.centery // TILE_SIZE
                         if e_row == row and e.health > 0:
                             dmg = h_lightning_dmg
-                            if e.enemy_type in (EnemyType.GOLD_ARMORED, EnemyType.NETHERITE_ARMORED):
-                                dmg = self.lightning_damage
                             reward = e.take_damage(dmg, color=GOLD)
                             self.game.coins += reward
                             e.on_lightning_hit()
@@ -921,6 +910,7 @@ class Bullet(pygame.sprite.Sprite):
             if self.source_tower and self.source_tower.wind_branch == 2 and self.tower_level >= 11:
                 dmg_map = {11: 2000, 12: 4000, 13: 6000, 14: 8000, 15: 10000}
                 lightning_dmg = dmg_map.get(self.tower_level, 2500)
+                lightning_dmg = int(lightning_dmg * self.game.get_enchant_damage_multiplier(TowerType.WIND))
                 col = enemy.rect.centerx // TILE_SIZE
                 for e in self.game.enemies:
                     e_col = e.rect.centerx // TILE_SIZE

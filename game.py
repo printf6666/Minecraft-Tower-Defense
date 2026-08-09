@@ -7,8 +7,8 @@ import os
 import assets
 from config import *
 from enemy import Enemy, DamageText
-from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion
+from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet, MAP_CENTER_X, MAP_CENTER_Y
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
 from dragons import Dragon
@@ -96,6 +96,7 @@ class Game:
         self.endless_greed_explosions = []
         self.ice_explosions = []
         self.hell_rays = []
+        self.resonance_storms = []
         self.poison_splashes = []
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
@@ -104,6 +105,9 @@ class Game:
         self.mushroom_explosions = []
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
+        self.resonance_counter = 0
+        self.sacrifices = 0
+        self.meteors = []
 
         self.fog_timer = 0
         self.fog_visible = False
@@ -348,6 +352,9 @@ class Game:
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
                         self.selected_tower.shield_branch = self.selected_tower.shield_branch % 3 + 1
                         self.selected_tower.update_sprite()
+                    elif event.key == pygame.K_q and self.selected_tower and self.ember_rebirth_active():
+                        if self.selected_tower.type == TowerType.FLAME and self.selected_tower.level == 15 and self.selected_tower.flame_branch == 1:
+                            self.sacrifice_tower()
                     elif event.key == pygame.K_s and self.selected_tower:
                         cost_map = {ttype: cost for ttype, name, cost, key in TOWER_DATA}
                         sell_price = cost_map[self.selected_tower.type] * self.selected_tower.level
@@ -417,19 +424,85 @@ class Game:
                         enemy.take_damage(damage, color=(255, 215, 0))
                     self.coins += (tower.level - 10) * 1000
                 elif tower.shield_branch == 2:
-                    damage = (tower.level - 10) * 30 * abs(self.temperature)
+                    damage = (tower.level - 10) * 3000
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=(100, 150, 255))
                         enemy.freeze_resistance = 0
                         enemy.freeze_time = max(enemy.freeze_time, 3 * 60)
                 elif tower.shield_branch == 3:
-                    damage = (tower.level - 10) * 25 * abs(self.temperature)
+                    damage = (tower.level - 10) * 2500
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=(255, 255, 0))
                         enemy.stun_resistance = 0
                         enemy.stun_time = max(enemy.stun_time, 60)
                         enemy.burn_time = float('inf')
                         enemy.burn_damage = max(enemy.burn_damage, self.temperature)
+
+    def trigger_resonance_storm(self):
+        if Enchantment.RESONANCE_STORM not in self.enchantments:
+            return
+        has_hammer = any(t.type == TowerType.WIND and t.level >= 11 and t.wind_branch == 2 for t in self.towers)
+        has_shield = any(t.type == TowerType.SHIELD and t.level >= 11 and t.shield_branch == 3 for t in self.towers)
+        if not (has_hammer and has_shield):
+            return
+        for tower in self.towers:
+            if tower.type == TowerType.SHIELD and tower.level >= 11 and tower.shield_branch == 3:
+                damage = (tower.level - 10) * 2500
+                for enemy in self.enemies:
+                    enemy.take_damage(damage, color=(255, 255, 0))
+                    enemy.stun_resistance = 0
+                    enemy.stun_time = max(enemy.stun_time, 60)
+                    enemy.burn_time = float('inf')
+                    enemy.burn_damage = max(enemy.burn_damage, self.temperature)
+        for enemy in self.enemies:
+            if enemy.wind_mark_tower is not None:
+                t = enemy.wind_mark_tower
+                dmg = 5000 if Enchantment.WIND_BURST in self.enchantments else t.damage
+                exp = WindExplosion(enemy.rect.centerx, enemy.rect.centery,
+                                    dmg, t.wind_knockback, self)
+                self.wind_explosions.append(exp)
+                enemy.wind_mark_tower = None
+        storm = ResonanceStorm(GRID_WIDTH * TILE_SIZE // 2, (1 + GRID_HEIGHT) * TILE_SIZE // 2)
+        self.resonance_storms.append(storm)
+
+    def ember_rebirth_active(self):
+        if Enchantment.EMBER_REBIRTH not in self.enchantments:
+            return False
+        has_dragon = any(t.type == TowerType.FLAME and t.level == 15 and t.flame_branch == 1 for t in self.towers)
+        nuclear_count = sum(1 for t in self.towers if t.type == TowerType.BOMB and t.is_nuclear and t.level == 15 and t.bomb_branch == 1)
+        return has_dragon and nuclear_count >= 8
+
+    def sacrifice_tower(self):
+        t = self.selected_tower
+        if t is None or not self.ember_rebirth_active():
+            return False
+        if not (t.type == TowerType.FLAME and t.level == 15 and t.flame_branch == 1):
+            return False
+        cost = 50000 * (2 ** self.sacrifices)
+        if self.coins < cost:
+            return False
+        self.coins -= cost
+        self.sacrifices += 1
+        self.temperature -= t.level
+        t.kill()
+        self.selected_tower = None
+        for tb in self.towers:
+            if tb.type == TowerType.BOMB and tb.is_nuclear and tb.bomb_branch == 1:
+                missile = NuclearMissile(tb.rect.centerx, tb.rect.centery,
+                                         MAP_CENTER_X, MAP_CENTER_Y,
+                                         tb.damage, tb.level, self, tb.bomb_branch)
+                self.bullets.add(missile)
+                tb.last_shot = self.game_time
+                tb.ember_salvo = False
+        self.meteors.append(Meteor(self))
+        self.save_game()
+        return True
+
+    def add_meteor_hit(self, x, y):
+        for enemy in list(self.enemies):
+            if enemy.health > 0:
+                reward = enemy.take_damage(1000000007, color=(255, 120, 40), scale=1.6, ignore_shield=True)
+                self.coins += reward
 
     def global_production(self):
         current_time = pygame.time.get_ticks()
@@ -501,6 +574,7 @@ class Game:
                 "emerald_per_wave": self.emerald_per_wave,
                 "enchantments": [e.value for e in self.enchantments],
                 "poison_base_damage": self.poison_base_damage,
+                "sacrifices": self.sacrifices,
                 "gold_ore_positions": [list(p) for p in self.gold_ore_positions],
                 "towers": towers_data,
             }
@@ -539,6 +613,7 @@ class Game:
         self.endless_greed_explosions = []
         self.ice_explosions = []
         self.hell_rays = []
+        self.resonance_storms = []
         self.poison_splashes = []
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
@@ -546,6 +621,9 @@ class Game:
         self.mushroom_explosions = []
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
+        self.resonance_counter = 0
+        self.sacrifices = 0
+        self.meteors = []
         self.enemy_grid = {}
         self.fog_timer = 0
         self.fog_visible = False
@@ -605,6 +683,7 @@ class Game:
         self.emerald_per_wave = data.get("emerald_per_wave", 0)
         self.enchantments = [Enchantment(v) for v in data.get("enchantments", [])]
         self.poison_base_damage = data.get("poison_base_damage", 10)
+        self.sacrifices = data.get("sacrifices", 0)
         raw_forecast = data.get("weather_forecast", [])
         if data.get("forecast_start") is None and len(raw_forecast) == 3:
             queue = []
@@ -634,10 +713,6 @@ class Game:
             t.trident_branch = td.get("trident_branch", 1)
             t.teleport_branch = td.get("teleport_branch", 1)
             t.shield_branch = td.get("shield_branch", 1)
-            if t.shield_branch == 3:
-                t.shield_branch = 1
-            elif t.shield_branch == 4:
-                t.shield_branch = 3
             if hasattr(t, 'bomb_subtype'):
                 sv = td.get("bomb_subtype")
                 t.bomb_subtype = BombSubType(sv) if sv is not None else BombSubType.SNOW
@@ -719,6 +794,13 @@ class Game:
         has_wall = any(t.type == TowerType.ICE and t.level >= 11 and t.ice_branch == 3 for t in self.towers)
         return has_bomb and has_wall
 
+    def poison_contract_active(self):
+        if Enchantment.POISON_CONTRACT not in self.enchantments:
+            return False
+        has_ring = any(t.type == TowerType.POISON and t.level >= 11 and t.poison_branch == 1 for t in self.towers)
+        has_hydra = any(t.type == TowerType.POISON and t.level >= 11 and t.poison_branch == 3 for t in self.towers)
+        return has_ring and has_hydra
+
     def dragon_legend_active(self):
         if Enchantment.DRAGON_LEGEND not in self.enchantments:
             return False
@@ -785,6 +867,8 @@ class Game:
         self.enchantments.append(ench)
         if ench in self.shop_offers:
             self.shop_offers.remove(ench)
+        if assets.trader_accept_sound:
+            assets.trader_accept_sound.play()
         self.save_game()
 
     def update(self):
@@ -941,6 +1025,16 @@ class Game:
             for ray in self.hell_rays[:]:
                 if not ray.update():
                     self.hell_rays.remove(ray)
+
+            for storm in self.resonance_storms[:]:
+                if not storm.update():
+                    self.resonance_storms.remove(storm)
+
+            for meteor in self.meteors[:]:
+                if meteor.done:
+                    self.meteors.remove(meteor)
+                else:
+                    meteor.update()
 
             for splash in self.poison_splashes[:]:
                 if not splash.update():
@@ -1353,6 +1447,7 @@ class Game:
         self.endless_greed_explosions = []
         self.ice_explosions = []
         self.hell_rays = []
+        self.resonance_storms = []
         self.poison_splashes = []
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
@@ -1360,6 +1455,9 @@ class Game:
         self.mushroom_explosions = []
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
+        self.resonance_counter = 0
+        self.sacrifices = 0
+        self.meteors = []
         self.enemy_grid = {}
         self.fog_timer = 0
         self.fog_visible = False

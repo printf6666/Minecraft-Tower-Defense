@@ -36,6 +36,7 @@ tnt_explosion_frames = []
 mushroom_cloud_frames = []
 endless_greed_frames = []
 ice_explosion_frames = []
+resonance_storm_frames = []
 
 icon0 = None
 icon1 = None
@@ -53,7 +54,9 @@ gold_img = None
 emerald_img = None
 
 enchantment_icons = {}
+enchantment_icons_raw = {}
 trader_img = None
+ember_meteor_img = None
 
 BUFF_SIZE = 32
 buff_icons = {}
@@ -137,6 +140,15 @@ def init_assets():
         except:
             pass
 
+    global resonance_storm_frames
+    resonance_storm_frames.clear()
+    for i in range(1, 17):
+        try:
+            img = load_image(f"tower/resonance_storm{i:02d}.png")
+            resonance_storm_frames.append(pygame.transform.scale(img, (img.get_width() * 4, img.get_height() * 4)))
+        except:
+            pass
+
 
     global mushroom_cloud_frames, endless_greed_frames
     mushroom_cloud_frames.clear()
@@ -157,19 +169,31 @@ def init_assets():
     gold_img = load_image("tower/2-1.png", (64, 64))
     emerald_img = load_image("tower/emerald.png", (80, 80))
 
-    global enchantment_icons, trader_img
+    global enchantment_icons, enchantment_icons_raw, trader_img
     enchantment_icons.clear()
+    enchantment_icons_raw.clear()
     for ench in Enchantment:
+        try:
+            enchantment_icons_raw[ench] = load_image(f"enchantment/{ench.value}.png")
+        except:
+            enchantment_icons_raw[ench] = None
         try:
             enchantment_icons[ench] = load_image(f"enchantment/{ench.value}.png", (ENCHANT_ICON_SIZE, ENCHANT_ICON_SIZE))
         except:
             s = pygame.Surface((ENCHANT_ICON_SIZE, ENCHANT_ICON_SIZE))
             s.fill((80, 80, 80))
             enchantment_icons[ench] = s
+            enchantment_icons_raw[ench] = s
     try:
         trader_img = load_image("tower/trader.png")
     except:
         trader_img = None
+
+    global ember_meteor_img
+    try:
+        ember_meteor_img = load_image("enchantment/23.png", (640, 640))
+    except:
+        ember_meteor_img = None
 
     buff_icons["burn"] = load_image("debuff/burn.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["slow"] = load_image("debuff/slow.png", (BUFF_SIZE, BUFF_SIZE))
@@ -224,7 +248,7 @@ def init_assets():
                 bgm_files.append(f"bgm/{f}")
     bgm_index = -1
 
-    global explode_sound, level_up_sound, teleport_sound
+    global explode_sound, level_up_sound, teleport_sound, trader_accept_sound
     try:
         explode_sound = pygame.mixer.Sound(resource_path("sound/explode.mp3"))
     except:
@@ -237,6 +261,10 @@ def init_assets():
         teleport_sound = pygame.mixer.Sound(resource_path("sound/teleport.mp3"))
     except:
         teleport_sound = None
+    try:
+        trader_accept_sound = pygame.mixer.Sound(resource_path("sound/trader_accept.ogg"))
+    except:
+        trader_accept_sound = None
 
     ts = (128, 128)
     stone_img = load_image("tower/stone.png", ts)

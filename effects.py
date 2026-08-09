@@ -64,13 +64,34 @@ class EndlessGreedExplosion:
         surface.blit(img, img.get_rect(center=(self.x, self.y)))
 
 
+class ResonanceStorm:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.frame_index = 0
+        self.frame_accum = 0
+
+    def update(self):
+        self.frame_accum += 1
+        if self.frame_accum >= 3:
+            self.frame_accum = 0
+            self.frame_index += 1
+        return self.frame_index < len(assets.resonance_storm_frames)
+
+    def draw(self, surface):
+        if self.frame_index >= len(assets.resonance_storm_frames):
+            return
+        img = assets.resonance_storm_frames[self.frame_index]
+        surface.blit(img, img.get_rect(center=(self.x, self.y)))
+
+
 class HellRay:
     def __init__(self, x1, y1, x2, y2):
         self.x1 = x1
         self.y1 = y1
         self.x2 = x2
         self.y2 = y2
-        self.duration = 12
+        self.duration = 15
 
     def update(self):
         self.duration -= 1
@@ -79,15 +100,14 @@ class HellRay:
     def draw(self, screen):
         if self.duration <= 0:
             return
-        t = self.duration / 12
         sx = min(self.x1, self.x2)
         sy = min(self.y1, self.y2)
         s = pygame.Surface((abs(self.x2 - self.x1) + 4, abs(self.y2 - self.y1) + 4), pygame.SRCALPHA)
-        s.set_alpha(int(255 * t))
+        s.set_alpha(int(17 * self.duration))
         pygame.draw.line(s, (0, 0, 0),
                          (self.x1 - sx + 2, self.y1 - sy + 2),
                          (self.x2 - sx + 2, self.y2 - sy + 2),
-                         max(2, int(10 * t)))
+                         max(3, int(self.duration)))
         screen.blit(s, (sx - 2, sy - 2))
 
 
@@ -248,6 +268,34 @@ class PoisonSplash:
         screen.blit(s, (self.x - self.radius, self.y - self.radius))
 
 
+class PoisonContractExplosion:
+    def __init__(self, x, y, game):
+        self.x = x
+        self.y = y
+        self.duration = 6
+        self.radius = 128
+        game.poison_base_damage += 1
+        for enemy in game.enemies:
+            if enemy.health <= 0:
+                continue
+            dx = enemy.rect.centerx - x
+            dy = enemy.rect.centery - y
+            if (dx * dx + dy * dy) <= self.radius * self.radius:
+                reward = enemy.take_damage(900, color=GREEN, scale=0.8)
+                game.coins += reward
+                enemy.apply_stun(5 * 60)
+
+    def update(self):
+        self.duration -= 1
+        return self.duration > 0
+
+    def draw(self, screen):
+        alpha = int(80 * self.duration / 6)
+        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, (0, 255, 0, alpha), (self.radius, self.radius), self.radius)
+        screen.blit(s, (self.x - self.radius, self.y - self.radius))
+
+
 class TNTExplosion:
     def __init__(self, x, y, damage, tower_level, bomb_subtype, game):
         self.x = x
@@ -360,6 +408,38 @@ class MushroomExplosion:
         img = assets.mushroom_cloud_frames[self.frame]
         rect = img.get_rect(center=(self.x, self.y))
         screen.blit(img, rect)
+
+
+class Meteor:
+    def __init__(self, game):
+        self.game = game
+        self.x = SCREEN_WIDTH + 200
+        self.y = -200
+        self.target_x = GRID_WIDTH * TILE_SIZE // 2
+        self.target_y = (1 + GRID_HEIGHT) * TILE_SIZE // 2
+        dx = self.target_x - self.x
+        dy = self.target_y - self.y
+        dist = math.sqrt(dx * dx + dy * dy)
+        self.vx = dx / dist * 18
+        self.vy = dy / dist * 18
+        self.done = False
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        tx = self.target_x - self.x
+        ty = self.target_y - self.y
+        if self.vx * tx + self.vy * ty <= 0:
+            self.x = self.target_x
+            self.y = self.target_y
+            self.game.add_meteor_hit(self.target_x, self.target_y)
+            self.done = True
+        return not self.done
+
+    def draw(self, screen):
+        if assets.ember_meteor_img:
+            screen.blit(assets.ember_meteor_img,
+                        assets.ember_meteor_img.get_rect(center=(self.x, self.y)))
 
 
 class NuclearShockwave:

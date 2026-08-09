@@ -15,7 +15,7 @@ def get_tower_info(game, tower):
             if tower.physical_branch == 2:
                 info = [f"天堂陨落长弓 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"将当前金币的1%作为伤害加成", f"12方向散射", "按 R 切换分支"]
             elif tower.physical_branch == 3:
-                info = [f"地狱升华之弩 Lv{tower.level}", "发射黑色射线", "秒杀离终点最近的敌人",
+                info = [f"地狱升华之弩 Lv{tower.level}", "发射黑色射线", "随机秒杀一个敌人",
                         "对BOSS造成5%最大生命伤害", f"攻击间隔:{(19 - tower.level)}s", "按 R 切换分支"]
             else:
                 info = [f"时空撕裂之矢 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s",
@@ -87,6 +87,9 @@ def get_tower_info(game, tower):
                 dmg_mult = (tower.level - 10) * 10
                 info = [f"龙息 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
                         f"龙息:{dmg_mult}倍温度/s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
+                if Enchantment.EMBER_REBIRTH in game.enchantments and tower.level == 15:
+                    cost = 50000 * (2 ** game.sacrifices)
+                    info.append(f"Q 献祭:{cost}金币")
         elif tower.level >= 6:
             info = [f"火球 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
                     f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
@@ -163,13 +166,13 @@ def get_tower_info(game, tower):
                 info = [f"贪婪盾 Lv{tower.level}",
                         f"护盾破碎:造成金币1%伤害", f"获得{gold_amt}金币", "按 R 切换分支"]
             elif tower.shield_branch == 2:
-                dmg_mult = (tower.level - 10) * 30
+                dmg_mult = (tower.level - 10) * 3000
                 info = [f"寒冰盾 Lv{tower.level}",
-                        f"护盾破碎:全屏{dmg_mult}倍温度伤害", "使所有敌人冰冻3秒", "按 R 切换分支"]
+                        f"护盾破碎:全屏{dmg_mult}点伤害", "使所有敌人冰冻3秒", "按 R 切换分支"]
             elif tower.shield_branch == 3:
-                dmg_mult = (tower.level - 10) * 25
+                dmg_mult = (tower.level - 10) * 2500
                 info = [f"雷盾 Lv{tower.level}",
-                        f"护盾破碎:全屏{dmg_mult}倍温度伤害", "击晕全场1秒并永久燃烧", "按 R 切换分支"]
+                        f"护盾破碎:全屏{dmg_mult}点伤害", "击晕全场1秒并永久燃烧", "按 R 切换分支"]
         elif tower.level >= 6:
             info = [f"铁壁盾 Lv{tower.level}", "每60秒给5*5范围内随机3个塔施加护盾"]
         else:
@@ -297,6 +300,8 @@ class UIManager:
             exp.draw(self.game.screen)
         for ray in self.game.hell_rays:
             ray.draw(self.game.screen)
+        for storm in self.game.resonance_storms:
+            storm.draw(self.game.screen)
         for splash in self.game.poison_splashes:
             splash.draw(self.game.screen)
         for splash in self.game.wither_splashes:
@@ -309,6 +314,8 @@ class UIManager:
             explosion.draw(self.game.screen)
         for sw in self.game.shockwave_effects:
             sw.draw(self.game.screen)
+        for meteor in self.game.meteors:
+            meteor.draw(self.game.screen)
         for explosion in self.game.mushroom_explosions:
             explosion.draw(self.game.screen)
         self.game.damage_texts.draw(self.game.screen)
@@ -497,8 +504,12 @@ class UIManager:
             affordable = self.game.emeralds >= ench_data["cost"]
             pygame.draw.rect(self.game.screen, (70, 70, 70) if affordable else (45, 45, 45), rect)
             pygame.draw.rect(self.game.screen, (255, 215, 0) if affordable else (100, 100, 100), rect, 2)
-            icon = pygame.transform.smoothscale(assets.enchantment_icons[ench], (120, 120))
-            self.game.screen.blit(icon, (rect.centerx - 60, rect.y + 20))
+            icon = assets.enchantment_icons_raw[ench]
+            if icon:
+                self.game.screen.blit(icon, (rect.centerx - icon.get_width() // 2, rect.y + 20))
+            else:
+                icon = assets.enchantment_icons[ench]
+                self.game.screen.blit(icon, (rect.centerx - icon.get_width() // 2, rect.y + 34))
             name_surf = assets.font_tower_level.render(ench_data["name"], True, WHITE)
             self.game.screen.blit(name_surf, (rect.centerx - name_surf.get_width() // 2, rect.y + 155))
             status = assets.font_tower_level.render(f"{ench_data['cost']} 绿宝石", True, GREEN if affordable else (200, 80, 80))

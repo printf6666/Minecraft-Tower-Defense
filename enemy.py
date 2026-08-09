@@ -3,7 +3,7 @@ import math
 import random
 import assets
 from config import *
-from effects import CreeperExplosion
+from effects import CreeperExplosion, PoisonContractExplosion
 from tower import WindExplosion
 
 
@@ -107,11 +107,13 @@ class Enemy(pygame.sprite.Sprite):
         if game.weather == Weather.ACID_RAIN:
             self.apply_poison(10)
         if game.weather == Weather.MAGNETIC_STORM:
-            if self.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED,
-                                   EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
+            if self.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED):
                 self.broken = True
 
         self.image = assets.load_image(f"enemy/{config['image']}")
+        if self.enemy_type in (EnemyType.SLIMELING, EnemyType.MAGMA_CUBE_SMALL):
+            self.image = pygame.transform.smoothscale(
+                self.image, (self.image.get_width() // 2, self.image.get_height() // 2))
 
         self.rect = self.image.get_rect()
         start_x, start_y = self.path[self.path_index]
@@ -151,15 +153,13 @@ class Enemy(pygame.sprite.Sprite):
 
     def apply_freeze(self, duration):
         if self.game.temperature < 0:
-            duration = int(duration * (1 + abs(self.game.temperature) / 60))
+            duration = int(duration * (1 + abs(self.game.temperature) / 100))
         effective = int(duration * (1.0 - self.freeze_resistance))
         self.freeze_time = max(self.freeze_time, effective)
         self.freeze_resistance = min(0.90, self.freeze_resistance + 0.10)
         self.last_freeze_time = self.game.game_time
 
     def apply_poison(self, stacks):
-        if self.enemy_type in (EnemyType.NAUTILUS, EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
-            return
         if self.game.weather == Weather.ACID_RAIN:
             stacks *= 2
         self.poison_stacks += stacks
@@ -207,8 +207,6 @@ class Enemy(pygame.sprite.Sprite):
         self.slow_time = duration
 
     def apply_wind(self, knockback):
-        if self.enemy_type in (EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
-            return
         if self.path_index >= len(self.path):
             return
         tx = self.path[self.path_index][0] * TILE_SIZE + TILE_SIZE // 2
@@ -349,8 +347,7 @@ class Enemy(pygame.sprite.Sprite):
         self.rect.center = (self.pos_x, self.pos_y)
 
     def apply_knockback(self, distance):
-        if self.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED,
-                               EnemyType.IRON_NAUTILUS, EnemyType.GOLD_NAUTILUS, EnemyType.DIAMOND_NAUTILUS, EnemyType.NETHERITE_NAUTILUS):
+        if self.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED):
             return
         if self.path_index <= 0:
             return
@@ -381,11 +378,11 @@ class Enemy(pygame.sprite.Sprite):
                     break
         self.rect.center = (self.pos_x, self.pos_y)
 
-    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False):
+    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, ignore_shield=False):
         if self.health <= 0:
             return 0
 
-        if self.lich_shield > 0:
+        if self.lich_shield > 0 and not ignore_shield:
             self.lich_shield -= 1
             self._update_lich_shield_image()
             return 0
@@ -394,10 +391,14 @@ class Enemy(pygame.sprite.Sprite):
             final_dmg = damage
         else:
             final_dmg = damage
-            if self.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED) and not self.broken:
+            if self.enemy_type == EnemyType.IRON_ARMORED and not self.broken:
                 final_dmg *= 0.4
-            if self.enemy_type in (EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED) and not self.broken:
+            if self.enemy_type == EnemyType.GOLD_ARMORED and not self.broken:
+                final_dmg *= 0.3
+            if self.enemy_type == EnemyType.DIAMOND_ARMORED and not self.broken:
                 final_dmg *= 0.2
+            if self.enemy_type == EnemyType.NETHERITE_ARMORED and not self.broken:
+                final_dmg *= 0.1
             if self.broken:
                 final_dmg *= 1.2
         final_dmg = int(final_dmg)
@@ -421,8 +422,6 @@ class Enemy(pygame.sprite.Sprite):
                     elif phase_group == 2:
                         for _ in range(5):
                             self.game.herobrine_summon_queue.append(EnemyType.NETHERITE_ARMORED)
-                        for _ in range(5):
-                            self.game.herobrine_summon_queue.append(EnemyType.NETHERITE_NAUTILUS)
                     elif phase_group == 3:
                         for _ in range(15):
                             self.game.herobrine_summon_queue.append(EnemyType.GHOST)
@@ -453,8 +452,9 @@ class Enemy(pygame.sprite.Sprite):
                 self.game.wind_explosions.append(exp)
                 self.wind_mark_tower = None
             if self.poison_stacks > 0 and Enchantment.POISON_CONTRACT in self.game.enchantments:
-                if random.random() < 0.10:
-                    self.game.poison_base_damage += 1
+                if random.random() < 0.06 and self.game.poison_contract_active():
+                    exp = PoisonContractExplosion(self.rect.centerx, self.rect.centery, self.game)
+                    self.game.poison_splashes.append(exp)
             self.kill()
             return self.reward
         return 0
