@@ -226,6 +226,7 @@ class UIManager:
         self.game = game
 
     def draw_menu(self):
+        pygame.mouse.set_visible(True)
         title = assets.font_large.render("像素防线:晶域守卫", True, WHITE)
         self.game.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 300))
         pygame.draw.rect(self.game.screen, GREEN, (900, 840, 760, 80))
@@ -247,10 +248,6 @@ class UIManager:
             img.set_alpha(alpha)
             self.game.screen.blit(img, (cb['x'] * TILE_SIZE, cb['y'] * TILE_SIZE))
         self.game.enemies.draw(self.game.screen)
-        for enemy in self.game.enemies:
-            if enemy.lich_shield > 0:
-                img = enemy.lich_shield_broken_image if enemy.lich_shield_broken_visual else enemy.lich_shield_image
-                self.game.screen.blit(img, img.get_rect(center=enemy.rect.center))
         self.game.bullets.draw(self.game.screen)
         for dragon in self.game.dragons:
             dragon.draw(self.game.screen)
@@ -318,12 +315,25 @@ class UIManager:
             meteor.draw(self.game.screen)
         for explosion in self.game.mushroom_explosions:
             explosion.draw(self.game.screen)
+        for bee in self.game.bees:
+            bee.draw(self.game.screen)
         self.game.damage_texts.draw(self.game.screen)
 
         self.draw_ui()
         self.draw_herobrine_health_bar()
         if self.game.state == GameState.PAUSED:
             self.draw_pause_overlay()
+
+        gauntlet_cursor = (
+            Enchantment.INFINITY_GAUNTLET in self.game.enchantments
+            and self.game.state in (GameState.PLAYING, GameState.WAVE_PREPARATION, GameState.PAUSED)
+        )
+        pygame.mouse.set_visible(not gauntlet_cursor)
+        if gauntlet_cursor:
+            icon = assets.enchantment_icons_raw.get(Enchantment.INFINITY_GAUNTLET)
+            if icon:
+                mx, my = pygame.mouse.get_pos()
+                self.game.screen.blit(icon, (mx - icon.get_width() // 2, my - icon.get_height() // 2))
 
     def draw_ui(self):
         pygame.draw.rect(self.game.screen, BLACK, (0, 0, SCREEN_WIDTH, 80))
@@ -480,6 +490,7 @@ class UIManager:
         return pygame.Rect(panel.x + 40, panel.bottom - 90, 220, 60)
 
     def draw_shop(self):
+        pygame.mouse.set_visible(True)
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
         self.game.screen.blit(overlay, (0, 0))
@@ -602,6 +613,7 @@ class UIManager:
         self.game.screen.blit(continue_text, (SCREEN_WIDTH // 2 - continue_text.get_width() // 2, SCREEN_HEIGHT // 2 + 20))
 
     def draw_game_over(self):
+        pygame.mouse.set_visible(True)
         self.game.screen.fill(BLACK)
         text1 = assets.font_large.render("游戏结束!", True, RED)
         self.game.screen.blit(text1, (SCREEN_WIDTH // 2 - text1.get_width() // 2, 400))
@@ -627,6 +639,7 @@ class UIManager:
                 break
 
     def draw_victory(self):
+        pygame.mouse.set_visible(True)
         self.game.screen.fill(BLACK)
         text1 = assets.font_large.render("胜利!", True, GREEN)
         self.game.screen.blit(text1, (SCREEN_WIDTH // 2 - text1.get_width() // 2, 400))

@@ -86,6 +86,7 @@ soul_sand_img = None
 gilded_blackstone_img = None
 command_block_img = None
 ice_wall_img = None
+bee_img = None
 
 ice_dragon_img = None
 fire_dragon_img = None
@@ -308,6 +309,13 @@ def init_assets():
     except:
         ice_wall_img = pygame.Surface(ts)
         ice_wall_img.fill((150, 200, 255))
+
+    global bee_img
+    try:
+        bee_img = load_image("tower/bee.png", (100, 100))
+    except:
+        bee_img = pygame.Surface((80, 80), pygame.SRCALPHA)
+        pygame.draw.circle(bee_img, (255, 200, 0), (40, 40), 30)
 
     global ice_dragon_img, fire_dragon_img, electric_dragon_img
     try:

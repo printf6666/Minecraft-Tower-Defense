@@ -555,3 +555,55 @@ class CreeperExplosion:
             img = pygame.transform.smoothscale(img, (target, target))
         rect = img.get_rect(center=(self.x, self.y))
         screen.blit(img, rect)
+
+
+class Bee:
+    SPEED = 5.0
+
+    def __init__(self, x, y, game):
+        self.x = float(x)
+        self.y = float(y)
+        self.game = game
+        self.target = None
+        self.done = False
+        self.image = assets.bee_img
+
+    def _pick_target(self):
+        living = [e for e in self.game.enemies if e.health > 0]
+        self.target = random.choice(living) if living else None
+
+    def update(self):
+        if self.done:
+            return False
+        if self.target is None or self.target.health <= 0:
+            self._pick_target()
+        for enemy in self.game.enemies:
+            if enemy.health <= 0:
+                continue
+            if enemy.rect.collidepoint(self.x, self.y):
+                dmg = max(1, int(enemy.max_health * 0.10))
+                reward = enemy.take_damage(dmg, color=GOLD, ignore_armor=True)
+                self.game.coins += reward
+                self.done = True
+                return False
+        if self.target is None:
+            return True
+        tx = self.target.rect.centerx
+        ty = self.target.rect.centery
+        dx = tx - self.x
+        dy = ty - self.y
+        dist = math.hypot(dx, dy)
+        if dist <= self.SPEED:
+            dmg = max(1, int(self.target.max_health * 0.10))
+            reward = self.target.take_damage(dmg, color=GOLD, ignore_armor=True)
+            self.game.coins += reward
+            self.done = True
+            return False
+        self.x += dx / dist * self.SPEED
+        self.y += dy / dist * self.SPEED
+        return True
+
+    def draw(self, screen):
+        if self.done or self.image is None:
+            return
+        screen.blit(self.image, self.image.get_rect(center=(int(self.x), int(self.y))))

@@ -24,11 +24,6 @@ class Enemy(pygame.sprite.Sprite):
             self.health = self.max_health
             self.total_layers = 18
             self.current_layer = 18
-        elif enemy_key == "LICH":
-            self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
-            self.health = self.max_health
-            self.total_layers = 1
-            self.current_layer = 1
         elif enemy_key in ("CREEPER", "CHARGED_CREEPER"):
             self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
             self.health = self.max_health
@@ -43,14 +38,6 @@ class Enemy(pygame.sprite.Sprite):
         self.creeper_explode_timer = 900 if enemy_key in ("CREEPER", "CHARGED_CREEPER") else -1
         self.reward = config["reward"]
         self.base_speed = self.speed
-        self.lich_shield = 100 if enemy_key == "LICH" else 0
-        self.lich_shield_broken_visual = False
-        if enemy_key == "LICH":
-            self.lich_shield_image = assets.load_image("enemy/lich_shield_full.png")
-            self.lich_shield_broken_image = assets.load_image("enemy/lich_shield_broken.png")
-        else:
-            self.lich_shield_image = None
-            self.lich_shield_broken_image = None
 
         self.stun_time = 0
         self.freeze_time = 0
@@ -254,7 +241,7 @@ class Enemy(pygame.sprite.Sprite):
                     dmg *= 2
                 if Enchantment.BLAZE_POWDER in self.game.enchantments:
                     dmg *= 1.3
-                reward = self.take_damage(int(dmg), color=YELLOW, scale=1.0)
+                reward = self.take_damage(int(dmg), color=ORANGE, scale=1.0)
                 self.game.coins += reward
 
         if self.poison_stacks > 0:
@@ -378,13 +365,8 @@ class Enemy(pygame.sprite.Sprite):
                     break
         self.rect.center = (self.pos_x, self.pos_y)
 
-    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, ignore_shield=False):
+    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False):
         if self.health <= 0:
-            return 0
-
-        if self.lich_shield > 0 and not ignore_shield:
-            self.lich_shield -= 1
-            self._update_lich_shield_image()
             return 0
 
         if ignore_armor:
@@ -458,12 +440,6 @@ class Enemy(pygame.sprite.Sprite):
             self.kill()
             return self.reward
         return 0
-
-    def _update_lich_shield_image(self):
-        if self.enemy_type != EnemyType.LICH:
-            return
-        if self.lich_shield < 50 and not self.lich_shield_broken_visual:
-            self.lich_shield_broken_visual = True
 
     def draw_health_bar(self, screen):
         if self.health <= 0:

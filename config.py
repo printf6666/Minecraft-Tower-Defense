@@ -71,6 +71,8 @@ LIGHT_BLUE = (100, 100, 255)
 ICE_BLUE = (150, 200, 255)
 BROWN = (139, 69, 19)
 GOLD = (255, 215, 0)
+ORANGE = (255, 165, 0)
+ELECTRIC_PURPLE = (178, 0, 255)
 PURPLE = (128, 0, 128)
 TELEPORT_PURPLE = (138, 43, 226)
 MINT = (152, 255, 152)
@@ -110,6 +112,8 @@ class Enchantment(Enum):
     PULSE_SHIELD = 21
     RESONANCE_STORM = 22
     EMBER_REBIRTH = 23
+    WAX = 24
+    INFINITY_GAUNTLET = 25
 
 ENCHANTMENT_DATA = {
     Enchantment.BALANCED: {"name": "均衡强化", "desc": "所有伤害+5%", "cost": 100},
@@ -136,7 +140,18 @@ ENCHANTMENT_DATA = {
     Enchantment.PULSE_SHIELD: {"name": "脉冲护盾", "desc": "护盾被击碎后进入脉冲状态8秒，期间免疫所有伤害", "cost": 800},
     Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，雷神之锤每攻击120次，所有雷盾反击一次并引爆所有蓄风印记", "cost": 1600},
     Enchantment.EMBER_REBIRTH: {"name": "余烬重生", "desc": "同时存在满级龙息塔与8座满级核弹塔时，点击龙息塔按Q花费5万金币献祭：塔消失、全场核弹立即冷却齐射，巨型陨石从天而降、着地时对全场敌人造成1000000007伤害。献祭花费逐次翻倍", "cost": 3200},
+    Enchantment.WAX: {"name": "蜜脾", "desc": "所有炮塔涂蜡，酸雨将无法破坏炮塔及护盾。酸雨开始后每0.5秒从终点扇形召唤5只蜜蜂，共召唤10次，蜜蜂随后寻敌，撞击敌人后死亡并造成其10%最大生命的无视护甲伤害", "cost": 400},
+    Enchantment.INFINITY_GAUNTLET: {"name": "无限手套", "desc": "鼠标位置将始终附着无限手套，鼠标点击敌人可对其造成各种伤害，伤害 = 攻击力 * 波数 ** 2 * (1 + 对应元素强化 + 均衡强化)", "cost": 1600},
 }
+
+GAUNTLET_ATTACKS = [
+    (TowerType.PHYSICAL, 20, 0.80, WHITE),
+    (TowerType.FLAME, 40, 0.02, ORANGE),
+    (TowerType.POISON, 30, 0.16, GREEN),
+    (TowerType.ICE, 20, 0.01, ICE_BLUE),
+    (TowerType.WIND, 20, 0.01, MINT),
+    (TowerType.TRIDENT, 30, 0.02, ELECTRIC_PURPLE),
+]
 
 ENCHANTMENT_ORDER = [
     Enchantment.BALANCED, Enchantment.PHYSICAL, Enchantment.ICE, Enchantment.FLAME, Enchantment.TRIDENT,
@@ -146,6 +161,8 @@ ENCHANTMENT_ORDER = [
     Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.FIRE_ARROW, Enchantment.PULSE_SHIELD,
     Enchantment.RESONANCE_STORM,
     Enchantment.EMBER_REBIRTH,
+    Enchantment.WAX,
+    Enchantment.INFINITY_GAUNTLET,
 ]
 
 NON_REPEATABLE_ENCHANTMENTS = {Enchantment.DENSE, Enchantment.WIND_BURST}
@@ -183,7 +200,6 @@ class EnemyType(Enum):
     MAGMA_CUBE = 12
     MAGMA_CUBE_SMALL = 13
     HEROBRINE = 14
-    LICH = 15
     CREEPER = 16
     CHARGED_CREEPER = 17
     SPIDER = 18
@@ -243,7 +259,6 @@ ENEMY_TYPES = {
     "NETHERITE_ARMORED": {"image": "netherite_armored.png", "speed": 1.2, "health": 300, "reward": 50},
     "MAGMA_CUBE": {"image": "magma_cube.png", "speed": 2.0, "health": 180, "reward": 25},
     "MAGMA_CUBE_SMALL": {"image": "magma_cube.png", "speed": 3.0, "health": 90, "reward": 10},
-    "LICH": {"image": "lich.png", "speed": 3, "health": 500, "reward": 40},
     "CREEPER": {"image": "creeper.png", "speed": 2, "health": 100, "reward": 20},
     "CHARGED_CREEPER": {"image": "charged_creeper.png", "speed": 2, "health": 100, "reward": 20},
     "SPIDER": {"image": "spider.png", "speed": 4, "health": 100, "reward": 20},

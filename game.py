@@ -4,11 +4,12 @@ import math
 import json
 import sys
 import os
+from types import SimpleNamespace
 import assets
 from config import *
 from enemy import Enemy, DamageText
 from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet, MAP_CENTER_X, MAP_CENTER_Y
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
 from dragons import Dragon
@@ -108,6 +109,9 @@ class Game:
         self.resonance_counter = 0
         self.sacrifices = 0
         self.meteors = []
+        self.bees = []
+        self.bee_spawn_remaining = 0
+        self.bee_spawn_timer = 0
 
         self.fog_timer = 0
         self.fog_visible = False
@@ -231,6 +235,24 @@ class Game:
                             self.selected_tower = None
                             self.selected_tower_type = icon_clicked
                             self.show_range = False
+                        elif Enchantment.INFINITY_GAUNTLET in self.enchantments:
+                            gauntlet_hit = False
+                            for e in self.enemies:
+                                if e.health > 0 and e.rect.collidepoint(mouse_x, mouse_y):
+                                    self.gauntlet_attack(e)
+                                    gauntlet_hit = True
+                                    break
+                            if not gauntlet_hit:
+                                clicked_tower = self.get_tower_at(grid_x, grid_y)
+                                if clicked_tower:
+                                    self.selected_tower = clicked_tower
+                                    self.selected_tower_type = None
+                                    self.show_range = True
+                                else:
+                                    self.selected_tower = None
+                                    self.show_range = False
+                                    if self.selected_tower_type and self.can_build_tower(grid_x, grid_y):
+                                        self.build_tower(grid_x, grid_y, self.selected_tower_type)
                         else:
                             clicked_tower = self.get_tower_at(grid_x, grid_y)
                             if clicked_tower:
@@ -432,7 +454,7 @@ class Game:
                 elif tower.shield_branch == 3:
                     damage = (tower.level - 10) * 2500
                     for enemy in self.enemies:
-                        enemy.take_damage(damage, color=(255, 255, 0))
+                        enemy.take_damage(damage, color=ORANGE)
                         enemy.stun_resistance = 0
                         enemy.stun_time = max(enemy.stun_time, 60)
                         enemy.burn_time = float('inf')
@@ -449,7 +471,7 @@ class Game:
             if tower.type == TowerType.SHIELD and tower.level >= 11 and tower.shield_branch == 3:
                 damage = (tower.level - 10) * 2500
                 for enemy in self.enemies:
-                    enemy.take_damage(damage, color=(255, 255, 0))
+                    enemy.take_damage(damage, color=ORANGE)
                     enemy.stun_resistance = 0
                     enemy.stun_time = max(enemy.stun_time, 60)
                     enemy.burn_time = float('inf')
@@ -501,7 +523,7 @@ class Game:
     def add_meteor_hit(self, x, y):
         for enemy in list(self.enemies):
             if enemy.health > 0:
-                reward = enemy.take_damage(1000000007, color=(255, 120, 40), scale=1.6, ignore_shield=True)
+                reward = enemy.take_damage(1000000007, color=(255, 120, 40), scale=1.6)
                 self.coins += reward
 
     def global_production(self):
@@ -624,6 +646,9 @@ class Game:
         self.resonance_counter = 0
         self.sacrifices = 0
         self.meteors = []
+        self.bees = []
+        self.bee_spawn_remaining = 0
+        self.bee_spawn_timer = 0
         self.enemy_grid = {}
         self.fog_timer = 0
         self.fog_visible = False
@@ -786,6 +811,34 @@ class Game:
 
     def enchantment_temp_bonus(self):
         return 0
+
+    def gauntlet_attack(self, enemy):
+        weights = [a[2] for a in GAUNTLET_ATTACKS]
+        tower_type, atk, _, color = random.choices(GAUNTLET_ATTACKS, weights=weights)[0]
+        wave = max(1, self.wave_manager.current_wave)
+        damage = int(atk * wave ** 2 * self.get_enchant_damage_multiplier(tower_type))
+        reward = enemy.take_damage(damage, color=color)
+        self.coins += reward
+        if tower_type == TowerType.FLAME:
+            enemy.apply_burn(max(1, self.temperature), 2 * 60)
+        elif tower_type == TowerType.POISON:
+            enemy.apply_poison(1)
+        elif tower_type == TowerType.ICE:
+            enemy.apply_freeze(int(0.25 * 60))
+        elif tower_type == TowerType.WIND:
+            armored = (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED,
+                       EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED)
+            enemy.apply_knockback(12)
+            if enemy.enemy_type not in armored:
+                enemy.wind_mark_tower = SimpleNamespace(damage=damage, wind_knockback=12)
+        elif tower_type == TowerType.TRIDENT:
+            col = enemy.rect.centerx // TILE_SIZE
+            for e in self.enemies:
+                if e.rect.centerx // TILE_SIZE == col and e.health > 0:
+                    reward = e.take_damage(damage, color=color)
+                    self.coins += reward
+                    e.on_lightning_hit()
+            self.add_lightning(enemy.rect.centerx, 800, False)
 
     def frost_combo_active(self):
         if Enchantment.FROZEN_DEEP not in self.enchantments:
@@ -1073,6 +1126,30 @@ class Game:
                 if sw.done:
                     self.shockwave_effects.remove(sw)
 
+            if self.bee_spawn_remaining > 0:
+                self.bee_spawn_timer += 1
+                if self.bee_spawn_timer >= 30:
+                    self.bee_spawn_timer = 0
+                    self.bee_spawn_remaining -= 1
+                    ex, ey = self.end_point
+                    cx = ex * TILE_SIZE + TILE_SIZE // 2
+                    cy = ey * TILE_SIZE + TILE_SIZE // 2
+                    sx, sy = self.start_point
+                    base_angle = math.atan2(
+                        (sy * TILE_SIZE + TILE_SIZE // 2) - cy,
+                        (sx * TILE_SIZE + TILE_SIZE // 2) - cx)
+                    n = 5
+                    spread = math.radians(120)
+                    radius = TILE_SIZE * 0.6
+                    for i in range(n):
+                        a = base_angle - spread / 2 + spread * i / (n - 1)
+                        bx = cx + math.cos(a) * radius
+                        by = cy + math.sin(a) * radius
+                        self.bees.append(Bee(bx, by, self))
+            for bee in self.bees[:]:
+                if not bee.update():
+                    self.bees.remove(bee)
+
             if self.weather == Weather.THUNDERSTORM:
                 self.thunderstorm_timer += 1
                 if self.thunderstorm_timer >= 180:
@@ -1087,7 +1164,7 @@ class Game:
                         for enemy in self.enemies:
                             e_col = enemy.rect.centerx // TILE_SIZE
                             if e_col == col and enemy.health > 0:
-                                reward = enemy.take_damage(50, color=GOLD)
+                                reward = enemy.take_damage(50, color=ELECTRIC_PURPLE)
                                 self.coins += reward
                                 enemy.apply_burn(self.temperature, 240)
                                 enemy.on_lightning_hit()
@@ -1160,6 +1237,9 @@ class Game:
         self.temperature = max(-273, self.temperature)
         self.save_game()
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
+        if self.weather == Weather.ACID_RAIN and Enchantment.WAX in self.enchantments:
+            self.bee_spawn_remaining = 10
+            self.bee_spawn_timer = 0
         if self.weather == Weather.ENDLESS_NIGHT and not self.herobrine_spawned:
             pygame.mixer.music.stop()
             boss_bgm = None
@@ -1171,102 +1251,103 @@ class Game:
                 pygame.mixer.music.load(assets.resource_path(boss_bgm))
                 pygame.mixer.music.play(-1)
         if self.weather == Weather.ACID_RAIN:
-            destroyed = []
-            for t in self.towers:
-                if t.level >= 1:
-                    if t.in_pulse():
-                        continue
-                    if getattr(t, 'has_shield', False):
-                        t.break_shield()
-                        self.trigger_shield_burst(t)
-                        continue
-                    old_level = t.level
-                    t.level -= 1
-                    t.upgrade_cost = int(t.upgrade_cost / 1.5)
-                    if t.type == TowerType.PRODUCTION:
-                        multiplier = 2 if t.is_on_gold_ore else 1
-                        self.gold_per_second -= multiplier
-                    if old_level > 1:
-                        if t.type == TowerType.PHYSICAL:
-                            t.damage -= 15
-                            t.range -= TILE_SIZE // 2
-                            t.fire_rate = min(60, t.fire_rate + 6)
-                        elif t.type == TowerType.ICE:
-                            t.damage -= 5
-                            t.range -= TILE_SIZE // 4
-                            t.fire_rate = min(60, t.fire_rate + 6)
-                            if old_level >= 6:
-                                t.freeze_time = round(t.freeze_time - 0.1, 1)
-                            self.temperature += 1
-                        elif t.type == TowerType.TELEPORT:
-                            if t.teleport_branch == 2:
-                                t.damage -= 100
+            if Enchantment.WAX not in self.enchantments:
+                destroyed = []
+                for t in self.towers:
+                    if t.level >= 1:
+                        if t.in_pulse():
+                            continue
+                        if getattr(t, 'has_shield', False):
+                            t.break_shield()
+                            self.trigger_shield_burst(t)
+                            continue
+                        old_level = t.level
+                        t.level -= 1
+                        t.upgrade_cost = int(t.upgrade_cost / 1.5)
+                        if t.type == TowerType.PRODUCTION:
+                            multiplier = 2 if t.is_on_gold_ore else 1
+                            self.gold_per_second -= multiplier
+                        if old_level > 1:
+                            if t.type == TowerType.PHYSICAL:
+                                t.damage -= 15
                                 t.range -= TILE_SIZE // 2
                                 t.fire_rate = min(60, t.fire_rate + 6)
-                            else:
+                            elif t.type == TowerType.ICE:
                                 t.damage -= 5
-                                t.teleport_chance = max(0, t.teleport_chance - 0.01)
                                 t.range -= TILE_SIZE // 4
                                 t.fire_rate = min(60, t.fire_rate + 6)
                                 if old_level >= 6:
-                                    t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
-                        elif t.type == TowerType.FLAME:
-                            t.damage -= 15
-                            t.range -= TILE_SIZE // 4
-                            t.fire_rate = min(60, t.fire_rate + 6)
-                            if old_level >= 6:
-                                t.stun_time = round(t.stun_time - 0.1, 1)
-                            self.temperature -= 1
-                        elif t.type == TowerType.TRIDENT:
-                            t.damage -= 25
-                            t.range -= TILE_SIZE // 2
-                            t.fire_rate = min(60, t.fire_rate + 6)
-                            t.lightning_damage -= 50
-                            self.temperature -= 1
-                        elif t.type == TowerType.WIND:
-                            t.wind_knockback -= 12
-                            if old_level >= 7:
-                                t.damage -= 20
-                                t.range -= TILE_SIZE // 2
-                            elif old_level == 6:
-                                t.damage -= 20
-                                t.range -= TILE_SIZE // 2
-                                t.fire_rate = min(60, t.fire_rate + 6)
-                            else:
-                                t.damage -= 5
+                                    t.freeze_time = round(t.freeze_time - 0.1, 1)
+                                self.temperature += 1
+                            elif t.type == TowerType.TELEPORT:
+                                if t.teleport_branch == 2:
+                                    t.damage -= 100
+                                    t.range -= TILE_SIZE // 2
+                                    t.fire_rate = min(60, t.fire_rate + 6)
+                                else:
+                                    t.damage -= 5
+                                    t.teleport_chance = max(0, t.teleport_chance - 0.01)
+                                    t.range -= TILE_SIZE // 4
+                                    t.fire_rate = min(60, t.fire_rate + 6)
+                                    if old_level >= 6:
+                                        t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
+                            elif t.type == TowerType.FLAME:
+                                t.damage -= 15
                                 t.range -= TILE_SIZE // 4
                                 t.fire_rate = min(60, t.fire_rate + 6)
-                        elif t.type == TowerType.POISON:
-                            t.damage -= 15
-                            t.range -= TILE_SIZE // 2
-                            t.fire_rate = min(60, t.fire_rate + 6)
-                        elif t.type == TowerType.BOMB:
-                            t.damage -= 100
-                            if old_level >= 11 and t.level < 11:
-                                t.is_nuclear = False
-                                base_range = int(TILE_SIZE * 2.2)
-                                t.range = base_range + int(TILE_SIZE * 0.2) * (t.level - 1)
-                                t.fire_rate = 120
-                            self.temperature -= 1
-                        elif t.type == TowerType.TIME:
-                            pass
-                        if t.type == TowerType.PRODUCTION:
-                            multiplier = 2 if t.is_on_gold_ore else 1
-                            if old_level >= 6: self.gold_per_wave -= multiplier
-                            if old_level >= 11:
-                                self.emerald_per_wave -= EMERALD_PER_WAVE_BY_LEVEL.get(old_level, 3) - EMERALD_PER_WAVE_BY_LEVEL.get(t.level, 0)
-                        t.update_sprite()
-                    else:
-                        if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
-                            self.temperature -= 1
-                        elif t.type == TowerType.ICE:
-                            self.temperature += 1
-                        self.temperature = max(-273, self.temperature)
-                        destroyed.append(t)
-            for t in destroyed:
-                if self.selected_tower is t:
-                    self.selected_tower = None
-                t.kill()
+                                if old_level >= 6:
+                                    t.stun_time = round(t.stun_time - 0.1, 1)
+                                self.temperature -= 1
+                            elif t.type == TowerType.TRIDENT:
+                                t.damage -= 25
+                                t.range -= TILE_SIZE // 2
+                                t.fire_rate = min(60, t.fire_rate + 6)
+                                t.lightning_damage -= 50
+                                self.temperature -= 1
+                            elif t.type == TowerType.WIND:
+                                t.wind_knockback -= 12
+                                if old_level >= 7:
+                                    t.damage -= 20
+                                    t.range -= TILE_SIZE // 2
+                                elif old_level == 6:
+                                    t.damage -= 20
+                                    t.range -= TILE_SIZE // 2
+                                    t.fire_rate = min(60, t.fire_rate + 6)
+                                else:
+                                    t.damage -= 5
+                                    t.range -= TILE_SIZE // 4
+                                    t.fire_rate = min(60, t.fire_rate + 6)
+                            elif t.type == TowerType.POISON:
+                                t.damage -= 15
+                                t.range -= TILE_SIZE // 2
+                                t.fire_rate = min(60, t.fire_rate + 6)
+                            elif t.type == TowerType.BOMB:
+                                t.damage -= 100
+                                if old_level >= 11 and t.level < 11:
+                                    t.is_nuclear = False
+                                    base_range = int(TILE_SIZE * 2.2)
+                                    t.range = base_range + int(TILE_SIZE * 0.2) * (t.level - 1)
+                                    t.fire_rate = 120
+                                self.temperature -= 1
+                            elif t.type == TowerType.TIME:
+                                pass
+                            if t.type == TowerType.PRODUCTION:
+                                multiplier = 2 if t.is_on_gold_ore else 1
+                                if old_level >= 6: self.gold_per_wave -= multiplier
+                                if old_level >= 11:
+                                    self.emerald_per_wave -= EMERALD_PER_WAVE_BY_LEVEL.get(old_level, 3) - EMERALD_PER_WAVE_BY_LEVEL.get(t.level, 0)
+                            t.update_sprite()
+                        else:
+                            if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
+                                self.temperature -= 1
+                            elif t.type == TowerType.ICE:
+                                self.temperature += 1
+                            self.temperature = max(-273, self.temperature)
+                            destroyed.append(t)
+                for t in destroyed:
+                    if self.selected_tower is t:
+                        self.selected_tower = None
+                    t.kill()
             for enemy in self.enemies:
                 enemy.apply_poison(10)
         if self.weather == Weather.SCORCHING_SUN and self.temperature > 0:
@@ -1458,6 +1539,9 @@ class Game:
         self.resonance_counter = 0
         self.sacrifices = 0
         self.meteors = []
+        self.bees = []
+        self.bee_spawn_remaining = 0
+        self.bee_spawn_timer = 0
         self.enemy_grid = {}
         self.fog_timer = 0
         self.fog_visible = False

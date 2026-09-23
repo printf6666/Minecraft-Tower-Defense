@@ -767,9 +767,9 @@ class Bullet(pygame.sprite.Sprite):
         elif self.tower_type == TowerType.TELEPORT:
             return WHITE
         elif self.tower_type == TowerType.FLAME:
-            return YELLOW
+            return ORANGE
         elif self.tower_type == TowerType.TRIDENT:
-            return GOLD
+            return ELECTRIC_PURPLE
         elif self.tower_type == TowerType.WIND:
             return MINT
         elif self.tower_type == TowerType.POISON:
@@ -880,7 +880,7 @@ class Bullet(pygame.sprite.Sprite):
                 e_col = e.rect.centerx // TILE_SIZE
                 if e_col == col and e.health > 0:
                     dmg = lightning_dmg
-                    reward = e.take_damage(dmg, color=GOLD)
+                    reward = e.take_damage(dmg, color=ELECTRIC_PURPLE)
                     self.game.coins += reward
                     e.apply_burn(self.game.temperature, 240)
                     e.on_lightning_hit()
@@ -894,7 +894,7 @@ class Bullet(pygame.sprite.Sprite):
                         e_row = e.rect.centery // TILE_SIZE
                         if e_row == row and e.health > 0:
                             dmg = h_lightning_dmg
-                            reward = e.take_damage(dmg, color=GOLD)
+                            reward = e.take_damage(dmg, color=ELECTRIC_PURPLE)
                             self.game.coins += reward
                             e.on_lightning_hit()
                     h_effect = HorizontalLightningEffect(1024, row * TILE_SIZE + TILE_SIZE // 2, not is_golden)
@@ -915,7 +915,7 @@ class Bullet(pygame.sprite.Sprite):
                 for e in self.game.enemies:
                     e_col = e.rect.centerx // TILE_SIZE
                     if e_col == col and e.health > 0:
-                        reward = e.take_damage(lightning_dmg, color=GOLD)
+                        reward = e.take_damage(lightning_dmg, color=ELECTRIC_PURPLE)
                         self.game.coins += reward
                 self.game.add_lightning(enemy.rect.centerx, 800, False)
         if self.tower_type == TowerType.POISON and self.poison_stacks > 0:
