@@ -256,7 +256,10 @@ class Enemy(pygame.sprite.Sprite):
             self.wither_timer += 1
             if self.wither_timer >= 120:
                 self.wither_timer = 0
-                dmg = int(self.max_health * 0.01)
+                wither_pct = 0.01
+                if self.game.wither_rose_active():
+                    wither_pct += 0.001
+                dmg = int(self.max_health * wither_pct)
                 reward = self.take_damage(dmg, color=(100, 0, 100), scale=1.0, ignore_armor=True)
                 self.game.coins += reward
 

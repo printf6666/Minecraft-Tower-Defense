@@ -133,7 +133,7 @@ ENCHANTMENT_DATA = {
     Enchantment.DRAGON_LEGEND: {"name": "龙族传说", "desc": "同时存在冰龙塔、火龙塔、电龙塔时，龙伤害翻倍且移动速度+75%", "cost": 600},
     Enchantment.ENDLESS_GREED: {"name": "无尽贪婪", "desc": "集齐七种无尽炮塔后，其子弹5%概率爆炸，造成1%最大生命伤害并获得500金币", "cost": 1600},
     Enchantment.RAIN_FIRE: {"name": "水火相容", "desc": "雨天/雷暴/酸雨可以点燃敌人", "cost": 200},
-    Enchantment.WITHER_ROSE: {"name": "凋零玫瑰", "desc": "凋零核弹伤害额外附加0.8%最大生命", "cost": 800},
+    Enchantment.WITHER_ROSE: {"name": "凋零玫瑰", "desc": "同时拥有凋零之首与凋零核弹时，凋零debuff额外附加0.1%最大生命，凋零核弹伤害额外附加0.8%最大生命", "cost": 1600},
     Enchantment.LAVA: {"name": "岩浆桶", "desc": "每5秒提高1温度，每波开始时重置", "cost": 200},
     Enchantment.TELESCOPE: {"name": "望远镜", "desc": "所有炮塔射程增加1格", "cost": 200},
     Enchantment.FIRE_ARROW: {"name": "火矢", "desc": "箭矢伤害*2，附带燃烧4秒", "cost": 200},
@@ -180,7 +180,7 @@ class BombSubType(Enum):
     POISON = 4
     WITHER_TNT = 5
 
-EMERALD_PER_WAVE_BY_LEVEL = {11: 1, 12: 1, 13: 2, 14: 2, 15: 3}
+EMERALD_PER_WAVE_BY_LEVEL = {11: 1, 12: 2, 13: 3, 14: 4, 15: 5}
 
 
 

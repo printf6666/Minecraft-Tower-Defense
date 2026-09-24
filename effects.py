@@ -380,7 +380,7 @@ class MushroomExplosion:
         else:
             percent_damage = [0.02, 0.04, 0.06, 0.08, 0.1][tower_level - 11]
             fixed_damage = [2000, 4000, 6000, 8000, 10000][tower_level - 11]
-            if Enchantment.WITHER_ROSE in game.enchantments:
+            if game.wither_rose_active():
                 percent_damage += 0.008
             for enemy in game.enemies:
                 if enemy.health <= 0:

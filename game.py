@@ -854,6 +854,13 @@ class Game:
         has_hydra = any(t.type == TowerType.POISON and t.level >= 11 and t.poison_branch == 3 for t in self.towers)
         return has_ring and has_hydra
 
+    def wither_rose_active(self):
+        if Enchantment.WITHER_ROSE not in self.enchantments:
+            return False
+        has_head = any(t.type == TowerType.POISON and t.level >= 11 and t.poison_branch == 2 for t in self.towers)
+        has_nuke = any(t.type == TowerType.BOMB and t.level >= 11 and t.bomb_branch == 2 for t in self.towers)
+        return has_head and has_nuke
+
     def dragon_legend_active(self):
         if Enchantment.DRAGON_LEGEND not in self.enchantments:
             return False
