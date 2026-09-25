@@ -114,6 +114,8 @@ class Enchantment(Enum):
     EMBER_REBIRTH = 23
     WAX = 24
     INFINITY_GAUNTLET = 25
+    UNSTABLE_CRYSTAL = 26
+    POWER_V = 27
 
 ENCHANTMENT_DATA = {
     Enchantment.BALANCED: {"name": "均衡强化", "desc": "所有伤害+5%", "cost": 100},
@@ -124,7 +126,7 @@ ENCHANTMENT_DATA = {
     Enchantment.WIND: {"name": "风系强化", "desc": "风系伤害+20%", "cost": 100},
     Enchantment.POISON: {"name": "毒系强化", "desc": "毒系伤害+20%", "cost": 100},
     Enchantment.BOMB: {"name": "爆炸强化", "desc": "爆炸伤害+20%", "cost": 100},
-    Enchantment.DENSE: {"name": "致密", "desc": "重锤获得距离增伤，伤害+2/px", "cost": 200},
+    Enchantment.DENSE: {"name": "致密V", "desc": "重锤获得距离增伤，伤害+5/px", "cost": 300},
     Enchantment.WIND_BURST: {"name": "风爆", "desc": "蓄风印记爆炸伤害固定为5000点", "cost": 200},
     Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "同时存在剧毒环刃与九头蛇毒箭时，中毒敌人被击败有6%概率爆炸，对周围敌人造成900伤害并击晕5秒，基础毒伤永久+1", "cost": 400},
     Enchantment.BURN: {"name": "高温燃烧", "desc": "燃烧伤害翻倍", "cost": 200},
@@ -142,6 +144,8 @@ ENCHANTMENT_DATA = {
     Enchantment.EMBER_REBIRTH: {"name": "余烬重生", "desc": "同时存在满级龙息塔与8座满级核弹塔时，点击龙息塔按Q花费5万金币献祭：塔消失、全场核弹立即冷却齐射，巨型陨石从天而降、着地时对全场敌人造成1000000007伤害。献祭花费逐次翻倍", "cost": 3200},
     Enchantment.WAX: {"name": "蜜脾", "desc": "所有炮塔涂蜡，酸雨将无法破坏炮塔及护盾。酸雨开始后每0.5秒从终点扇形召唤5只蜜蜂，共召唤10次，蜜蜂随后寻敌，撞击敌人后死亡并造成其10%最大生命的无视护甲伤害", "cost": 400},
     Enchantment.INFINITY_GAUNTLET: {"name": "无限手套", "desc": "鼠标位置将始终附着无限手套，鼠标点击敌人可对其造成各种伤害，伤害 = 攻击力 * 波数 ** 2 * (1 + 对应元素强化 + 均衡强化)", "cost": 1600},
+    Enchantment.UNSTABLE_CRYSTAL: {"name": "不稳定水晶", "desc": "TNT类炮塔子弹爆炸有10%概率在周围道路格生成不稳定水晶，敌人碰到后受到其1%最大生命伤害并引发爆炸；核弹/凋零核弹爆炸时全场每个道路格各有10%概率生成", "cost": 1600},
+    Enchantment.POWER_V: {"name": "力量V", "desc": "箭矢伤害+125%", "cost": 300},
 }
 
 GAUNTLET_ATTACKS = [
@@ -163,6 +167,8 @@ ENCHANTMENT_ORDER = [
     Enchantment.EMBER_REBIRTH,
     Enchantment.WAX,
     Enchantment.INFINITY_GAUNTLET,
+    Enchantment.UNSTABLE_CRYSTAL,
+    Enchantment.POWER_V,
 ]
 
 NON_REPEATABLE_ENCHANTMENTS = {Enchantment.DENSE, Enchantment.WIND_BURST}

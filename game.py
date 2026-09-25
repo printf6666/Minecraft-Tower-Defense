@@ -9,7 +9,7 @@ import assets
 from config import *
 from enemy import Enemy, DamageText
 from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet, MAP_CENTER_X, MAP_CENTER_Y
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
 from dragons import Dragon
@@ -112,6 +112,7 @@ class Game:
         self.bees = []
         self.bee_spawn_remaining = 0
         self.bee_spawn_timer = 0
+        self.crystals = []
 
         self.fog_timer = 0
         self.fog_visible = False
@@ -649,6 +650,7 @@ class Game:
         self.bees = []
         self.bee_spawn_remaining = 0
         self.bee_spawn_timer = 0
+        self.crystals = []
         self.enemy_grid = {}
         self.fog_timer = 0
         self.fog_visible = False
@@ -885,6 +887,33 @@ class Game:
         self.coins += 500
         exp = EndlessGreedExplosion(x, y, self)
         self.endless_greed_explosions.append(exp)
+
+    def _crystal_cell_taken(self, col, row):
+        return any(c.col == col and c.row == row for c in self.crystals)
+
+    def try_spawn_crystal_near(self, x, y):
+        if Enchantment.UNSTABLE_CRYSTAL not in self.enchantments:
+            return
+        if random.random() >= 0.10:
+            return
+        c0 = int(x) // TILE_SIZE
+        r0 = int(y) // TILE_SIZE
+        candidates = [(c, r) for (c, r) in self.path
+                      if abs(c - c0) <= 2 and abs(r - r0) <= 2
+                      and not self._crystal_cell_taken(c, r)]
+        if not candidates:
+            return
+        col, row = random.choice(candidates)
+        self.crystals.append(UnstableCrystal(col, row, self))
+
+    def spawn_crystals_fullmap(self):
+        if Enchantment.UNSTABLE_CRYSTAL not in self.enchantments:
+            return
+        for col, row in self.path:
+            if self._crystal_cell_taken(col, row):
+                continue
+            if random.random() < 0.10:
+                self.crystals.append(UnstableCrystal(col, row, self))
 
     def _shop_pool(self):
         return [e for e in ENCHANTMENT_ORDER
@@ -1156,6 +1185,10 @@ class Game:
             for bee in self.bees[:]:
                 if not bee.update():
                     self.bees.remove(bee)
+
+            for crystal in self.crystals[:]:
+                if not crystal.update():
+                    self.crystals.remove(crystal)
 
             if self.weather == Weather.THUNDERSTORM:
                 self.thunderstorm_timer += 1
@@ -1549,6 +1582,7 @@ class Game:
         self.bees = []
         self.bee_spawn_remaining = 0
         self.bee_spawn_timer = 0
+        self.crystals = []
         self.enemy_grid = {}
         self.fog_timer = 0
         self.fog_visible = False

@@ -688,9 +688,9 @@ class Bullet(pygame.sprite.Sprite):
                     branch = self.source_tower.wind_branch
                 if self.tower_level >= 11:
                     if branch in (1, 2):
-                        dmg += int(self.traveled * 2)
+                        dmg += int(self.traveled * 5)
                 elif branch == 1:
-                    dmg += int(self.traveled * 2)
+                    dmg += int(self.traveled * 5)
 
         if self.tower_type == TowerType.TELEPORT and self.teleport_branch == 2:
             dmg = random.randint(0, self.damage * 2)
@@ -698,6 +698,8 @@ class Bullet(pygame.sprite.Sprite):
         mult = self.game.get_enchant_damage_multiplier(self.tower_type)
         if self.tower_type == TowerType.PHYSICAL and Enchantment.FIRE_ARROW in self.game.enchantments:
             mult *= 2
+        if self.tower_type == TowerType.PHYSICAL and Enchantment.POWER_V in self.game.enchantments:
+            mult *= 2.25
         return int(dmg * mult)
 
     def calculate_lightning_damage(self):
@@ -982,6 +984,7 @@ class BombBullet(pygame.sprite.Sprite):
         explosion = TNTExplosion(self.rect.centerx, self.rect.centery,
                                  int(self.damage * mult), self.tower_level, self.bomb_subtype, self.game)
         self.game.tnt_explosions.append(explosion)
+        self.game.try_spawn_crystal_near(self.rect.centerx, self.rect.centery)
 
 
 class NuclearMissile(pygame.sprite.Sprite):
@@ -1010,6 +1013,7 @@ class NuclearMissile(pygame.sprite.Sprite):
             self.game.mushroom_explosions.append(explosion)
             shockwave = NuclearShockwave(MAP_CENTER_X, MAP_CENTER_Y, self.game, self.bomb_branch)
             self.game.shockwave_effects.append(shockwave)
+            self.game.spawn_crystals_fullmap()
             self.kill()
             return
         self.x += (dx / dist) * self.speed

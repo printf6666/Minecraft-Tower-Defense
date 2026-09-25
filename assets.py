@@ -87,6 +87,7 @@ gilded_blackstone_img = None
 command_block_img = None
 ice_wall_img = None
 bee_img = None
+unstable_crystal_img = None
 
 ice_dragon_img = None
 fire_dragon_img = None
@@ -316,6 +317,14 @@ def init_assets():
     except:
         bee_img = pygame.Surface((80, 80), pygame.SRCALPHA)
         pygame.draw.circle(bee_img, (255, 200, 0), (40, 40), 30)
+
+    global unstable_crystal_img
+    try:
+        unstable_crystal_img = load_image("enchantment/26.png", (TILE_SIZE, TILE_SIZE))
+    except:
+        unstable_crystal_img = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+        pygame.draw.rect(unstable_crystal_img, (178, 0, 255),
+                         (16, 16, TILE_SIZE - 32, TILE_SIZE - 32))
 
     global ice_dragon_img, fire_dragon_img, electric_dragon_img
     try:

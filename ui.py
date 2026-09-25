@@ -317,6 +317,8 @@ class UIManager:
             explosion.draw(self.game.screen)
         for bee in self.game.bees:
             bee.draw(self.game.screen)
+        for crystal in self.game.crystals:
+            crystal.draw(self.game.screen)
         self.game.damage_texts.draw(self.game.screen)
 
         self.draw_ui()

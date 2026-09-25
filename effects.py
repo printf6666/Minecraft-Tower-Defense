@@ -607,3 +607,59 @@ class Bee:
         if self.done or self.image is None:
             return
         screen.blit(self.image, self.image.get_rect(center=(int(self.x), int(self.y))))
+
+
+class UnstableCrystal:
+    def __init__(self, col, row, game):
+        self.col = col
+        self.row = row
+        self.game = game
+        self.x = col * TILE_SIZE + TILE_SIZE // 2
+        self.y = row * TILE_SIZE + TILE_SIZE // 2
+        self.rect = pygame.Rect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+        self.image = assets.unstable_crystal_img
+        self.exploding = False
+        self.frame = 0
+        self.frame_timer = 0
+        self.frame_duration = 5
+        self.max_frames = 5
+        self.done = False
+        self._blast_frames = None
+
+    def update(self):
+        if self.done:
+            return False
+        if self.exploding:
+            self.frame_timer += 1
+            if self.frame_timer >= self.frame_duration:
+                self.frame_timer = 0
+                self.frame += 1
+                if self.frame >= self.max_frames:
+                    self.done = True
+                    return False
+            return True
+        touched = False
+        for enemy in self.game.enemies:
+            if enemy.health <= 0:
+                continue
+            if enemy.rect.colliderect(self.rect):
+                pct = max(1, int(enemy.max_health * 0.01))
+                reward = enemy.take_damage(pct, color=WHITE, scale=1.0)
+                self.game.coins += reward
+                touched = True
+        if touched:
+            self.exploding = True
+            self.frame = 0
+            self.frame_timer = 0
+        return True
+
+    def draw(self, screen):
+        if self.exploding:
+            if self._blast_frames is None:
+                self._blast_frames = [pygame.transform.smoothscale(f, (128, 128))
+                                      for f in assets.tnt_explosion_frames]
+            if self.frame < len(self._blast_frames):
+                img = self._blast_frames[self.frame]
+                screen.blit(img, img.get_rect(center=(self.x, self.y)))
+        elif self.image:
+            screen.blit(self.image, self.image.get_rect(center=(self.x, self.y)))
