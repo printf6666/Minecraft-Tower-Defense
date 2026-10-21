@@ -639,7 +639,7 @@ class FinalBoss(Enemy):
             self.game.set_boss_banner(text, frames)
 
     def _skill_summon(self):
-        self._announce("指令·召唤  /summon")
+        self._announce("指令-召唤  /summon")
         count = {1: 3, 2: 4, 3: 5, 4: 6}[self.phase]
         pool = FINAL_BOSS_SUMMON_POOL[self.phase]
         path = self.game.path
@@ -654,7 +654,7 @@ class FinalBoss(Enemy):
                 BossPortal(col, row, self.game, 26 + i * 12, random.choice(pool), idx))
 
     def _skill_fill(self):
-        self._announce("指令·填充  /fill")
+        self._announce("指令-填充  /fill")
         count = {1: 2, 2: 3, 3: 4, 4: 5}[self.phase]
         candidates = [t for t in self.game.towers if not t.in_pulse()]
         if not candidates:
@@ -671,7 +671,7 @@ class FinalBoss(Enemy):
             })
 
     def _skill_execute(self):
-        self._announce("指令·执行  /execute")
+        self._announce("指令-执行  /execute")
         count = {1: 2, 2: 3, 3: 4, 4: 5}[self.phase]
         candidates = [t for t in self.game.towers if not t.in_pulse()]
         if not candidates:
@@ -680,7 +680,7 @@ class FinalBoss(Enemy):
             self.game.boss_strikes.append(BossStrike(tower.x, tower.y, self.game, delay=150))
 
     def _skill_beam(self):
-        self._announce("指令·抹除  /kill @e[type=tower]")
+        self._announce("指令-抹除  /kill @e[type=tower]")
         vertical = random.random() < 0.5
         towers = list(self.game.towers)
         if vertical:
@@ -702,7 +702,7 @@ class FinalBoss(Enemy):
         self.game.boss_beams.append(DeleteBeam(self.game, vertical, index, telegraph=90))
 
     def _skill_freeze(self):
-        self._announce("指令·时停  /tick freeze")
+        self._announce("指令-时停  /tick freeze")
         self.game.boss_time_frozen = 3 * 60
         self.game.boss_flash = 45
         for i in range(18):
@@ -717,15 +717,15 @@ class FinalBoss(Enemy):
             ("gold", "金币产量归零"),
         ])
         self.game.boss_rule = {"type": rule, "timer": 12 * 60}
-        self._announce(f"指令·覆写  /gamerule  [{label}]", 180)
+        self._announce(f"指令-覆写  /gamerule  [{label}]", 180)
         self.game.boss_flash = 30
 
     def _skill_tp(self):
-        self._announce("指令·相移  /tp")
+        self._announce("指令-相移  /tp")
         self._teleport()
 
     def _skill_acid_rain(self):
-        self._announce("指令·酸雨  /weather acid_rain", 220)
+        self._announce("指令-酸雨  /weather acid_rain", 220)
         self.acid_cooldown = 15 * 60
         self.game.boss_acid_timer = 220
         self.game.boss_flash = 45
@@ -749,10 +749,10 @@ class FinalBoss(Enemy):
 
         affected = self.game.apply_acid_rain_downgrade()
         self.game.set_boss_banner(
-            f"指令·酸雨  /weather acid_rain —— {affected} 座炮塔被侵蚀，等级 -1", 220)
+            f"指令-酸雨  /weather acid_rain —— {affected} 座炮塔被侵蚀，等级 -1", 220)
 
     def _skill_reload(self):
-        self._announce("终焉·世界重载  /reload —— 12 秒内击破任意一层血即可打断！", 720)
+        self._announce("终焉-世界重载  /reload —— 12 秒内击破任意一层血即可打断！", 720)
         self.reloading = True
         self.reload_total = 12 * 60
         self.reload_timer = self.reload_total
@@ -850,7 +850,6 @@ class FinalBoss(Enemy):
             return
 
         broken = FINAL_BOSS_LAYERS - self.current_layer
-        # 18 层一个阶段：第 18 层击破时进入阶段 2，第 36 层进入阶段 3，第 54 层进入阶段 4
         new_phase = min(4, broken // FINAL_BOSS_LAYERS_PER_PHASE + 1)
         if new_phase != self.phase:
             self.phase = new_phase
@@ -870,7 +869,7 @@ class FinalBoss(Enemy):
             # 每崩解六层，立刻追加一次指令（爆发输出时也不能让玩家完全无压力）
             self.cast_cooldown = 0
         else:
-            self.game.set_boss_banner(f"第 {self.current_layer} 层血 崩解  ×{self.current_layer}", 90)
+            self.game.set_boss_banner(f"第 {self.current_layer} 层血 崩解  *{self.current_layer}", 90)
 
     def _start_death(self):
         self.dying = True
@@ -880,7 +879,7 @@ class FinalBoss(Enemy):
         self.dash_timer = 0
         self.stun_timer = 0
         self.game.final_boss = self
-        self.game.set_boss_banner("终焉·奥米伽 —— 世界正在删除它……", 240)
+        self.game.set_boss_banner("终焉-奥米伽 —— 世界正在删除它……", 240)
         self.game.boss_flash = 150
         if assets.explode_sound:
             assets.explode_sound.play()

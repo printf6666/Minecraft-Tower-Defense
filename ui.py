@@ -691,7 +691,6 @@ class UIManager:
         pygame.draw.rect(screen, (36, 8, 36), (bar_x, bar_y, bar_w, bar_h))
         pygame.draw.rect(screen, phase_color, (bar_x, bar_y, int(bar_w * ratio), bar_h))
 
-        # 72 条血：每一层一条刻度
         for i in range(1, FINAL_BOSS_LAYERS):
             x = bar_x + bar_w * i // FINAL_BOSS_LAYERS
             pygame.draw.line(screen, (14, 4, 20), (x, bar_y), (x, bar_y + bar_h), 1)
@@ -734,13 +733,20 @@ class UIManager:
             warn = assets.font_tower_level.render(f"世界重载 {remain:.1f}s —— 击破任意一层可打断", True, WHITE)
             screen.blit(warn, (SCREEN_WIDTH // 2 - warn.get_width() // 2, 216))
 
-        # 规则覆写提示
+        # 规则覆写提示：占用右上角「天气预报」按钮的位置
+        # （100 波没有天气预报，forecast 按钮在 wave >= 97 时本来就不绘制，正好空出来）
         if game.boss_rule:
             labels = {"attack_speed": "攻速-50%", "range": "射程-30%", "gold": "金币产量归零"}
             label = labels.get(game.boss_rule.get("type"), "规则覆写")
-            remain = max(0, game.boss_rule["timer"]) // 60
-            rule_text = assets.font_tower_level.render(f"规则覆写：{label}  {remain}s", True, (255, 170, 120))
-            screen.blit(rule_text, (SCREEN_WIDTH - rule_text.get_width() - 40, 216))
+            remain = max(0, game.boss_rule["timer"]) / 60.0
+            panel = pygame.Rect(FORECAST_BTN_X, FORECAST_BTN_Y,
+                                FORECAST_BTN_WIDTH, FORECAST_BTN_HEIGHT)
+            pygame.draw.rect(screen, (92, 28, 18), panel)
+            pygame.draw.rect(screen, (255, 150, 80), panel, 3)
+            rule_text = assets.font_tower_level.render(
+                f"指令覆写：{label}  {remain:.1f}s", True, (255, 228, 190))
+            screen.blit(rule_text, (panel.centerx - rule_text.get_width() // 2,
+                                    panel.centery - rule_text.get_height() // 2))
 
     def draw_herobrine_health_bar(self):
         for enemy in self.game.enemies:

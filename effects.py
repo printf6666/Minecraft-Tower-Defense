@@ -4,6 +4,9 @@ import pygame
 import assets
 from config import *
 
+# 不稳定水晶引爆动画的缩放帧只做一次，避免每颗水晶各缩放一遍
+_CRYSTAL_BLAST_FRAMES = None
+
 
 class WindExplosion:
     def __init__(self, x, y, damage, knockback, game):
@@ -629,7 +632,6 @@ class UnstableCrystal:
         self.max_frames = 5
         self.done = False
         self.age = 0
-        self._blast_frames = None
 
     def update(self):
         if self.done:
@@ -661,14 +663,13 @@ class UnstableCrystal:
 
     def draw(self, screen):
         if self.exploding:
-            if self._blast_frames is None:
-                self._blast_frames = [pygame.transform.smoothscale(f, (128, 128))
-                                      for f in assets.tnt_explosion_frames]
-            if self.frame < len(self._blast_frames):
-                img = self._blast_frames[self.frame]
+            global _CRYSTAL_BLAST_FRAMES
+            if _CRYSTAL_BLAST_FRAMES is None:
+                _CRYSTAL_BLAST_FRAMES = [pygame.transform.smoothscale(f, (128, 128))
+                                         for f in assets.tnt_explosion_frames]
+            if self.frame < len(_CRYSTAL_BLAST_FRAMES):
+                img = _CRYSTAL_BLAST_FRAMES[self.frame]
                 screen.blit(img, img.get_rect(center=(self.x, self.y)))
         elif self.image:
-            bob = math.sin((self.game.game_time + self.col * 9) * 0.08) * 4
-            screen.blit(self.image, self.image.get_rect(center=(int(self.x), int(self.y + bob))))
-            pulse = 3 + int(2 * math.sin(self.game.game_time * 0.12 + self.col * 0.7))
-            pygame.draw.rect(screen, (195, 95, 255), self.rect, pulse)
+            # 静态贴图：不再做上下浮动和紫色描边，避免水晶多时每帧额外绘制
+            screen.blit(self.image, self.rect)
