@@ -13,6 +13,8 @@ from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffe
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
 from dragons import Dragon
+from final_boss import (FinalBoss, BossShockwave, BossRune, BossPortal,
+                        BossStrike, DeleteBeam)
 
 WEATHER_FORECAST_POOL = [
     Weather.ACID_RAIN, Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
@@ -125,6 +127,7 @@ class Game:
         self.herobrine = None
         self.herobrine_summon_timer = 0
         self.herobrine_summon_queue = []
+        self._init_boss_state()
 
         self.command_block_timer = 0
         self.command_blocks = []
@@ -189,9 +192,19 @@ class Game:
         for e in self.enemies:
             if e.health <= 0:
                 continue
-            col = e.rect.centerx // TILE_SIZE
-            row = e.rect.centery // TILE_SIZE
-            self.enemy_grid.setdefault((col, row), []).append(e)
+            left = e.rect.left // TILE_SIZE
+            right = (e.rect.right - 1) // TILE_SIZE
+            top = e.rect.top // TILE_SIZE
+            bottom = (e.rect.bottom - 1) // TILE_SIZE
+            if left == right and top == bottom:
+                col = e.rect.centerx // TILE_SIZE
+                row = e.rect.centery // TILE_SIZE
+                self.enemy_grid.setdefault((col, row), []).append(e)
+            else:
+                # 大体型单位（例如最终BOSS）会占据多格，所有覆盖到的格子都要能被打到
+                for col in range(left, right + 1):
+                    for row in range(top, bottom + 1):
+                        self.enemy_grid.setdefault((col, row), []).append(e)
 
     def quit_game(self):
         if self.state == GameState.SHOP:
@@ -524,10 +537,18 @@ class Game:
     def add_meteor_hit(self, x, y):
         for enemy in list(self.enemies):
             if enemy.health > 0:
-                reward = enemy.take_damage(1000000007, color=(255, 120, 40), scale=1.6)
+                if getattr(enemy, "is_boss", False):
+                    # 余烬重生的陨石可以一次打穿 BOSS 的 5 层血
+                    reward = enemy.take_damage(1000000007, color=(255, 120, 40), scale=1.6,
+                                               layers=FINAL_BOSS_METEOR_LAYERS)
+                else:
+                    reward = enemy.take_damage(1000000007, color=(255, 120, 40), scale=1.6)
                 self.coins += reward
 
     def global_production(self):
+        if self.boss_rule and self.boss_rule.get("type") == "gold":
+            # 指令·覆写：金币产量归零
+            return
         current_time = pygame.time.get_ticks()
         if current_time - self.last_global_production_time >= 1000:
             self.coins += self.gold_per_second
@@ -664,6 +685,7 @@ class Game:
         self.herobrine = None
         self.herobrine_summon_timer = 0
         self.herobrine_summon_queue = []
+        self._init_boss_state()
         self.command_block_timer = 0
         self.command_blocks = []
         self.ice_walls = []
@@ -671,6 +693,109 @@ class Game:
         self.poison_base_damage = 10
         self.shop_offers = []
         self.shop_offers_wave = -1
+
+    # ------------------------------------------------------------------ 最终BOSS状态
+
+    def _init_boss_state(self):
+        """第 100 波最终 BOSS 相关的全部运行时状态。"""
+        self.final_boss = None
+        self.boss_spawned = False
+        self.boss_banner_text = ""
+        self.boss_banner_timer = 0
+        self.boss_flash = 0
+        self.boss_acid_timer = 0
+        self.boss_time_frozen = 0
+        self.boss_rule = None
+        self.boss_strikes = []
+        self.boss_beams = []
+        self.boss_runes = []
+        self.boss_shockwaves = []
+        self.boss_portals = []
+
+    def set_boss_banner(self, text, frames=150):
+        self.boss_banner_text = text
+        self.boss_banner_timer = max(1, int(frames))
+
+    def update_boss_fx(self):
+        if self.boss_flash > 0:
+            self.boss_flash -= 1
+        if self.boss_banner_timer > 0:
+            self.boss_banner_timer -= 1
+        if self.boss_acid_timer > 0:
+            self.boss_acid_timer -= 1
+        if self.boss_time_frozen > 0:
+            self.boss_time_frozen -= 1
+        if self.boss_rule is not None:
+            self.boss_rule["timer"] -= 1
+            if self.boss_rule["timer"] <= 0:
+                self.boss_rule = None
+
+        for effect in self.boss_strikes[:]:
+            if not effect.update():
+                self.boss_strikes.remove(effect)
+        for effect in self.boss_beams[:]:
+            if not effect.update():
+                self.boss_beams.remove(effect)
+        for effect in self.boss_runes[:]:
+            if not effect.update():
+                self.boss_runes.remove(effect)
+        for effect in self.boss_shockwaves[:]:
+            if not effect.update():
+                self.boss_shockwaves.remove(effect)
+        for effect in self.boss_portals[:]:
+            if not effect.update():
+                self.boss_portals.remove(effect)
+
+    def destroy_tower_by_boss(self, tower):
+        """BOSS 指令抹除炮塔（不计入出售、不返还金币）。"""
+        if tower is None or tower not in self.towers:
+            return
+        if self.selected_tower is tower:
+            self.selected_tower = None
+        tower.kill()
+
+    def play_boss_bgm(self):
+        for bgm in assets.bgm_files:
+            if "Celestial Fury" in bgm or "The End" in bgm:
+                pygame.mixer.music.load(assets.resource_path(bgm))
+                pygame.mixer.music.play(-1)
+                return
+
+    def force_boss_weather(self):
+        """第 50 / 100 波强制「永夜」。
+
+        正常推进时 select_weather() 已经会强制一次；但读档（load_game 直接
+        start_new_wave，不经过 select_weather）或调试跳波会绕过它，导致
+        100 波顶着逆风/晴天打 BOSS。所有入口统一走这里兜底。
+        """
+        self.fog_visible = False
+        self.weather = Weather.ENDLESS_NIGHT
+        # 读档时背景可能还是白天配色，这里无条件重建一次永夜场景
+        self._build_background(night_mode=True, gold_ore_positions=self.gold_ore_positions)
+        base_temp = WEATHER_CONFIG[self.weather]["temp"]
+        self.temperature = base_temp
+        for t in self.towers:
+            if t.type in (TowerType.FLAME, TowerType.TRIDENT):
+                self.temperature += t.level
+            elif t.type == TowerType.ICE:
+                self.temperature -= t.level
+            elif t.type == TowerType.BOMB:
+                self.temperature += self.get_bomb_temp_effect(t)
+            elif t.type == TowerType.SHIELD and t.level >= 11 and t.shield_branch == 2:
+                self.temperature -= t.level
+        self.temperature += self.enchantment_temp_bonus()
+        self.temperature = max(-273, self.temperature)
+        self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
+        self.play_boss_bgm()
+
+    def start_boss_fight(self):
+        self.boss_spawned = True
+        self.force_boss_weather()
+        self.fog_visible = False
+        self.set_boss_banner(f"{FINAL_BOSS_NAME} 降临 —— {FINAL_BOSS_TITLE}", 240)
+        self.boss_flash = 120
+        if assets.explode_sound:
+            assets.explode_sound.play()
 
     def load_game(self):
         new_path = get_save_path()
@@ -765,6 +890,10 @@ class Game:
         self.temperature += self.enchantment_temp_bonus()
         self.temperature = max(-273, self.temperature)
         self.wave_manager.start_new_wave()
+        if self.wave_manager.current_wave in (50, FINAL_BOSS_WAVE):
+            # 读档直接进入 BOSS 波时不会走 select_weather，这里强制补上永夜
+            self.force_boss_weather()
+            self.save_game()
         self.state = GameState.PLAYING
         self.pending_first_wave_weather = False
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
@@ -908,12 +1037,131 @@ class Game:
 
     def spawn_crystals_fullmap(self):
         if Enchantment.UNSTABLE_CRYSTAL not in self.enchantments:
-            return
+            return 0
+        spawned = 0
         for col, row in self.path:
             if self._crystal_cell_taken(col, row):
                 continue
             if random.random() < 0.10:
                 self.crystals.append(UnstableCrystal(col, row, self))
+                spawned += 1
+        # 保底 1 颗：核弹爆炸至少要能在道路上看到一颗不稳定水晶
+        if spawned == 0:
+            free = [(c, r) for (c, r) in self.path if not self._crystal_cell_taken(c, r)]
+            if free:
+                col, row = random.choice(free)
+                self.crystals.append(UnstableCrystal(col, row, self))
+                spawned = 1
+        return spawned
+
+    def apply_acid_rain_downgrade(self, min_level=0):
+        """酸雨侵蚀：场上所有炮塔等级 -1；护盾可以挡下，脉冲护盾免疫。
+
+        min_level=1 时最低只降到 1 级（最终 BOSS 的酸雨技能用这个模式，不会直接删塔）。
+        返回被侵蚀的炮塔数量。
+        """
+        affected = 0
+        destroyed = []
+        for t in self.towers:
+            if t.level < 1:
+                if min_level > 0:
+                    continue
+                if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
+                    self.temperature -= 1
+                elif t.type == TowerType.ICE:
+                    self.temperature += 1
+                self.temperature = max(-273, self.temperature)
+                destroyed.append(t)
+                continue
+            if t.level <= min_level:
+                continue
+            if t.in_pulse():
+                continue
+            if getattr(t, 'has_shield', False):
+                t.break_shield()
+                self.trigger_shield_burst(t)
+                continue
+            old_level = t.level
+            t.level -= 1
+            t.upgrade_cost = int(t.upgrade_cost / 1.5)
+            if t.type == TowerType.PRODUCTION:
+                multiplier = 2 if t.is_on_gold_ore else 1
+                self.gold_per_second -= multiplier
+            if old_level > 1:
+                if t.type == TowerType.PHYSICAL:
+                    t.damage -= 15
+                    t.range -= TILE_SIZE // 2
+                    t.fire_rate = min(60, t.fire_rate + 6)
+                elif t.type == TowerType.ICE:
+                    t.damage -= 5
+                    t.range -= TILE_SIZE // 4
+                    t.fire_rate = min(60, t.fire_rate + 6)
+                    if old_level >= 6:
+                        t.freeze_time = round(t.freeze_time - 0.1, 1)
+                    self.temperature += 1
+                elif t.type == TowerType.TELEPORT:
+                    if t.teleport_branch == 2:
+                        t.damage -= 100
+                        t.range -= TILE_SIZE // 2
+                        t.fire_rate = min(60, t.fire_rate + 6)
+                    else:
+                        t.damage -= 5
+                        t.teleport_chance = max(0, t.teleport_chance - 0.01)
+                        t.range -= TILE_SIZE // 4
+                        t.fire_rate = min(60, t.fire_rate + 6)
+                        if old_level >= 6:
+                            t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
+                elif t.type == TowerType.FLAME:
+                    t.damage -= 15
+                    t.range -= TILE_SIZE // 4
+                    t.fire_rate = min(60, t.fire_rate + 6)
+                    if old_level >= 6:
+                        t.stun_time = round(t.stun_time - 0.1, 1)
+                    self.temperature -= 1
+                elif t.type == TowerType.TRIDENT:
+                    t.damage -= 25
+                    t.range -= TILE_SIZE // 2
+                    t.fire_rate = min(60, t.fire_rate + 6)
+                    t.lightning_damage -= 50
+                    self.temperature -= 1
+                elif t.type == TowerType.WIND:
+                    t.wind_knockback -= 12
+                    if old_level >= 7:
+                        t.damage -= 20
+                        t.range -= TILE_SIZE // 2
+                    elif old_level == 6:
+                        t.damage -= 20
+                        t.range -= TILE_SIZE // 2
+                        t.fire_rate = min(60, t.fire_rate + 6)
+                    else:
+                        t.damage -= 5
+                        t.range -= TILE_SIZE // 4
+                        t.fire_rate = min(60, t.fire_rate + 6)
+                elif t.type == TowerType.POISON:
+                    t.damage -= 15
+                    t.range -= TILE_SIZE // 2
+                    t.fire_rate = min(60, t.fire_rate + 6)
+                elif t.type == TowerType.BOMB:
+                    t.damage -= 100
+                    if old_level >= 11 and t.level < 11:
+                        t.is_nuclear = False
+                        base_range = int(TILE_SIZE * 2.2)
+                        t.range = base_range + int(TILE_SIZE * 0.2) * (t.level - 1)
+                        t.fire_rate = 120
+                    self.temperature -= 1
+                if t.type == TowerType.PRODUCTION:
+                    multiplier = 2 if t.is_on_gold_ore else 1
+                    if old_level >= 6:
+                        self.gold_per_wave -= multiplier
+                    if old_level >= 11:
+                        self.emerald_per_wave -= EMERALD_PER_WAVE_BY_LEVEL.get(old_level, 3) - EMERALD_PER_WAVE_BY_LEVEL.get(t.level, 0)
+                t.update_sprite()
+            affected += 1
+        for t in destroyed:
+            if self.selected_tower is t:
+                self.selected_tower = None
+            t.kill()
+        return affected
 
     def _shop_pool(self):
         return [e for e in ENCHANTMENT_ORDER
@@ -988,11 +1236,18 @@ class Game:
                     enemy.apply_burn(self.temperature, 999999)
 
             self._build_enemy_grid()
+            self.update_boss_fx()
 
             self.apply_time_buffs()
 
+            frozen_by_boss = self.boss_time_frozen > 0
             for tower in self.towers:
+                if tower.disabled_timer > 0:
+                    tower.disabled_timer -= 1
                 if tower.type not in (TowerType.PRODUCTION, TowerType.TIME):
+                    if frozen_by_boss or tower.disabled_timer > 0:
+                        tower.update_shield_tower()
+                        continue
                     bullets = tower.attack(self.game_time)
                     for bullet in bullets:
                         self.bullets.add(bullet)
@@ -1017,10 +1272,16 @@ class Game:
 
             if self.weather == Weather.ENDLESS_NIGHT:
                 self.night_dark_timer += 1
-                if self.night_dark_timer >= 1800:
+                if self.final_boss is not None:
+                    # 最终BOSS战期间不压黑屏，否则弹幕与预警看不清
+                    self.fog_visible = False
+                elif self.night_dark_timer >= 1800:
                     self.night_dark_timer = 0
                     self.fog_visible = True
                     for enemy in self.enemies:
+                        # 永夜的回复不能复活已经倒下的最终BOSS
+                        if getattr(enemy, "is_boss", False) or enemy.health <= 0:
+                            continue
                         heal_amount = int(enemy.max_health * 0.05)
                         enemy.health = min(enemy.health + heal_amount, enemy.max_health)
                 if self.fog_visible and self.night_dark_timer >= 300:
@@ -1054,29 +1315,29 @@ class Game:
                     cb['timer'] += 1
                     if cb['timer'] >= cb['max_timer']:
                         self.command_blocks.remove(cb)
+                        blast = cb.get('radius', 1)
                         for tower in list(self.towers):
                             dx = abs(tower.x - cb['x'])
                             dy = abs(tower.y - cb['y'])
-                            if dx <= 1 and dy <= 1:
+                            if dx <= blast and dy <= blast:
                                 if tower.in_pulse():
                                     continue
                                 if getattr(tower, 'has_shield', False):
                                     tower.break_shield()
                                     self.trigger_shield_burst(tower)
                                 else:
-                                    tower.kill()
-                                    self.towers.remove(tower)
+                                    self.destroy_tower_by_boss(tower)
                         for wall in list(self.ice_walls):
                             dx = abs(wall.x - cb['x'])
                             dy = abs(wall.y - cb['y'])
-                            if dx <= 1 and dy <= 1:
+                            if dx <= blast and dy <= blast:
                                 self.destroy_ice_wall(wall)
                         explosion = TNTExplosion(cb['x'] * TILE_SIZE + TILE_SIZE // 2,
                                                  cb['y'] * TILE_SIZE + TILE_SIZE // 2,
                                                  0, 0, None, self)
                         self.tnt_explosions.append(explosion)
 
-            if self.wave_manager.current_wave == 50:
+            if self.wave_manager.current_wave in (50, FINAL_BOSS_WAVE):
                 if not pygame.mixer.music.get_busy():
                     boss_bgm = None
                     for bgm in assets.bgm_files:
@@ -1215,7 +1476,7 @@ class Game:
                     self.enemies_killed += 1
                     enemy.kill()
 
-            if self.wave_manager.current_wave == 50 and self.wave_manager.wave_timer > 0:
+            if self.wave_manager.current_wave in (50, FINAL_BOSS_WAVE) and self.wave_manager.wave_timer > 0:
                 self.wave_manager.update()
             elif self.wave_manager.is_wave_complete(self.enemies):
                 self.apply_production_bonus()
@@ -1232,21 +1493,28 @@ class Game:
             else:
                 enemy_type = self.wave_manager.update()
                 if enemy_type:
-                    enemy = Enemy(self.path, enemy_type, self)
-                    self.enemies.add(enemy)
-                    if enemy_type == EnemyType.HEROBRINE:
-                        self.herobrine_spawned = True
-                        for _ in range(5):
-                            self.herobrine_summon_queue.append(EnemyType.SLIME)
-                        for _ in range(5):
-                            self.herobrine_summon_queue.append(EnemyType.MAGMA_CUBE)
+                    if enemy_type == EnemyType.FINAL_BOSS:
+                        boss = FinalBoss(self.path, enemy_type, self)
+                        self.enemies.add(boss)
+                        self.final_boss = boss
+                        self.start_boss_fight()
+                    else:
+                        enemy = Enemy(self.path, enemy_type, self)
+                        self.enemies.add(enemy)
+                        if enemy_type == EnemyType.HEROBRINE:
+                            self.force_boss_weather()
+                            self.herobrine_spawned = True
+                            for _ in range(5):
+                                self.herobrine_summon_queue.append(EnemyType.SLIME)
+                            for _ in range(5):
+                                self.herobrine_summon_queue.append(EnemyType.MAGMA_CUBE)
 
 
     def _generate_weather_for_wave(self, wave_num):
-        if wave_num == 50:
+        if wave_num in (50, FINAL_BOSS_WAVE):
             return Weather.ENDLESS_NIGHT
         pool = list(WEATHER_FORECAST_POOL)
-        if wave_num > 50:
+        if 50 < wave_num < FINAL_BOSS_WAVE:
             pool.append(Weather.ENDLESS_NIGHT)
         return random.choice(pool)
 
@@ -1256,7 +1524,7 @@ class Game:
         if not self.weather_forecast:
             self.weather_forecast = [self._generate_weather_for_wave(w) for w in range(1, 4)]
         self.weather = self.weather_forecast.pop(0)
-        if self.wave_manager.current_wave == 50:
+        if self.wave_manager.current_wave in (50, FINAL_BOSS_WAVE):
             self.weather = Weather.ENDLESS_NIGHT
         self.weather_forecast.append(self._generate_weather_for_wave(self.wave_manager.current_wave + 3))
         self._build_background(night_mode=(self.weather == Weather.ENDLESS_NIGHT),
@@ -1292,102 +1560,7 @@ class Game:
                 pygame.mixer.music.play(-1)
         if self.weather == Weather.ACID_RAIN:
             if Enchantment.WAX not in self.enchantments:
-                destroyed = []
-                for t in self.towers:
-                    if t.level >= 1:
-                        if t.in_pulse():
-                            continue
-                        if getattr(t, 'has_shield', False):
-                            t.break_shield()
-                            self.trigger_shield_burst(t)
-                            continue
-                        old_level = t.level
-                        t.level -= 1
-                        t.upgrade_cost = int(t.upgrade_cost / 1.5)
-                        if t.type == TowerType.PRODUCTION:
-                            multiplier = 2 if t.is_on_gold_ore else 1
-                            self.gold_per_second -= multiplier
-                        if old_level > 1:
-                            if t.type == TowerType.PHYSICAL:
-                                t.damage -= 15
-                                t.range -= TILE_SIZE // 2
-                                t.fire_rate = min(60, t.fire_rate + 6)
-                            elif t.type == TowerType.ICE:
-                                t.damage -= 5
-                                t.range -= TILE_SIZE // 4
-                                t.fire_rate = min(60, t.fire_rate + 6)
-                                if old_level >= 6:
-                                    t.freeze_time = round(t.freeze_time - 0.1, 1)
-                                self.temperature += 1
-                            elif t.type == TowerType.TELEPORT:
-                                if t.teleport_branch == 2:
-                                    t.damage -= 100
-                                    t.range -= TILE_SIZE // 2
-                                    t.fire_rate = min(60, t.fire_rate + 6)
-                                else:
-                                    t.damage -= 5
-                                    t.teleport_chance = max(0, t.teleport_chance - 0.01)
-                                    t.range -= TILE_SIZE // 4
-                                    t.fire_rate = min(60, t.fire_rate + 6)
-                                    if old_level >= 6:
-                                        t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
-                            elif t.type == TowerType.FLAME:
-                                t.damage -= 15
-                                t.range -= TILE_SIZE // 4
-                                t.fire_rate = min(60, t.fire_rate + 6)
-                                if old_level >= 6:
-                                    t.stun_time = round(t.stun_time - 0.1, 1)
-                                self.temperature -= 1
-                            elif t.type == TowerType.TRIDENT:
-                                t.damage -= 25
-                                t.range -= TILE_SIZE // 2
-                                t.fire_rate = min(60, t.fire_rate + 6)
-                                t.lightning_damage -= 50
-                                self.temperature -= 1
-                            elif t.type == TowerType.WIND:
-                                t.wind_knockback -= 12
-                                if old_level >= 7:
-                                    t.damage -= 20
-                                    t.range -= TILE_SIZE // 2
-                                elif old_level == 6:
-                                    t.damage -= 20
-                                    t.range -= TILE_SIZE // 2
-                                    t.fire_rate = min(60, t.fire_rate + 6)
-                                else:
-                                    t.damage -= 5
-                                    t.range -= TILE_SIZE // 4
-                                    t.fire_rate = min(60, t.fire_rate + 6)
-                            elif t.type == TowerType.POISON:
-                                t.damage -= 15
-                                t.range -= TILE_SIZE // 2
-                                t.fire_rate = min(60, t.fire_rate + 6)
-                            elif t.type == TowerType.BOMB:
-                                t.damage -= 100
-                                if old_level >= 11 and t.level < 11:
-                                    t.is_nuclear = False
-                                    base_range = int(TILE_SIZE * 2.2)
-                                    t.range = base_range + int(TILE_SIZE * 0.2) * (t.level - 1)
-                                    t.fire_rate = 120
-                                self.temperature -= 1
-                            elif t.type == TowerType.TIME:
-                                pass
-                            if t.type == TowerType.PRODUCTION:
-                                multiplier = 2 if t.is_on_gold_ore else 1
-                                if old_level >= 6: self.gold_per_wave -= multiplier
-                                if old_level >= 11:
-                                    self.emerald_per_wave -= EMERALD_PER_WAVE_BY_LEVEL.get(old_level, 3) - EMERALD_PER_WAVE_BY_LEVEL.get(t.level, 0)
-                            t.update_sprite()
-                        else:
-                            if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
-                                self.temperature -= 1
-                            elif t.type == TowerType.ICE:
-                                self.temperature += 1
-                            self.temperature = max(-273, self.temperature)
-                            destroyed.append(t)
-                for t in destroyed:
-                    if self.selected_tower is t:
-                        self.selected_tower = None
-                    t.kill()
+                self.apply_acid_rain_downgrade()
             for enemy in self.enemies:
                 enemy.apply_poison(10)
         if self.weather == Weather.SCORCHING_SUN and self.temperature > 0:
@@ -1593,6 +1766,7 @@ class Game:
         self.poison_base_damage = 10
         self.shop_offers = []
         self.shop_offers_wave = -1
+        self._init_boss_state()
         self.start_game()
 
     def run(self):

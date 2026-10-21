@@ -55,6 +55,7 @@ class Tower(pygame.sprite.Sprite):
 
         self.attack_speed_buff = 0
         self.production_buff = 0.0
+        self.disabled_timer = 0
 
         self.setup_tower()
         self.update_sprite()
@@ -332,12 +333,16 @@ class Tower(pygame.sprite.Sprite):
         self.rect.topleft = (self.x * TILE_SIZE, self.y * TILE_SIZE)
 
     def can_attack(self, current_time):
+        if self.disabled_timer > 0:
+            return False
         if self.type == TowerType.PHYSICAL and self.level >= 11 and self.physical_branch == 3:
             return current_time - self.last_shot >= (19 - self.level) * 60
         total_bonus = self.attack_speed_buff
         if self.game.weather == Weather.AURORA and self.game.temperature < 0:
             total_bonus += abs(self.game.temperature)
         effective_fire_rate = self.fire_rate * 100 / max(1, 100 + total_bonus)
+        if self.game.boss_rule and self.game.boss_rule.get("type") == "attack_speed":
+            effective_fire_rate *= 1.5
         return current_time - self.last_shot >= effective_fire_rate
 
     def get_effective_range(self):
@@ -350,6 +355,8 @@ class Tower(pygame.sprite.Sprite):
             r += int(self.range * 0.5)
         if self.game.weather == Weather.HEADWIND:
             r -= int(self.range * 0.5)
+        if self.game.boss_rule and self.game.boss_rule.get("type") == "range":
+            r = int(r * 0.7)
         return r
 
     def attack(self, current_time):
@@ -400,7 +407,7 @@ class Tower(pygame.sprite.Sprite):
                        and (e.rect.centerx - self.rect.centerx) ** 2 + (e.rect.centery - self.rect.centery) ** 2 <= er * er]
             if targets:
                 best = random.choice(targets)
-                if best.enemy_type == EnemyType.HEROBRINE:
+                if best.enemy_type in (EnemyType.HEROBRINE, EnemyType.FINAL_BOSS):
                     dmg = int(best.max_health * 0.05)
                 else:
                     dmg = 99999999
@@ -833,7 +840,7 @@ class Bullet(pygame.sprite.Sprite):
                     enemy.teleport_to_start()
                     if assets.teleport_sound:
                         assets.teleport_sound.play()
-                if enemy.enemy_type != EnemyType.HEROBRINE and random.random() < self.oneshot_chance:
+                if enemy.enemy_type not in (EnemyType.HEROBRINE, EnemyType.FINAL_BOSS) and random.random() < self.oneshot_chance:
                     reward = enemy.take_damage(99999999, color=RED, scale=1.2)
                     self.game.coins += reward
             else:

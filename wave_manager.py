@@ -1,11 +1,11 @@
 import random
-from config import EnemyType
+from config import EnemyType, FINAL_BOSS_WAVE
 
 
 class WaveManager:
     def __init__(self):
         self.current_wave = 0
-        self.total_waves = 99
+        self.total_waves = FINAL_BOSS_WAVE
         self.enemies_spawned = 0
         self.enemies_to_spawn = 0
         self.spawn_timer = 0
@@ -18,7 +18,7 @@ class WaveManager:
     def start_new_wave(self):
         self.current_wave += 1
         self.enemies_spawned = 0
-        if self.current_wave == 50:
+        if self.current_wave in (50, FINAL_BOSS_WAVE):
             self.enemies_to_spawn = 1
             self.gold_armored_count = 0
             self.ghost_count = 0
@@ -71,6 +71,8 @@ class WaveManager:
     def select_enemy_type(self):
         if self.current_wave == 50:
             return EnemyType.HEROBRINE
+        if self.current_wave == FINAL_BOSS_WAVE:
+            return EnemyType.FINAL_BOSS
         if self.gold_armored_spawned < self.gold_armored_count:
             self.gold_armored_spawned += 1
             return EnemyType.GOLD_ARMORED

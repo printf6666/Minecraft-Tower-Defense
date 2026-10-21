@@ -208,27 +208,24 @@ class Enemy(pygame.sprite.Sprite):
             self.pos_y -= dy * knockback
             self.rect.center = (self.pos_x, self.pos_y)
 
-    def update(self):
-        if self.health <= 0:
-            return False
-
+    def _tick_resistances(self):
         if self.game.game_time - self.last_freeze_time > 600:
             self.freeze_resistance = 0.0
         if self.game.game_time - self.last_stun_time > 600:
             self.stun_resistance = 0.0
 
-        if self.creeper_explode_timer > 0:
-            self.creeper_explode_timer -= 1
-            if self.creeper_explode_timer == 0:
-                self.creeper_explode()
-                return False
+    def update_status_effects(self):
+        """推进减益计时（眩晕/冰冻/减速/燃烧/中毒/凋零）。
 
+        返回 True 表示这一帧被控制住、无法行动。最终 BOSS 会把控制类减益
+        重写成空实现，但依然复用这里的持续伤害结算。
+        """
         if self.stun_time > 0:
             self.stun_time -= 1
-            return False
+            return True
         if self.freeze_time > 0:
             self.freeze_time -= 1
-            return False
+            return True
         if self.slow_time > 0:
             self.slow_time -= 1
         else:
@@ -262,6 +259,22 @@ class Enemy(pygame.sprite.Sprite):
                 dmg = int(self.max_health * wither_pct)
                 reward = self.take_damage(dmg, color=(100, 0, 100), scale=1.0, ignore_armor=True)
                 self.game.coins += reward
+        return False
+
+    def update(self):
+        if self.health <= 0:
+            return False
+
+        self._tick_resistances()
+
+        if self.creeper_explode_timer > 0:
+            self.creeper_explode_timer -= 1
+            if self.creeper_explode_timer == 0:
+                self.creeper_explode()
+                return False
+
+        if self.update_status_effects():
+            return False
 
         if self.health <= 0:
             self.kill()

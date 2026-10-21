@@ -209,6 +209,7 @@ class EnemyType(Enum):
     CREEPER = 16
     CHARGED_CREEPER = 17
     SPIDER = 18
+    FINAL_BOSS = 19
 
 
 class Weather(Enum):
@@ -268,4 +269,68 @@ ENEMY_TYPES = {
     "CREEPER": {"image": "creeper.png", "speed": 2, "health": 100, "reward": 20},
     "CHARGED_CREEPER": {"image": "charged_creeper.png", "speed": 2, "health": 100, "reward": 20},
     "SPIDER": {"image": "spider.png", "speed": 4, "health": 100, "reward": 20},
+    "FINAL_BOSS": {"image": "command_block.png", "speed": 2, "health": 200000000, "reward": 0},
 }
+
+
+# ==========================================================================================
+#  第 100 波最终 BOSS —— 终焉·奥米伽 (OMEGA)
+# ==========================================================================================
+#  BOSS 一共 FINAL_BOSS_LAYERS 层血，每层 FINAL_BOSS_LAYER_HEALTH 点。
+#  100 × 200,000,000 = 20,000,000,000（200 亿）
+#  如需保持 144 亿总血量，把 FINAL_BOSS_LAYER_HEALTH 改成 144_000_000 即可。
+# ==========================================================================================
+FINAL_BOSS_NAME = "终焉·奥米伽"
+FINAL_BOSS_EN_NAME = "OMEGA"
+FINAL_BOSS_TITLE = "原初命令方块"
+FINAL_BOSS_WAVE = 100
+FINAL_BOSS_LAYERS = 100
+FINAL_BOSS_LAYER_HEALTH = 200_000_000
+FINAL_BOSS_TOTAL_HEALTH = FINAL_BOSS_LAYERS * FINAL_BOSS_LAYER_HEALTH
+FINAL_BOSS_LAYERS_PER_PHASE = FINAL_BOSS_LAYERS // 4   # 100 层 -> 每阶段 25 层
+
+# BOSS 核心画面尺寸（比最初版本放大 50%：256 -> 384）
+FINAL_BOSS_CORE_SIZE = 384
+# 余烬重生的陨石（1,000,000,007）可以一次打穿 5 层
+FINAL_BOSS_METEOR_LAYERS = 5
+# 不稳定水晶的绘制尺寸
+UNSTABLE_CRYSTAL_SIZE = TILE_SIZE
+
+FINAL_BOSS_PHASE_NAMES = [
+    "编译 COMPILE",
+    "覆写 OVERWRITE",
+    "执行 EXECUTE",
+    "终焉 OMEGA",
+]
+
+# 阶段主色：外壳裂开得越多，颜色越危险
+FINAL_BOSS_PHASE_COLORS = [
+    (120, 80, 255),
+    (190, 60, 240),
+    (255, 70, 190),
+    (255, 60, 40),
+]
+
+# BOSS 召唤物的固定血量（不套用 1.2^波数，否则第100波小怪会比BOSS还肉）
+FINAL_BOSS_MINION_HEALTH = {
+    EnemyType.NORMAL: 60_000_000,
+    EnemyType.FAST: 45_000_000,
+    EnemyType.NETHERITE_ARMORED: 120_000_000,
+    EnemyType.CREEPER: 40_000_000,
+    EnemyType.GHOST: 55_000_000,
+    EnemyType.WITHER: 150_000_000,
+}
+
+# 各阶段召唤物池
+FINAL_BOSS_SUMMON_POOL = {
+    1: [EnemyType.NORMAL, EnemyType.FAST, EnemyType.CREEPER],
+    2: [EnemyType.NETHERITE_ARMORED, EnemyType.CREEPER, EnemyType.FAST],
+    3: [EnemyType.GHOST, EnemyType.NETHERITE_ARMORED, EnemyType.WITHER],
+    4: [EnemyType.GHOST, EnemyType.WITHER, EnemyType.NETHERITE_ARMORED],
+}
+
+# 战斗场地范围（像素，限制 BOSS 核心的活动区域）
+FINAL_BOSS_ARENA_LEFT = 280
+FINAL_BOSS_ARENA_RIGHT = GRID_WIDTH * TILE_SIZE - 280
+FINAL_BOSS_ARENA_TOP = 300
+FINAL_BOSS_ARENA_BOTTOM = (1 + GRID_HEIGHT) * TILE_SIZE - 260

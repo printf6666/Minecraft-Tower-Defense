@@ -251,6 +251,7 @@ class UIManager:
         self.game.bullets.draw(self.game.screen)
         for dragon in self.game.dragons:
             dragon.draw(self.game.screen)
+        self.draw_boss_effects()
         for tower in self.game.towers:
             self.game.screen.blit(assets.font_tower_level.render(str(tower.level), True, YELLOW),
                                  (tower.x * TILE_SIZE + 85, tower.y * TILE_SIZE + 90))
@@ -266,6 +267,9 @@ class UIManager:
                 scaled.set_alpha(alpha)
                 self.game.screen.blit(scaled, scaled.get_rect(
                     center=(tower.x * TILE_SIZE + TILE_SIZE // 2, tower.y * TILE_SIZE + TILE_SIZE // 2)))
+            if tower.disabled_timer > 0:
+                self.game.screen.blit(self.get_disabled_overlay(),
+                                      (tower.x * TILE_SIZE, tower.y * TILE_SIZE))
         for enemy in self.game.enemies:
             enemy.draw_health_bar(self.game.screen)
 
@@ -321,7 +325,9 @@ class UIManager:
             crystal.draw(self.game.screen)
         self.game.damage_texts.draw(self.game.screen)
 
+        self.draw_boss_screen_fx()
         self.draw_ui()
+        self.draw_boss_hud()
         self.draw_herobrine_health_bar()
         if self.game.state == GameState.PAUSED:
             self.draw_pause_overlay()
@@ -622,6 +628,119 @@ class UIManager:
         pygame.draw.rect(self.game.screen, GREEN, (900, 850, 760, 80))
         restart_text = assets.font_medium.render("重新开始", True, WHITE)
         self.game.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
+
+    # ------------------------------------------------------------------ 最终BOSS HUD
+
+    def get_disabled_overlay(self):
+        surf = getattr(self, "_disabled_surf", None)
+        if surf is None:
+            surf = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+            surf.fill((110, 30, 180, 95))
+            pygame.draw.line(surf, (235, 130, 255), (16, 16), (TILE_SIZE - 16, TILE_SIZE - 16), 5)
+            pygame.draw.line(surf, (235, 130, 255), (TILE_SIZE - 16, 16), (16, TILE_SIZE - 16), 5)
+            self._disabled_surf = surf
+        return surf
+
+    def draw_boss_effects(self):
+        for portal in self.game.boss_portals:
+            portal.draw(self.game.screen)
+        for beam in self.game.boss_beams:
+            beam.draw(self.game.screen)
+        for strike in self.game.boss_strikes:
+            strike.draw(self.game.screen)
+        for wave in self.game.boss_shockwaves:
+            wave.draw(self.game.screen)
+        for rune in self.game.boss_runes:
+            rune.draw(self.game.screen)
+        boss = self.game.final_boss
+        if boss is not None:
+            boss.draw_overlay(self.game.screen)
+
+    def draw_boss_screen_fx(self):
+        game = self.game
+        if game.boss_time_frozen > 0:
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((40, 90, 200, 56))
+            game.screen.blit(overlay, (0, 0))
+            text = assets.font_large.render("TICK FREEZE", True, (170, 225, 255))
+            game.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 250))
+        if game.boss_flash > 0:
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((255, 120, 235, min(80, game.boss_flash)))
+            game.screen.blit(overlay, (0, 0))
+        if game.boss_acid_timer > 0:
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((90, 220, 50, min(66, game.boss_acid_timer)))
+            game.screen.blit(overlay, (0, 0))
+            text = assets.font_large.render("ACID RAIN", True, (170, 255, 130))
+            text.set_alpha(min(255, game.boss_acid_timer * 5))
+            game.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 310))
+
+    def draw_boss_hud(self):
+        game = self.game
+        boss = game.final_boss
+        if boss is None:
+            return
+
+        screen = game.screen
+        bar_x, bar_y, bar_w, bar_h = 330, 86, 1900, 44
+        ratio = max(0.0, min(1.0, boss.health / boss.max_health))
+        phase_color = FINAL_BOSS_PHASE_COLORS[boss.phase - 1]
+
+        pygame.draw.rect(screen, (10, 4, 18), (bar_x - 4, bar_y - 4, bar_w + 8, bar_h + 8))
+        pygame.draw.rect(screen, (36, 8, 36), (bar_x, bar_y, bar_w, bar_h))
+        pygame.draw.rect(screen, phase_color, (bar_x, bar_y, int(bar_w * ratio), bar_h))
+
+        # 72 条血：每一层一条刻度
+        for i in range(1, FINAL_BOSS_LAYERS):
+            x = bar_x + bar_w * i // FINAL_BOSS_LAYERS
+            pygame.draw.line(screen, (14, 4, 20), (x, bar_y), (x, bar_y + bar_h), 1)
+        for k in range(1, 4):
+            x = bar_x + bar_w * k // 4
+            pygame.draw.line(screen, (255, 255, 255), (x, bar_y), (x, bar_y + bar_h), 3)
+        pygame.draw.rect(screen, (235, 205, 255), (bar_x, bar_y, bar_w, bar_h), 2)
+
+        name_label = f"{FINAL_BOSS_NAME} {FINAL_BOSS_EN_NAME}"
+        name_shadow = assets.font_small.render(name_label, True, (20, 0, 20))
+        screen.blit(name_shadow, (bar_x + 18, bar_y + 5))
+        name = assets.font_small.render(name_label, True, (255, 240, 255))
+        screen.blit(name, (bar_x + 16, bar_y + 3))
+
+        phase_text = assets.font_tower_level.render(
+            f"阶段 {boss.phase} · {FINAL_BOSS_PHASE_NAMES[boss.phase - 1]}", True, WHITE)
+        screen.blit(phase_text, (SCREEN_WIDTH // 2 - phase_text.get_width() // 2, bar_y + 7))
+
+        layer_text = assets.font_tower_level.render(
+            f"{max(0, boss.current_layer)} / {FINAL_BOSS_LAYERS} 层", True, (255, 230, 160))
+        screen.blit(layer_text, (bar_x + bar_w - layer_text.get_width() - 14, bar_y + 7))
+
+        # 技能播报
+        if game.boss_banner_timer > 0 and game.boss_banner_text:
+            alpha = min(255, game.boss_banner_timer * 4)
+            banner = pygame.Surface((1500, 40), pygame.SRCALPHA)
+            banner.fill((0, 0, 0, min(200, alpha)))
+            screen.blit(banner, (SCREEN_WIDTH // 2 - 750, 134))
+            text = assets.font_tower_level.render(game.boss_banner_text, True, (255, 220, 150))
+            text.set_alpha(alpha)
+            screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 140))
+
+        # 世界重载读条
+        if boss.reloading:
+            remain = max(0, boss.reload_timer) / 60.0
+            charge = 1.0 - boss.reload_timer / max(1, boss.reload_total)
+            pygame.draw.rect(screen, (30, 0, 0), (760, 188, 1040, 24))
+            pygame.draw.rect(screen, (255, 70, 50), (760, 188, int(1040 * charge), 24))
+            pygame.draw.rect(screen, (255, 220, 200), (760, 188, 1040, 24), 2)
+            warn = assets.font_tower_level.render(f"世界重载 {remain:.1f}s —— 击破任意一层可打断", True, WHITE)
+            screen.blit(warn, (SCREEN_WIDTH // 2 - warn.get_width() // 2, 216))
+
+        # 规则覆写提示
+        if game.boss_rule:
+            labels = {"attack_speed": "攻速-50%", "range": "射程-30%", "gold": "金币产量归零"}
+            label = labels.get(game.boss_rule.get("type"), "规则覆写")
+            remain = max(0, game.boss_rule["timer"]) // 60
+            rule_text = assets.font_tower_level.render(f"规则覆写：{label}  {remain}s", True, (255, 170, 120))
+            screen.blit(rule_text, (SCREEN_WIDTH - rule_text.get_width() - 40, 216))
 
     def draw_herobrine_health_bar(self):
         for enemy in self.game.enemies:

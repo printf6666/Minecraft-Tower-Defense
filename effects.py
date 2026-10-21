@@ -616,14 +616,19 @@ class UnstableCrystal:
         self.game = game
         self.x = col * TILE_SIZE + TILE_SIZE // 2
         self.y = row * TILE_SIZE + TILE_SIZE // 2
-        self.rect = pygame.Rect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-        self.image = assets.unstable_crystal_img
+        self.rect = pygame.Rect(col * TILE_SIZE, row * TILE_SIZE,
+                                UNSTABLE_CRYSTAL_SIZE, UNSTABLE_CRYSTAL_SIZE)
+        img = assets.unstable_crystal_img
+        if img is not None and img.get_size() != (UNSTABLE_CRYSTAL_SIZE, UNSTABLE_CRYSTAL_SIZE):
+            img = pygame.transform.scale(img, (UNSTABLE_CRYSTAL_SIZE, UNSTABLE_CRYSTAL_SIZE))
+        self.image = img
         self.exploding = False
         self.frame = 0
         self.frame_timer = 0
         self.frame_duration = 5
         self.max_frames = 5
         self.done = False
+        self.age = 0
         self._blast_frames = None
 
     def update(self):
@@ -638,6 +643,7 @@ class UnstableCrystal:
                     self.done = True
                     return False
             return True
+        self.age += 1
         touched = False
         for enemy in self.game.enemies:
             if enemy.health <= 0:
@@ -662,4 +668,7 @@ class UnstableCrystal:
                 img = self._blast_frames[self.frame]
                 screen.blit(img, img.get_rect(center=(self.x, self.y)))
         elif self.image:
-            screen.blit(self.image, self.image.get_rect(center=(self.x, self.y)))
+            bob = math.sin((self.game.game_time + self.col * 9) * 0.08) * 4
+            screen.blit(self.image, self.image.get_rect(center=(int(self.x), int(self.y + bob))))
+            pulse = 3 + int(2 * math.sin(self.game.game_time * 0.12 + self.col * 0.7))
+            pygame.draw.rect(screen, (195, 95, 255), self.rect, pulse)
