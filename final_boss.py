@@ -1,4 +1,4 @@
-"""第 100 波最终 BOSS：终焉·奥米伽 (OMEGA)。
+"""第 100 波最终 BOSS：终焉奥米伽 (OMEGA)。
 
 与第 50 波的 Herobrine 不同，奥米伽**不沿路径行走**：
 它悬浮在战场上空，像泰拉瑞亚的猪龙鱼公爵 / 光之女皇 / 石巨人那样，
@@ -857,7 +857,7 @@ class FinalBoss(Enemy):
             self._teleport()
             self.game.boss_flash = 100
             self.game.set_boss_banner(
-                f"阶段 {new_phase} · {FINAL_BOSS_PHASE_NAMES[new_phase - 1]}", 240)
+                f"阶段 {new_phase} : {FINAL_BOSS_PHASE_NAMES[new_phase - 1]}", 240)
             for i in range(24):
                 self.game.boss_runes.append(
                     BossRune(self.rect.centerx, self.rect.centery,

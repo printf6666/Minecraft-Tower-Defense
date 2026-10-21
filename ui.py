@@ -706,7 +706,7 @@ class UIManager:
         screen.blit(name, (bar_x + 16, bar_y + 3))
 
         phase_text = assets.font_tower_level.render(
-            f"阶段 {boss.phase} · {FINAL_BOSS_PHASE_NAMES[boss.phase - 1]}", True, WHITE)
+            f"阶段 {boss.phase} : {FINAL_BOSS_PHASE_NAMES[boss.phase - 1]}", True, WHITE)
         screen.blit(phase_text, (SCREEN_WIDTH // 2 - phase_text.get_width() // 2, bar_y + 7))
 
         layer_text = assets.font_tower_level.render(
