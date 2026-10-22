@@ -12,6 +12,7 @@ from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet, MAP_C
 from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal, LanternShockwave
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
+from codex import Codex
 from dragons import Dragon
 import stats
 from final_boss import (FinalBoss, BossShockwave, BossRune, BossPortal,
@@ -161,6 +162,7 @@ class Game:
         self._build_background()
 
         self.ui_manager = UIManager(self)
+        self.codex = Codex(self)
 
     def _build_background(self, night_mode=False, gold_ore_positions=None):
         gw = GRID_WIDTH * TILE_SIZE
@@ -232,6 +234,11 @@ class Game:
             if event.type == pygame.QUIT:
                 self.quit_game()
 
+            # 图鉴是全屏模态：打开时吞掉所有输入
+            if self.codex.open:
+                self.codex.handle_event(event)
+                continue
+
             # 伤害统计弹窗是模态的：只响应关闭（X / ESC / TAB）
             if self.stats_open:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -265,6 +272,9 @@ class Game:
                     if self.state == GameState.MENU:
                         if 900 <= mouse_x <= 1660 and 840 <= mouse_y <= 920:
                             self.start_game()
+                        elif (CODEX_BTN_X <= mouse_x <= CODEX_BTN_X + CODEX_BTN_WIDTH
+                              and CODEX_BTN_Y <= mouse_y <= CODEX_BTN_Y + CODEX_BTN_HEIGHT):
+                            self.codex.toggle()
                         elif 900 <= mouse_x <= 1660 and 1020 <= mouse_y <= 1100:
                             self.quit_game()
 
@@ -325,6 +335,9 @@ class Game:
                             self.reset_game()
 
             elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_c:
+                    self.codex.toggle()
+                    continue
                 if event.key == pygame.K_TAB and self.state in (
                         GameState.PLAYING, GameState.WAVE_PREPARATION, GameState.PAUSED,
                         GameState.VICTORY, GameState.GAME_OVER):
@@ -1288,7 +1301,7 @@ class Game:
         self.save_game()
 
     def update(self):
-        if self.stats_open:
+        if self.stats_open or self.codex.open:
             return
         if self.state == GameState.PAUSED:
             return
@@ -1739,6 +1752,10 @@ class Game:
             self.ui_manager.draw_game_over()
         elif self.state == GameState.VICTORY:
             self.ui_manager.draw_victory()
+        if self.codex.open:
+            self.codex.draw(self.screen)
+            pygame.display.flip()
+            return
         if self.stats_open and self.state != GameState.MENU:
             self.ui_manager.draw_damage_stats()
         pygame.display.flip()

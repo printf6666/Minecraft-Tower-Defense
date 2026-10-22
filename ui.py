@@ -241,6 +241,10 @@ class UIManager:
         pygame.draw.rect(self.game.screen, GREEN, (900, 840, 760, 80))
         start_text = assets.font_medium.render("开始游戏", True, WHITE)
         self.game.screen.blit(start_text, (1200, 855))
+        pygame.draw.rect(self.game.screen, CODEX_BTN_COLOR,
+                         (CODEX_BTN_X, CODEX_BTN_Y, CODEX_BTN_WIDTH, CODEX_BTN_HEIGHT))
+        codex_text = assets.font_medium.render("查看图鉴", True, WHITE)
+        self.game.screen.blit(codex_text, (1200, CODEX_BTN_Y + 15))
         pygame.draw.rect(self.game.screen, RED, (900, 1020, 760, 80))
         exit_text = assets.font_medium.render("退出游戏", True, WHITE)
         self.game.screen.blit(exit_text, (1200, 1035))
