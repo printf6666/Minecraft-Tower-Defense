@@ -119,19 +119,19 @@ class Dragon(pygame.sprite.Sprite):
         if self.dragon_type == "ice":
             damage = multiplier * abs(self.game.temperature)
             color = ICE_BLUE
-            reward = enemy.take_damage(damage, color=color)
+            reward = enemy.take_damage(damage, color=color, element="ice")
             self.game.coins += reward
             enemy.apply_freeze(self.freeze_duration)
         elif self.dragon_type == "electric":
             damage = multiplier * abs(self.game.temperature)
             color = ELECTRIC_PURPLE
-            reward = enemy.take_damage(damage, color=color)
+            reward = enemy.take_damage(damage, color=color, element="electric")
             self.game.coins += reward
             enemy.apply_stun(self.stun_duration)
         else:
             damage = multiplier * abs(self.game.temperature)
             color = ORANGE
-            reward = enemy.take_damage(damage, color=color)
+            reward = enemy.take_damage(damage, color=color, element="fire")
             self.game.coins += reward
             enemy.apply_burn(self.game.temperature, self.burn_duration)
 

@@ -53,12 +53,19 @@ EXIT_BTN_WIDTH = SCREEN_WIDTH - EXIT_BTN_X
 EXIT_BTN_HEIGHT = 60
 EXIT_BTN_COLOR = (120, 30, 30)
 
-FORECAST_BTN_X = 2050
-FORECAST_BTN_Y = 10
-FORECAST_BTN_WIDTH = 460
-FORECAST_BTN_HEIGHT = 60
-FORECAST_BTN_COLOR = (60, 60, 60)
-FORECAST_BTN_COLOR_DISABLED = (40, 40, 40)
+# 右上角提示面板（最终BOSS「指令覆写」提示用）
+TOP_PANEL_X = 2050
+TOP_PANEL_Y = 10
+TOP_PANEL_WIDTH = 460
+TOP_PANEL_HEIGHT = 60
+
+# 局内「伤害统计」按钮（右侧操作说明下方、底部炮塔栏上方）
+STATS_BTN_X = INFO_BORDER_X
+STATS_BTN_Y = SCREEN_HEIGHT - 128 - 80
+STATS_BTN_WIDTH = INFO_BORDER_SIZE
+STATS_BTN_HEIGHT = 54
+STATS_BTN_COLOR = (52, 52, 74)
+STATS_BTN_BORDER = (150, 150, 210)
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -116,6 +123,7 @@ class Enchantment(Enum):
     INFINITY_GAUNTLET = 25
     UNSTABLE_CRYSTAL = 26
     POWER_V = 27
+    LANTERN = 28
 
 ENCHANTMENT_DATA = {
     Enchantment.BALANCED: {"name": "均衡强化", "desc": "所有伤害+5%", "cost": 100},
@@ -128,7 +136,7 @@ ENCHANTMENT_DATA = {
     Enchantment.BOMB: {"name": "爆炸强化", "desc": "爆炸伤害+20%", "cost": 100},
     Enchantment.DENSE: {"name": "致密V", "desc": "重锤获得距离增伤，伤害+5/px", "cost": 300},
     Enchantment.WIND_BURST: {"name": "风爆", "desc": "蓄风印记爆炸伤害固定为5000点", "cost": 200},
-    Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "同时存在剧毒环刃与九头蛇毒箭时，中毒敌人被击败有6%概率爆炸，对周围敌人造成900伤害并击晕5秒，基础毒伤永久+1", "cost": 400},
+    Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "同时存在剧毒环刃与九头蛇毒箭时，中毒敌人被击败有10%概率爆炸，对周围敌人造成(基础毒伤+中毒层数)×18的伤害并击晕5秒，基础毒伤永久+1", "cost": 400},
     Enchantment.BURN: {"name": "高温燃烧", "desc": "燃烧伤害翻倍", "cost": 200},
     Enchantment.BLAZE_POWDER: {"name": "烈焰粉", "desc": "敌人永远燃烧，燃烧伤害+30%", "cost": 400},
     Enchantment.FROZEN_DEEP: {"name": "冰冻三尺", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹冻结时长+0.5秒，冰墙存在时间翻倍", "cost": 400},
@@ -142,10 +150,11 @@ ENCHANTMENT_DATA = {
     Enchantment.PULSE_SHIELD: {"name": "脉冲护盾", "desc": "护盾被击碎后进入脉冲状态8秒，期间免疫所有伤害", "cost": 800},
     Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，雷神之锤每攻击120次，所有雷盾反击一次并引爆所有蓄风印记", "cost": 1600},
     Enchantment.EMBER_REBIRTH: {"name": "余烬重生", "desc": "同时存在满级龙息塔与8座满级核弹塔时，点击龙息塔按Q花费5万金币献祭：塔消失、全场核弹立即冷却齐射，巨型陨石从天而降、着地时对全场敌人造成1000000007伤害。献祭花费逐次翻倍", "cost": 3200},
-    Enchantment.WAX: {"name": "蜜脾", "desc": "所有炮塔涂蜡，酸雨将无法破坏炮塔及护盾。酸雨开始后每0.5秒从终点扇形召唤5只蜜蜂，共召唤10次，蜜蜂随后寻敌，撞击敌人后死亡并造成其10%最大生命的无视护甲伤害", "cost": 400},
+    Enchantment.WAX: {"name": "蜜脾", "desc": "所有炮塔涂蜡，酸雨将无法破坏炮塔及护盾。酸雨开始后每0.5秒从终点扇形召唤5只蜜蜂，共召唤10次，蜜蜂随后寻敌，撞击敌人后死亡并造成其1%最大生命的毒系伤害", "cost": 400},
     Enchantment.INFINITY_GAUNTLET: {"name": "无限手套", "desc": "鼠标位置将始终附着无限手套，鼠标点击敌人可对其造成各种伤害，伤害 = 攻击力 * 波数 ** 2 * (1 + 对应元素强化 + 均衡强化)", "cost": 1600},
     Enchantment.UNSTABLE_CRYSTAL: {"name": "不稳定水晶", "desc": "TNT类炮塔子弹爆炸有10%概率在周围道路格生成不稳定水晶，敌人碰到后受到其1%最大生命伤害并引发爆炸；核弹/凋零核弹爆炸时全场每个道路格各有10%概率生成", "cost": 1600},
     Enchantment.POWER_V: {"name": "力量V", "desc": "箭矢伤害+125%", "cost": 300},
+    Enchantment.LANTERN: {"name": "灯火通明", "desc": "场上存在3座满级星焰提灯时：燃烧伤害*5，火系伤害+80%，并永久驱散全场迷雾", "cost": 1000},
 }
 
 GAUNTLET_ATTACKS = [
@@ -169,6 +178,7 @@ ENCHANTMENT_ORDER = [
     Enchantment.INFINITY_GAUNTLET,
     Enchantment.UNSTABLE_CRYSTAL,
     Enchantment.POWER_V,
+    Enchantment.LANTERN,
 ]
 
 NON_REPEATABLE_ENCHANTMENTS = {Enchantment.DENSE, Enchantment.WIND_BURST}
@@ -187,6 +197,19 @@ class BombSubType(Enum):
     WITHER_TNT = 5
 
 EMERALD_PER_WAVE_BY_LEVEL = {11: 1, 12: 2, 13: 3, 14: 4, 15: 5}
+
+# ==========================================================================================
+#  星焰提灯 —— 火系（FLAME）第 3 分支，Lv11 起解锁
+#  伤害 = (1600 + 温度 × 2) × (等级 - 10)，以自身为中心释放环形冲击波，命中范围内全部敌人
+# ==========================================================================================
+LANTERN_RANGE_TILES = {11: 2.50, 12: 2.75, 13: 3.00, 14: 3.25, 15: 3.50}
+LANTERN_FIRE_RATE = 120          # 攻击间隔 2 秒（60 FPS）
+LANTERN_BASE_DAMAGE = 1600
+LANTERN_TEMP_MULT = 2
+LANTERN_BURN_FRAMES = 4 * 60     # 燃烧 4 秒
+LANTERN_ENCHANT_TOWERS = 3       # 「灯火通明」需要的满级提灯数量
+LANTERN_BURN_MULT = 5            # 灯火通明：全局燃烧伤害倍率（乘算）
+LANTERN_FIRE_BONUS = 80          # 灯火通明：火系伤害加成（加算，百分点）
 
 
 
@@ -289,12 +312,24 @@ FINAL_BOSS_LAYER_HEALTH = 200_000_000
 FINAL_BOSS_TOTAL_HEALTH = FINAL_BOSS_LAYERS * FINAL_BOSS_LAYER_HEALTH
 FINAL_BOSS_LAYERS_PER_PHASE = FINAL_BOSS_LAYERS // 4   # 100 层 -> 每阶段 25 层
 
+# ==========================================================================================
+#  中毒（每 1.25 秒一跳）：纯平坦伤害，永久持续、无限叠层，不做百分比
+#  跳伤 = (基础毒伤 + 中毒层数) * POISON_TICK_FLAT_MULT
+#  试毒合约：中毒敌人被击败有 POISON_CONTRACT_TRIGGER_CHANCE 概率触发
+#  爆炸 = (基础毒伤 + 触发者层数) * POISON_CONTRACT_BURST_MULT
+# ==========================================================================================
+POISON_TICK_FLAT_MULT = 6.0
+POISON_CONTRACT_TRIGGER_CHANCE = 0.10
+POISON_CONTRACT_BURST_MULT = 18
+
 # BOSS 核心画面尺寸（比最初版本放大 50%：256 -> 384）
 FINAL_BOSS_CORE_SIZE = 384
 # 余烬重生的陨石（1,000,000,007）可以一次打穿 5 层
 FINAL_BOSS_METEOR_LAYERS = 5
 # 不稳定水晶的绘制尺寸
 UNSTABLE_CRYSTAL_SIZE = TILE_SIZE
+# 最终 BOSS 同屏伤害飘字上限（超出时移除最旧的，避免糊成一团）
+BOSS_DAMAGE_TEXT_LIMIT = 12
 
 FINAL_BOSS_PHASE_NAMES = [
     "编译 COMPILE",

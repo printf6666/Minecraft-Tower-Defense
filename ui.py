@@ -1,6 +1,7 @@
 import pygame
 import math
 import assets
+import stats
 from config import *
 from tower import TowerType
 from enemy import EnemyType
@@ -79,7 +80,14 @@ def get_tower_info(game, tower):
                         f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
     elif tower.type == TowerType.FLAME:
         if tower.level >= 11:
-            if tower.flame_branch == 2:
+            if tower.flame_branch == 3:
+                info = [f"星焰提灯 Lv{tower.level}", f"伤害:{tower.lantern_damage()}",
+                        f"燃烧:{game.temperature}/s,持续4s",
+                        f"范围:{LANTERN_RANGE_TILES.get(tower.level, 3.5)}格",
+                        "冲击波:范围内全体敌人",
+                        f"攻击间隔:{LANTERN_FIRE_RATE / 60}s 迷雾照明",
+                        "按 R 切换形态"]
+            elif tower.flame_branch == 2:
                 fire_dmg = {11: 36, 12: 72, 13: 108, 14: 144, 15: 180}
                 info = [f"唤龙火晶石 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
                         f"5%召唤火龙:{fire_dmg.get(tower.level,36)}倍温度+燃烧", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
@@ -224,6 +232,7 @@ def get_tower_info(game, tower):
 class UIManager:
     def __init__(self, game):
         self.game = game
+        self._lantern_light_cache = {}
 
     def draw_menu(self):
         pygame.mouse.set_visible(True)
@@ -248,6 +257,9 @@ class UIManager:
             img.set_alpha(alpha)
             self.game.screen.blit(img, (cb['x'] * TILE_SIZE, cb['y'] * TILE_SIZE))
         self.game.enemies.draw(self.game.screen)
+        # 不稳定水晶压在子弹下层，避免挡住弹道
+        for crystal in self.game.crystals:
+            crystal.draw(self.game.screen)
         self.game.bullets.draw(self.game.screen)
         for dragon in self.game.dragons:
             dragon.draw(self.game.screen)
@@ -287,6 +299,7 @@ class UIManager:
                 s.fill((0, 0, 0, 255))
             else:
                 s.fill((255, 255, 255, 255))
+            self.cut_lantern_lights(s)
             self.game.screen.blit(s, (0, TILE_SIZE))
 
         for pool in self.game.dragon_breath_pools:
@@ -299,6 +312,8 @@ class UIManager:
             explosion.draw(self.game.screen)
         for exp in self.game.ice_explosions:
             exp.draw(self.game.screen)
+        for wave_fx in self.game.lantern_shockwaves:
+            wave_fx.draw(self.game.screen)
         for ray in self.game.hell_rays:
             ray.draw(self.game.screen)
         for storm in self.game.resonance_storms:
@@ -321,8 +336,6 @@ class UIManager:
             explosion.draw(self.game.screen)
         for bee in self.game.bees:
             bee.draw(self.game.screen)
-        for crystal in self.game.crystals:
-            crystal.draw(self.game.screen)
         self.game.damage_texts.draw(self.game.screen)
 
         self.draw_boss_screen_fx()
@@ -356,21 +369,6 @@ class UIManager:
         weather_name = WEATHER_CONFIG[self.game.weather]["name"]
         weather_color = WEATHER_CONFIG[self.game.weather]["color"]
         self.game.screen.blit(assets.font_medium.render(f"天气:{weather_name}  温度:{self.game.temperature}", True, weather_color), (1570, 16))
-
-        if self.game.wave_manager.current_wave < 97:
-            can_buy = self.game.state == GameState.PLAYING and not self.game.forecast_purchased
-            can_afford = self.game.coins >= 100 * self.game.wave_manager.current_wave
-            btn_color = FORECAST_BTN_COLOR if can_buy and can_afford else FORECAST_BTN_COLOR_DISABLED
-            pygame.draw.rect(self.game.screen, btn_color,
-                             (FORECAST_BTN_X, FORECAST_BTN_Y, FORECAST_BTN_WIDTH, FORECAST_BTN_HEIGHT))
-            if self.game.forecast_purchased and len(self.game.weather_forecast) >= 3:
-                forecast_names = [WEATHER_CONFIG[w]['name'] for w in self.game.weather_forecast[:3]]
-                label = f"天气预报:{','.join(forecast_names)}"
-            else:
-                label = f"天气预报:花费{100*self.game.wave_manager.current_wave}金"
-            fc_color = WHITE if can_afford else GRAY
-            fc_text = assets.font_small.render(label, True, fc_color)
-            self.game.screen.blit(fc_text, (FORECAST_BTN_X + 20, FORECAST_BTN_Y + 10))
 
         pygame.draw.rect(self.game.screen, BLACK, (0, SCREEN_HEIGHT - 128, SCREEN_WIDTH, 128))
         pygame.draw.line(self.game.screen, WHITE, (0, SCREEN_HEIGHT - 128), (SCREEN_WIDTH, SCREEN_HEIGHT - 128), 4)
@@ -407,7 +405,8 @@ class UIManager:
                          (INFO_BORDER_X, ENCHANT_BOX_Y, ENCHANT_BOX_WIDTH, ENCHANT_BOX_HEIGHT), INFO_BORDER_WIDTH)
         for rect, ench, cnt in self.get_enchant_icon_rects():
             self.game.screen.blit(assets.enchantment_icons[ench], rect.topleft)
-            if cnt > 1:
+            # 试毒合约叠加到 1 层也要显示；其他附魔只在重复持有时显示数量
+            if cnt > 1 or (ench is Enchantment.POISON_CONTRACT and cnt > 0):
                 badge = assets.font_tower_level.render(str(cnt), True, WHITE)
                 pygame.draw.rect(self.game.screen, (0, 0, 0),
                                  (rect.right - badge.get_width() - 8, rect.bottom - badge.get_height() - 8,
@@ -424,6 +423,13 @@ class UIManager:
         exit_text = assets.font_small.render("退出游戏", True, WHITE)
         self.game.screen.blit(exit_text, (EXIT_BTN_X + EXIT_BTN_WIDTH // 2 - exit_text.get_width() // 2, EXIT_BTN_Y + 10))
 
+        stats_btn = self.get_stats_button_rect()
+        pygame.draw.rect(self.game.screen, STATS_BTN_COLOR, stats_btn)
+        pygame.draw.rect(self.game.screen, STATS_BTN_BORDER, stats_btn, 2)
+        stats_label = assets.font_small.render("伤害统计 (TAB)", True, WHITE)
+        self.game.screen.blit(stats_label, (stats_btn.centerx - stats_label.get_width() // 2,
+                                            stats_btn.centery - stats_label.get_height() // 2))
+
         instructions = ["操作说明:", "0~9,X选择炮塔", "U升级 S出售", "R切换分支 E升5级", "ESC暂停"]
         for i, text in enumerate(instructions):
             self.game.screen.blit(assets.font_small.render(text, True, WHITE), (2156, 1144 + i * 48))
@@ -434,6 +440,9 @@ class UIManager:
         for ench in self.game.enchantments:
             counts[ench] = counts.get(ench, 0) + 1
         for i, (ench, cnt) in enumerate(counts.items()):
+            if ench is Enchantment.POISON_CONTRACT:
+                # 角标显示「已叠加层数」：基础毒伤 = 5 + 层数
+                cnt = max(0, self.game.poison_base_damage - 5)
             col = i % ENCHANT_ICONS_PER_ROW
             row = i // ENCHANT_ICONS_PER_ROW
             x = INFO_BORDER_X + INFO_PADDING + col * (ENCHANT_ICON_SIZE + ENCHANT_ICON_GAP)
@@ -555,6 +564,35 @@ class UIManager:
         self.game.screen.blit(cont_text, (cont_rect.centerx - cont_text.get_width() // 2,
                                           cont_rect.y + (cont_rect.height - cont_text.get_height()) // 2))
 
+    def _lantern_light(self, radius):
+        """缓存的路灯光斑：中心完全透明、向外渐变，用于从迷雾里挖出可视区域。"""
+        light = self._lantern_light_cache.get(radius)
+        if light is not None:
+            return light
+        light = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+        light.fill((0, 0, 0, 0))
+        steps = 40
+        for i in range(steps, 0, -1):
+            r = max(1, int(radius * i / steps))
+            alpha = int(255 * (1.0 - i / steps) ** 0.55)
+            pygame.draw.circle(light, (0, 0, 0, alpha), (radius, radius), r)
+        self._lantern_light_cache[radius] = light
+        return light
+
+    def cut_lantern_lights(self, fog_surface):
+        """星焰提灯在迷雾 / 永夜黑暗里照亮自身周围（类似植物大战僵尸的路灯花）。"""
+        for tower in self.game.towers:
+            if not tower.is_lantern():
+                continue
+            radius = int(tower.get_effective_range() * 1.05)
+            if radius <= 0:
+                continue
+            light = self._lantern_light(radius)
+            # 迷雾层整体下移了一个 TILE_SIZE，这里要减回去
+            fog_surface.blit(light,
+                             (tower.rect.centerx - radius, tower.rect.centery - TILE_SIZE - radius),
+                             special_flags=pygame.BLEND_RGBA_SUB)
+
     def draw_weather_particles(self):
         for p in self.game.weather_particles:
             if p[-1] == "rain":
@@ -628,6 +666,8 @@ class UIManager:
         pygame.draw.rect(self.game.screen, GREEN, (900, 850, 760, 80))
         restart_text = assets.font_medium.render("重新开始", True, WHITE)
         self.game.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
+        hint = assets.font_tower_level.render("按 TAB 查看伤害统计", True, (190, 190, 190))
+        self.game.screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 970))
 
     # ------------------------------------------------------------------ 最终BOSS HUD
 
@@ -733,20 +773,98 @@ class UIManager:
             warn = assets.font_tower_level.render(f"世界重载 {remain:.1f}s —— 击破任意一层可打断", True, WHITE)
             screen.blit(warn, (SCREEN_WIDTH // 2 - warn.get_width() // 2, 216))
 
-        # 规则覆写提示：占用右上角「天气预报」按钮的位置
-        # （100 波没有天气预报，forecast 按钮在 wave >= 97 时本来就不绘制，正好空出来）
+        # 规则覆写提示：占用右上角空白位置
         if game.boss_rule:
             labels = {"attack_speed": "攻速-50%", "range": "射程-30%", "gold": "金币产量归零"}
             label = labels.get(game.boss_rule.get("type"), "规则覆写")
             remain = max(0, game.boss_rule["timer"]) / 60.0
-            panel = pygame.Rect(FORECAST_BTN_X, FORECAST_BTN_Y,
-                                FORECAST_BTN_WIDTH, FORECAST_BTN_HEIGHT)
+            panel = pygame.Rect(TOP_PANEL_X, TOP_PANEL_Y,
+                                TOP_PANEL_WIDTH, TOP_PANEL_HEIGHT)
             pygame.draw.rect(screen, (92, 28, 18), panel)
             pygame.draw.rect(screen, (255, 150, 80), panel, 3)
             rule_text = assets.font_tower_level.render(
                 f"指令覆写：{label}  {remain:.1f}s", True, (255, 228, 190))
             screen.blit(rule_text, (panel.centerx - rule_text.get_width() // 2,
                                     panel.centery - rule_text.get_height() // 2))
+
+    # ------------------------------------------------------------------ 伤害统计
+
+    def get_stats_button_rect(self):
+        return pygame.Rect(STATS_BTN_X, STATS_BTN_Y, STATS_BTN_WIDTH, STATS_BTN_HEIGHT)
+
+    def get_stats_panel_rect(self):
+        return pygame.Rect(580, 250, 1400, 1020)
+
+    def get_stats_close_rect(self):
+        panel = self.get_stats_panel_rect()
+        return pygame.Rect(panel.right - 76, panel.y + 18, 56, 56)
+
+    def draw_damage_stats(self):
+        game = self.game
+        screen = game.screen
+        panel = self.get_stats_panel_rect()
+
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 190))
+        screen.blit(overlay, (0, 0))
+
+        pygame.draw.rect(screen, (24, 22, 34), panel)
+        pygame.draw.rect(screen, (190, 180, 255), panel, 3)
+
+        title = assets.font_large.render("伤害统计", True, WHITE)
+        screen.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 20))
+
+        data = game.damage_stats
+        total_text = assets.font_small.render(
+            f"总伤害：{stats.format_damage(data.total)}", True, (230, 220, 255))
+        screen.blit(total_text, (panel.centerx - total_text.get_width() // 2, panel.y + 94))
+
+        rows = data.rows()
+        max_damage = max([row[2] for row in rows] + [1])
+        top = panel.y + 160
+        row_h = 92
+        bar_x = panel.x + 420
+        bar_w = 620
+        bar_h = 30
+        for i, (key, name, damage, color, icon) in enumerate(rows):
+            y = top + i * row_h
+            if i % 2 == 1:
+                pygame.draw.rect(screen, (32, 30, 46),
+                                 (panel.x + 28, y - 4, panel.width - 56, row_h - 8))
+            if icon:
+                screen.blit(icon, (panel.x + 44, y + 8))
+            else:
+                pygame.draw.rect(screen, (80, 80, 80), (panel.x + 44, y + 8, 56, 56))
+            name_surf = assets.font_small.render(name, True, WHITE)
+            screen.blit(name_surf, (panel.x + 124, y + 20))
+            pygame.draw.rect(screen, (48, 44, 62), (bar_x, y + 18, bar_w, bar_h))
+            fill = int(bar_w * damage / max_damage)
+            if fill > 0:
+                pygame.draw.rect(screen, color, (bar_x, y + 18, fill, bar_h))
+            pygame.draw.rect(screen, (90, 84, 110), (bar_x, y + 18, bar_w, bar_h), 1)
+            dmg_surf = assets.font_tower_level.render(stats.format_damage(damage), True, (255, 245, 220))
+            screen.blit(dmg_surf, (panel.x + 1180 - dmg_surf.get_width(), y + 20))
+            pct = (damage / data.total * 100) if data.total > 0 else 0.0
+            if damage > 0 and pct < 0.1:
+                pct_text = "<0.1%"
+            else:
+                pct_text = f"{pct:.1f}%"
+            pct_surf = assets.font_tower_level.render(pct_text, True, (200, 200, 220))
+            screen.blit(pct_surf, (panel.x + 1225, y + 20))
+
+        close = self.get_stats_close_rect()
+        pygame.draw.rect(screen, (70, 30, 40), close)
+        pygame.draw.rect(screen, (255, 120, 120), close, 2)
+        pygame.draw.line(screen, WHITE, (close.x + 16, close.y + 16), (close.right - 16, close.bottom - 16), 4)
+        pygame.draw.line(screen, WHITE, (close.right - 16, close.y + 16), (close.x + 16, close.bottom - 16), 4)
+
+        note = assets.font_tower_level.render(
+            "统计口径：凋零→毒系；无尽贪婪/不稳定水晶→爆炸；余烬陨石→火系；蜜脾蜂群→毒系",
+            True, (170, 165, 190))
+        screen.blit(note, (panel.centerx - note.get_width() // 2, panel.bottom - 92))
+        hint = assets.font_tower_level.render(
+            "打开统计时游戏暂停，点击 X 或按 TAB / ESC 关闭", True, (150, 145, 170))
+        screen.blit(hint, (panel.centerx - hint.get_width() // 2, panel.bottom - 52))
 
     def draw_herobrine_health_bar(self):
         for enemy in self.game.enemies:
@@ -773,3 +891,5 @@ class UIManager:
         pygame.draw.rect(self.game.screen, GREEN, (900, 850, 760, 80))
         restart_text = assets.font_medium.render("重新开始", True, WHITE)
         self.game.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
+        hint = assets.font_tower_level.render("按 TAB 查看伤害统计", True, (190, 190, 190))
+        self.game.screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 970))

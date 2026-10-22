@@ -23,6 +23,18 @@ CORE_SIZE = FINAL_BOSS_CORE_SIZE
 S = CORE_SIZE / 256.0
 VISUALS = {}
 
+# 伤害飘字点位表（相对 BOSS 中心）：(左右, x 起点, y)
+#   左右：-1 左 / 1 右 / 0 正上方居中
+#   第 1、2 行为左右交替的两行；第 5 个点位在正上方居中
+DMG_TEXT_SLOTS = [
+    (-1, 85, -155),
+    (1, 85, -155),
+    (-1, 120, -50),
+    (1, 120, -50),
+    (0, 0, -220),
+]
+DMG_TEXT_BAND_W = 50
+
 
 # ==========================================================================================
 #  预渲染资源（只做一次，避免每帧缩放）
@@ -421,6 +433,8 @@ class FinalBoss(Enemy):
         self.move_timer = 90
         self.bob_phase = 0.0
         self.spin = 0.0
+        self.dmg_text_slot = -1
+        self._dmg_text_vy = -2.0
         self.dash_timer = 0
         self.dash_vx = 0.0
         self.dash_vy = 0.0
@@ -791,7 +805,28 @@ class FinalBoss(Enemy):
 
     # ------------------------------------------------------------------ 受伤与死亡
 
-    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, layers=1):
+    def _next_dmg_text_slot(self):
+        """伤害飘字点位：左右交替的两行 + 正上方一个，共 5 个点位轮转。
+
+        点位坐标相对 BOSS 中心，全部落在本体范围内（不再往外飘）。
+        """
+        self.dmg_text_slot = (self.dmg_text_slot + 1) % len(DMG_TEXT_SLOTS)
+        side, base_x, base_y = DMG_TEXT_SLOTS[self.dmg_text_slot]
+        if side == 0:
+            # 正上方居中：只做小幅抖动
+            offset_x = random.randint(-40, 40)
+            drift_x = random.uniform(-0.3, 0.3)
+        else:
+            offset_x = side * random.randint(base_x, base_x + DMG_TEXT_BAND_W)
+            drift_x = side * random.uniform(0.2, 0.7)
+        offset_y = base_y + random.randint(-25, 25)
+        # 上浮速度各不相同，同一点位连续冒出的数字会自己拉开，不会糊成一团
+        self._dmg_text_vy = random.uniform(-2.9, -1.2)
+        return (self.rect.centerx + offset_x,
+                self.rect.centery + offset_y,
+                drift_x)
+
+    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, layers=1, element=None):
         """layers>1 表示一次打穿多层（余烬重生的陨石会传 5）。"""
         if self.dying or self.health <= 0:
             return 0
@@ -805,7 +840,12 @@ class FinalBoss(Enemy):
         self.health -= final_dmg
         self.hit_flash = 4
         if self.game:
-            self.game.spawn_damage_text(final_dmg, self.rect.center, color=color, scale=scale)
+            tx, ty, tvx = self._next_dmg_text_slot()
+            self.game.spawn_damage_text(final_dmg, (tx, ty), color=color, scale=scale,
+                                        speed_x=tvx, speed_y=self._dmg_text_vy, boss=True)
+            if final_dmg > 0 and getattr(self.game, "damage_stats", None) is not None:
+                elem = element or getattr(self.game, "damage_element", None)
+                self.game.damage_stats.add(elem, final_dmg)
 
         if layers > 1:
             return self._pierce_layers(int(layers))

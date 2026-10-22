@@ -9,18 +9,19 @@ _CRYSTAL_BLAST_FRAMES = None
 
 
 class WindExplosion:
-    def __init__(self, x, y, damage, knockback, game):
+    def __init__(self, x, y, damage, knockback, game, element="wind"):
         self.x = x
         self.y = y
         self.duration = 6
         self.radius = 128
+        self.element = element
         for enemy in game.enemies:
             if enemy.health <= 0:
                 continue
             dx = enemy.rect.centerx - x
             dy = enemy.rect.centery - y
             if (dx * dx + dy * dy) <= self.radius * self.radius:
-                reward = enemy.take_damage(damage, color=MINT, scale=0.8)
+                reward = enemy.take_damage(damage, color=MINT, scale=0.8, element=self.element)
                 game.coins += reward
                 enemy.apply_knockback(knockback)
 
@@ -50,7 +51,7 @@ class EndlessGreedExplosion:
             dy = enemy.rect.centery - y
             if (dx * dx + dy * dy) <= self.radius * self.radius:
                 pct_dmg = max(1, int(enemy.max_health * 0.01))
-                reward = enemy.take_damage(pct_dmg, color=WHITE, scale=1.0)
+                reward = enemy.take_damage(pct_dmg, color=WHITE, scale=1.0, element="explosion")
                 game.coins += reward
 
     def update(self):
@@ -134,7 +135,8 @@ class IceExplosion:
             dx = enemy.rect.centerx - x
             dy = enemy.rect.centery - y
             if abs(dx) <= self.w // 2 and abs(dy) <= self.h // 2:
-                reward = enemy.take_damage(damage, color=ICE_BLUE, scale=0.8)
+                reward = enemy.take_damage(damage, color=ICE_BLUE, scale=0.8,
+                                           element=getattr(game, "damage_element", None) or "ice")
                 game.coins += reward
                 enemy.apply_freeze(freeze_time)
 
@@ -166,7 +168,7 @@ class DragonBreathPool:
             dx = enemy.rect.centerx - self.x
             dy = enemy.rect.centery - self.y
             if (dx * dx + dy * dy) <= self.radius * self.radius:
-                reward = enemy.take_damage(dmg, color=PURPLE, scale=0.7)
+                reward = enemy.take_damage(dmg, color=PURPLE, scale=0.7, element="fire")
                 game.coins += reward
                 if stun_time > 0:
                     enemy.apply_stun(int(stun_time * 60))
@@ -256,7 +258,7 @@ class PoisonSplash:
             dx = enemy.rect.centerx - x
             dy = enemy.rect.centery - y
             if (dx * dx + dy * dy) <= self.radius * self.radius:
-                reward = enemy.take_damage(damage, color=GREEN, scale=0.8)
+                reward = enemy.take_damage(damage, color=GREEN, scale=0.8, element="poison")
                 game.coins += reward
                 enemy.apply_poison(stacks)
 
@@ -272,11 +274,15 @@ class PoisonSplash:
 
 
 class PoisonContractExplosion:
-    def __init__(self, x, y, game):
+    def __init__(self, x, y, game, stacks=0):
         self.x = x
         self.y = y
         self.duration = 6
         self.radius = 128
+        self.stacks = max(0, int(stacks))
+        # 用触发时（+1 之前）的基础毒伤结算，避免奖励层数反过来放大本次爆炸
+        # 线性公式：(基础毒伤 + 层数) * 18，避免 base × stacks 的平方爆炸
+        damage = int((game.poison_base_damage + self.stacks) * POISON_CONTRACT_BURST_MULT)
         game.poison_base_damage += 1
         for enemy in game.enemies:
             if enemy.health <= 0:
@@ -284,7 +290,7 @@ class PoisonContractExplosion:
             dx = enemy.rect.centerx - x
             dy = enemy.rect.centery - y
             if (dx * dx + dy * dy) <= self.radius * self.radius:
-                reward = enemy.take_damage(900, color=GREEN, scale=0.8)
+                reward = enemy.take_damage(damage, color=GREEN, scale=0.8, element="poison")
                 game.coins += reward
                 enemy.apply_stun(5 * 60)
 
@@ -320,7 +326,8 @@ class TNTExplosion:
             dx = enemy.rect.centerx - x
             dy = enemy.rect.centery - y
             if (dx * dx + dy * dy) <= radius_px * radius_px:
-                reward = enemy.take_damage(damage, color=RED, scale=1.0)
+                reward = enemy.take_damage(damage, color=RED, scale=1.0,
+                                           element=getattr(game, "damage_element", None))
                 game.coins += reward
                 if bomb_subtype is not None:
                     if bomb_subtype == BombSubType.SNOW:
@@ -377,7 +384,8 @@ class MushroomExplosion:
             for enemy in game.enemies:
                 if enemy.health <= 0:
                     continue
-                reward = enemy.take_damage(final_damage, color=RED, scale=1.2)
+                reward = enemy.take_damage(final_damage, color=RED, scale=1.2,
+                                           element=getattr(game, "damage_element", None))
                 game.coins += reward
                 enemy.apply_stun(120)
         else:
@@ -389,8 +397,9 @@ class MushroomExplosion:
                 if enemy.health <= 0:
                     continue
                 percent_dmg = int(enemy.max_health * percent_damage)
-                reward = enemy.take_damage(percent_dmg, color=RED, scale=1.2)
-                reward += enemy.take_damage(fixed_damage, color=RED, scale=1.2)
+                element = getattr(game, "damage_element", None)
+                reward = enemy.take_damage(percent_dmg, color=RED, scale=1.2, element=element)
+                reward += enemy.take_damage(fixed_damage, color=RED, scale=1.2, element=element)
                 game.coins += reward
                 enemy.apply_stun(120)
                 enemy.wither_timer = 600
@@ -478,6 +487,47 @@ class NuclearShockwave:
         screen.blit(s, (self.x - self.radius, self.y - self.radius))
 
 
+class LanternShockwave:
+    """星焰提灯的攻击表现：从塔中心向外扩散的金色光环。"""
+
+    def __init__(self, x, y, radius):
+        self.x = x
+        self.y = y
+        self.max_radius = int(radius)
+        self.duration = 24
+        self.timer = 0
+        self.done = False
+
+    def update(self):
+        self.timer += 1
+        if self.timer >= self.duration:
+            self.done = True
+        return not self.done
+
+    def draw(self, screen):
+        if self.done:
+            return
+        t = self.timer / self.duration
+        radius = int(self.max_radius * (0.30 + 0.70 * t))
+        if radius <= 0:
+            return
+        fade = 1.0 - t
+        ring_width = max(4, int(18 * fade))
+        pad = ring_width + 2
+        size = radius * 2 + pad * 2
+        surf = pygame.Surface((size, size), pygame.SRCALPHA)
+        center = size // 2
+        # 外扩的余晖填充 + 内层暖光
+        pygame.draw.circle(surf, (255, 160, 50, int(42 * fade)),
+                           (center, center), max(1, radius - ring_width // 2))
+        pygame.draw.circle(surf, (255, 215, 110, int(58 * fade)),
+                           (center, center), max(1, int((radius - ring_width) * 0.5)))
+        # 亮环
+        pygame.draw.circle(surf, (255, 240, 170, int(240 * fade)),
+                           (center, center), radius, ring_width)
+        screen.blit(surf, (self.x - center, self.y - center))
+
+
 class WitherSplash:
     def __init__(self, x, y, damage, wither_duration, game):
         self.x = x
@@ -490,7 +540,7 @@ class WitherSplash:
             dx = enemy.rect.centerx - x
             dy = enemy.rect.centery - y
             if (dx * dx + dy * dy) <= self.radius * self.radius:
-                reward = enemy.take_damage(damage, color=(100, 0, 100), scale=0.8)
+                reward = enemy.take_damage(damage, color=(100, 0, 100), scale=0.8, element="poison")
                 game.coins += reward
                 enemy.apply_wither(wither_duration)
 
@@ -584,9 +634,11 @@ class Bee:
             if enemy.health <= 0:
                 continue
             if enemy.rect.collidepoint(self.x, self.y):
-                dmg = max(1, int(enemy.max_health * 0.10))
-                reward = enemy.take_damage(dmg, color=GOLD, ignore_armor=True)
+                # 百分比伤害，不吃毒系附魔加成
+                dmg = max(1, int(enemy.max_health * 0.01))
+                reward = enemy.take_damage(dmg, color=GREEN, ignore_armor=True, element="poison")
                 self.game.coins += reward
+                enemy.apply_poison(50)
                 self.done = True
                 return False
         if self.target is None:
@@ -597,9 +649,11 @@ class Bee:
         dy = ty - self.y
         dist = math.hypot(dx, dy)
         if dist <= self.SPEED:
-            dmg = max(1, int(self.target.max_health * 0.10))
-            reward = self.target.take_damage(dmg, color=GOLD, ignore_armor=True)
+            # 百分比伤害，不吃毒系附魔加成
+            dmg = max(1, int(self.target.max_health * 0.01))
+            reward = self.target.take_damage(dmg, color=GREEN, ignore_armor=True, element="poison")
             self.game.coins += reward
+            self.target.apply_poison(50)
             self.done = True
             return False
         self.x += dx / dist * self.SPEED
@@ -652,7 +706,7 @@ class UnstableCrystal:
                 continue
             if enemy.rect.colliderect(self.rect):
                 pct = max(1, int(enemy.max_health * 0.01))
-                reward = enemy.take_damage(pct, color=WHITE, scale=1.0)
+                reward = enemy.take_damage(pct, color=WHITE, scale=1.0, element="explosion")
                 self.game.coins += reward
                 touched = True
         if touched:

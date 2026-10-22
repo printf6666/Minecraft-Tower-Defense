@@ -2,6 +2,7 @@ import pygame
 import random
 import math
 import assets
+import stats
 from config import *
 from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, IceWall, HellRay
 from dragons import Dragon
@@ -208,9 +209,15 @@ class Tower(pygame.sprite.Sprite):
                 self.range = 0
                 self.fire_rate = 35 * 60
 
+        if self.type == TowerType.FLAME:
+            self.recalculate_stats()
+
         self.update_sprite()
 
     def recalculate_stats(self):
+        if self.type == TowerType.FLAME:
+            self._recalc_flame()
+            return
         if self.type != TowerType.TELEPORT:
             return
         self.teleport_chance = 0.01
@@ -226,6 +233,32 @@ class Tower(pygame.sprite.Sprite):
                 if i >= 5:
                     self.oneshot_chance += 0.01
         self.fire_rate = max(30, 60 - (self.level - 1) * 6)
+
+    def _recalc_flame(self):
+        """火系数值按等级整体重算；分支 3（星焰提灯）走独立数值表。"""
+        lv = self.level
+        self.damage = 20 + 15 * (lv - 1)
+        self.range = TILE_SIZE * 1.5 + (lv - 1) * (TILE_SIZE // 4)
+        self.fire_rate = max(30, 60 - (lv - 1) * 6)
+        self.stun_time = round(0.1 * max(0, lv - 5), 1) if lv >= 6 else 0
+        if lv >= 11 and self.flame_branch == 3:
+            self.range = int(TILE_SIZE * LANTERN_RANGE_TILES.get(lv, 3.5))
+            self.fire_rate = LANTERN_FIRE_RATE
+            self.stun_time = 0
+
+    def is_lantern(self):
+        """星焰提灯：火系 Lv11+ 分支 3。"""
+        return (self.type == TowerType.FLAME and self.level >= 11
+                and self.flame_branch == 3)
+
+    def lantern_damage(self):
+        """星焰提灯冲击波的单次伤害（含火系 / 均衡附魔加成）。
+
+        注意：只有冲击波本体吃加成，附加的燃烧沿用原始温度，不吃任何伤害加成。
+        """
+        mult = self.game.get_enchant_damage_multiplier(TowerType.FLAME)
+        return max(1, int((LANTERN_BASE_DAMAGE + self.game.temperature * LANTERN_TEMP_MULT)
+                          * (self.level - 10) * mult))
 
     def update_sprite(self):
         if self.type == TowerType.BOMB:
@@ -270,7 +303,9 @@ class Tower(pygame.sprite.Sprite):
         elif self.type == TowerType.FLAME:
             prefix = str(self.type.value)
             if self.level >= 11:
-                if self.flame_branch == 2:
+                if self.flame_branch == 3:
+                    img = f"tower/{prefix}{prefix}{prefix}-3.png"
+                elif self.flame_branch == 2:
                     img = f"tower/{prefix}{prefix}{prefix}-2.png"
                 else:
                     img = f"tower/{prefix}{prefix}{prefix}-1.png"
@@ -362,6 +397,15 @@ class Tower(pygame.sprite.Sprite):
     def attack(self, current_time):
         if not self.can_attack(current_time):
             return []
+        # 整个攻击流程（含直接结算的地狱射线、闪电、爆炸）都归属该塔的属性
+        prev_element = self.game.damage_element
+        self.game.damage_element = stats.tower_element(self.type)
+        try:
+            return self._attack_inner(current_time)
+        finally:
+            self.game.damage_element = prev_element
+
+    def _attack_inner(self, current_time):
         prev_last_shot = self.last_shot
         self.last_shot = current_time
 
@@ -378,6 +422,9 @@ class Tower(pygame.sprite.Sprite):
                 return [missile]
             self.last_shot = prev_last_shot
             return []
+
+        if self.is_lantern():
+            return self._lantern_attack()
 
         check_range = self.get_effective_range() + TILE_SIZE // 2
         tc = self.rect.centerx // TILE_SIZE
@@ -525,6 +572,27 @@ class Tower(pygame.sprite.Sprite):
 
         return bullets
 
+    def _lantern_attack(self):
+        """星焰提灯：以自身为中心释放冲击波，命中范围内全部敌人（类似保卫萝卜的太阳）。"""
+        radius = self.get_effective_range()
+        if radius <= 0:
+            return []
+        cx, cy = self.rect.centerx, self.rect.centery
+        targets = [e for e in self.game.enemies
+                   if e.health > 0
+                   and (e.rect.centerx - cx) ** 2 + (e.rect.centery - cy) ** 2 <= radius * radius]
+        if not targets:
+            return []
+
+        damage = self.lantern_damage()
+
+        self.game.add_lantern_shockwave(cx, cy, radius)
+        for enemy in targets:
+            reward = enemy.take_damage(damage, color=(255, 205, 90), scale=1.3)
+            self.game.coins += reward
+            enemy.apply_burn(self.game.temperature, LANTERN_BURN_FRAMES)
+        return []
+
     def draw_range(self, surface):
         if self.type == TowerType.SHIELD or self.type == TowerType.TIME:
             if self.type == TowerType.SHIELD and self.level >= 11:
@@ -611,6 +679,7 @@ class Bullet(pygame.sprite.Sprite):
         self.damage = damage
         self.tower_type = tower_type
         self.game = game
+        self.damage_element = getattr(game, "damage_element", None)
         self.teleport_chance = teleport_chance
         self.penetrate = penetrate
         self.freeze_time = freeze_time
@@ -786,6 +855,9 @@ class Bullet(pygame.sprite.Sprite):
         return RED
 
     def on_hit(self, enemy):
+        prev_element = self.game.damage_element
+        if self.damage_element is not None:
+            self.game.damage_element = self.damage_element
         final_dmg = self.calculate_final_damage()
         mult = self.game.get_enchant_damage_multiplier(self.tower_type)
 
@@ -813,6 +885,7 @@ class Bullet(pygame.sprite.Sprite):
             if is_greed and random.random() < 0.05:
                 self.game.endless_greed_explode(enemy.rect.centerx, enemy.rect.centery)
         self.kill()
+        self.game.damage_element = prev_element
 
     def apply_effects(self, enemy):
         if self.tower_type == TowerType.ICE:
@@ -948,6 +1021,7 @@ class BombBullet(pygame.sprite.Sprite):
         self.tower_level = tower_level
         self.bomb_subtype = bomb_subtype
         self.game = game
+        self.damage_element = getattr(game, "damage_element", None)
         self.enemies = game.enemies
 
         if tower_level >= 11:
@@ -988,8 +1062,12 @@ class BombBullet(pygame.sprite.Sprite):
 
     def explode(self):
         mult = self.game.get_enchant_damage_multiplier(TowerType.BOMB)
+        prev_element = self.game.damage_element
+        if self.damage_element is not None:
+            self.game.damage_element = self.damage_element
         explosion = TNTExplosion(self.rect.centerx, self.rect.centery,
                                  int(self.damage * mult), self.tower_level, self.bomb_subtype, self.game)
+        self.game.damage_element = prev_element
         self.game.tnt_explosions.append(explosion)
         self.game.try_spawn_crystal_near(self.rect.centerx, self.rect.centery)
 
@@ -1006,6 +1084,7 @@ class NuclearMissile(pygame.sprite.Sprite):
         self.tower_level = tower_level
         self.game = game
         self.bomb_branch = bomb_branch
+        self.damage_element = getattr(game, "damage_element", None)
         self.raw_img = assets.load_image(f"tower/999-{bomb_branch}.png", (TILE_SIZE // 2, TILE_SIZE // 2))
         self.image = self.raw_img
         self.rect = self.image.get_rect(center=(x, y))
@@ -1015,8 +1094,12 @@ class NuclearMissile(pygame.sprite.Sprite):
         dy = self.target_y - self.y
         dist = (dx * dx + dy * dy) ** 0.5
         if dist < self.speed:
+            prev_element = self.game.damage_element
+            if self.damage_element is not None:
+                self.game.damage_element = self.damage_element
             explosion = MushroomExplosion(MAP_CENTER_X, MAP_CENTER_Y,
                                           self.damage, self.tower_level, self.game, self.bomb_branch)
+            self.game.damage_element = prev_element
             self.game.mushroom_explosions.append(explosion)
             shockwave = NuclearShockwave(MAP_CENTER_X, MAP_CENTER_Y, self.game, self.bomb_branch)
             self.game.shockwave_effects.append(shockwave)
@@ -1041,6 +1124,7 @@ class WitherBullet(pygame.sprite.Sprite):
         self.damage = damage
         self.tower_level = tower_level
         self.game = game
+        self.damage_element = getattr(game, "damage_element", None)
         self.enemies = game.enemies
 
         if tower_level >= 11:
@@ -1078,6 +1162,9 @@ class WitherBullet(pygame.sprite.Sprite):
                         return
 
     def on_hit(self, enemy):
+        prev_element = self.game.damage_element
+        if self.damage_element is not None:
+            self.game.damage_element = self.damage_element
         if self.tower_level >= 11:
             wither_duration = 720
         else:
@@ -1094,3 +1181,4 @@ class WitherBullet(pygame.sprite.Sprite):
             enemy.apply_wither(wither_duration)
 
         self.kill()
+        self.game.damage_element = prev_element

@@ -238,14 +238,18 @@ class Enemy(pygame.sprite.Sprite):
                     dmg *= 2
                 if Enchantment.BLAZE_POWDER in self.game.enchantments:
                     dmg *= 1.3
-                reward = self.take_damage(int(dmg), color=ORANGE, scale=1.0)
+                if self.game.lantern_active():
+                    dmg *= LANTERN_BURN_MULT
+                reward = self.take_damage(int(dmg), color=ORANGE, scale=1.0, element="fire")
                 self.game.coins += reward
 
         if self.poison_stacks > 0:
             self.poison_timer += 1
             if self.poison_timer >= 75:
                 self.poison_timer = 0
-                reward = self.take_damage(self.game.poison_base_damage + self.poison_stacks, color=GREEN, scale=1.0)
+                poison_damage = int((self.game.poison_base_damage + self.poison_stacks)
+                                   * POISON_TICK_FLAT_MULT)
+                reward = self.take_damage(poison_damage, color=GREEN, scale=1.0, element="poison")
                 self.game.coins += reward
 
         if self.wither_time > 0:
@@ -257,7 +261,9 @@ class Enemy(pygame.sprite.Sprite):
                 if self.game.wither_rose_active():
                     wither_pct += 0.001
                 dmg = int(self.max_health * wither_pct)
-                reward = self.take_damage(dmg, color=(100, 0, 100), scale=1.0, ignore_armor=True)
+                # 凋零伤害统一归入毒系
+                reward = self.take_damage(dmg, color=(100, 0, 100), scale=1.0,
+                                          ignore_armor=True, element="poison")
                 self.game.coins += reward
         return False
 
@@ -381,7 +387,7 @@ class Enemy(pygame.sprite.Sprite):
                     break
         self.rect.center = (self.pos_x, self.pos_y)
 
-    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False):
+    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, element=None):
         if self.health <= 0:
             return 0
 
@@ -404,6 +410,9 @@ class Enemy(pygame.sprite.Sprite):
 
         if self.game:
             self.game.spawn_damage_text(final_dmg, self.rect.center, color=color, scale=scale)
+            if final_dmg > 0 and getattr(self.game, "damage_stats", None) is not None:
+                elem = element or getattr(self.game, "damage_element", None)
+                self.game.damage_stats.add(elem, final_dmg)
 
         if self.health <= 0:
             if self.enemy_type == EnemyType.HEROBRINE:
@@ -446,12 +455,14 @@ class Enemy(pygame.sprite.Sprite):
                 t = self.wind_mark_tower
                 exp_dmg = 5000 if Enchantment.WIND_BURST in self.game.enchantments else t.damage
                 exp = WindExplosion(self.rect.centerx, self.rect.centery,
-                                   exp_dmg, t.wind_knockback, self.game)
+                                   exp_dmg, t.wind_knockback, self.game, element="wind")
                 self.game.wind_explosions.append(exp)
                 self.wind_mark_tower = None
-            if self.poison_stacks > 0 and Enchantment.POISON_CONTRACT in self.game.enchantments:
-                if random.random() < 0.06 and self.game.poison_contract_active():
-                    exp = PoisonContractExplosion(self.rect.centerx, self.rect.centery, self.game)
+            if self.poison_stacks > 0 and self.game.poison_contract_active():
+                # 10% 概率触发，期望约等于「本波敌人数 / 10」层
+                if random.random() < POISON_CONTRACT_TRIGGER_CHANCE:
+                    exp = PoisonContractExplosion(self.rect.centerx, self.rect.centery,
+                                                  self.game, self.poison_stacks)
                     self.game.poison_splashes.append(exp)
             self.kill()
             return self.reward
@@ -480,13 +491,14 @@ class Enemy(pygame.sprite.Sprite):
 
 
 class DamageText(pygame.sprite.Sprite):
-    def __init__(self, text, x, y, color=RED, duration=45, speed_y=-2, scale=1.0):
+    def __init__(self, text, x, y, color=RED, duration=45, speed_y=-2, scale=1.0, speed_x=0.0):
         super().__init__()
         self.text = str(text)
         self.color = color
         self.duration = duration
         self.timer = 0
         self.speed_y = speed_y
+        self.speed_x = speed_x
         self.pos_x = float(x)
         self.pos_y = float(y)
 
@@ -501,6 +513,7 @@ class DamageText(pygame.sprite.Sprite):
     def update(self):
         self.timer += 1
         self.pos_y += self.speed_y
+        self.pos_x += self.speed_x
         self.rect.center = (int(self.pos_x), int(self.pos_y))
 
         if (
