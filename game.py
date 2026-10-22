@@ -17,6 +17,17 @@ import stats
 from final_boss import (FinalBoss, BossShockwave, BossRune, BossPortal,
                         BossStrike, DeleteBeam)
 
+# 伤害属性 -> 对应强化附魔所属的炮塔类型
+ELEMENT_TO_TOWER_TYPE = {
+    "physical": TowerType.PHYSICAL,
+    "fire": TowerType.FLAME,
+    "ice": TowerType.ICE,
+    "electric": TowerType.TRIDENT,
+    "wind": TowerType.WIND,
+    "poison": TowerType.POISON,
+    "explosion": TowerType.BOMB,
+}
+
 WEATHER_POOL = [
     Weather.ACID_RAIN, Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
     Weather.THUNDERSTORM, Weather.TAILWIND, Weather.HEADWIND,
@@ -468,18 +479,18 @@ class Game:
         for tower in self.towers:
             if tower.type == TowerType.SHIELD and tower.level >= 11:
                 if tower.shield_branch == 1:
-                    damage = int(self.coins * 0.01)
+                    damage = int(self.coins * 0.01 * self.get_element_damage_multiplier("physical"))
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=(255, 215, 0), element="physical")
                     self.coins += (tower.level - 10) * 1000
                 elif tower.shield_branch == 2:
-                    damage = (tower.level - 10) * 3000
+                    damage = int((tower.level - 10) * 3000 * self.get_element_damage_multiplier("ice"))
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=(100, 150, 255), element="ice")
                         enemy.freeze_resistance = 0
                         enemy.freeze_time = max(enemy.freeze_time, 3 * 60)
                 elif tower.shield_branch == 3:
-                    damage = (tower.level - 10) * 2500
+                    damage = int((tower.level - 10) * 2500 * self.get_element_damage_multiplier("electric"))
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=ORANGE, element="electric")
                         enemy.stun_resistance = 0
@@ -496,7 +507,7 @@ class Game:
             return
         for tower in self.towers:
             if tower.type == TowerType.SHIELD and tower.level >= 11 and tower.shield_branch == 3:
-                damage = (tower.level - 10) * 2500
+                damage = int((tower.level - 10) * 2500 * self.get_element_damage_multiplier("electric"))
                 for enemy in self.enemies:
                     enemy.take_damage(damage, color=ORANGE, element="electric")
                     enemy.stun_resistance = 0
@@ -507,6 +518,7 @@ class Game:
             if enemy.wind_mark_tower is not None:
                 t = enemy.wind_mark_tower
                 dmg = 5000 if Enchantment.WIND_BURST in self.enchantments else t.damage
+                dmg = int(dmg * self.get_element_damage_multiplier("wind"))
                 exp = WindExplosion(enemy.rect.centerx, enemy.rect.centery,
                                     dmg, t.wind_knockback, self, element="wind")
                 self.wind_explosions.append(exp)
@@ -548,14 +560,11 @@ class Game:
         return True
 
     def add_meteor_hit(self, x, y):
+        # 陨石吃火系伤害加成；打 BOSS 只打穿当前这一层，溢出伤害不带到下一层
+        damage = int(FINAL_BOSS_METEOR_DAMAGE * self.get_element_damage_multiplier("fire"))
         for enemy in list(self.enemies):
             if enemy.health > 0:
-                if getattr(enemy, "is_boss", False):
-                    # 余烬重生的陨石可以一次打穿 BOSS 的 5 层血
-                    reward = enemy.take_damage(1000000007, color=(255, 120, 40), scale=1.6,
-                                               layers=FINAL_BOSS_METEOR_LAYERS, element="fire")
-                else:
-                    reward = enemy.take_damage(1000000007, color=(255, 120, 40), scale=1.6, element="fire")
+                reward = enemy.take_damage(damage, color=(255, 120, 40), scale=1.6, element="fire")
                 self.coins += reward
 
     def global_production(self):
@@ -965,6 +974,28 @@ class Game:
         if tower_type == TowerType.FLAME and self.lantern_active():
             bonus += LANTERN_FIRE_BONUS
         return 1.0 + bonus / 100.0
+
+    def burn_tick_damage(self, base):
+        """燃烧每跳的实际伤害 = 基础 × 烈焰粉 × 高温燃烧 × 灯火通明 × (1 + 火系伤害加成)。"""
+        dmg = base
+        if Enchantment.BLAZE_POWDER in self.enchantments:
+            dmg *= 1.3
+        if Enchantment.BURN in self.enchantments:
+            dmg *= 2
+        if self.lantern_active():
+            dmg *= LANTERN_BURN_MULT
+        dmg *= self.get_element_damage_multiplier("fire")
+        return int(dmg)
+
+    def get_element_damage_multiplier(self, element):
+        """按伤害属性取附魔倍率（燃烧 / 中毒 / 龙息 / 闪电等结算统一用它）。
+
+        百分比伤害属于真实伤害，不调用这里。
+        """
+        tower_type = ELEMENT_TO_TOWER_TYPE.get(element)
+        if tower_type is None:
+            return 1.0
+        return self.get_enchant_damage_multiplier(tower_type)
 
     def enchantment_temp_bonus(self):
         return 0

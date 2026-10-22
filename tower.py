@@ -786,6 +786,8 @@ class Bullet(pygame.sprite.Sprite):
                 ldmg += gold_bonus
         if self.game.weather == Weather.MAGNETIC_STORM:
             ldmg *= 2
+        # 闪电吃电系伤害加成
+        ldmg *= self.game.get_element_damage_multiplier("electric")
         return int(ldmg)
 
     def update(self):
@@ -900,7 +902,9 @@ class Bullet(pygame.sprite.Sprite):
                 freeze_frames_for_exp = freeze_frames
                 if self.freeze_time <= 0:
                     freeze_frames_for_exp = 60
-                exp = IceExplosion(enemy.rect.centerx, enemy.rect.centery, self.damage, freeze_frames_for_exp, self.game)
+                exp = IceExplosion(enemy.rect.centerx, enemy.rect.centery,
+                                   int(self.damage * self.game.get_element_damage_multiplier("ice")),
+                                   freeze_frames_for_exp, self.game)
                 if self.source_tower is not None:
                     self.source_tower.ice_explosion_visual += 1
                     if self.source_tower.ice_explosion_visual % 2 == 1:
@@ -1169,7 +1173,8 @@ class WitherBullet(pygame.sprite.Sprite):
             wither_duration = 720
         else:
             wither_duration = 300
-        final_dmg = self.damage
+        # 凋零弹的本体伤害吃毒系伤害加成
+        final_dmg = int(self.damage * self.game.get_element_damage_multiplier("poison"))
 
         reward = enemy.take_damage(final_dmg, color=(100, 0, 100))
         self.game.coins += reward

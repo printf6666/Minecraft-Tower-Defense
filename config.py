@@ -154,7 +154,7 @@ ENCHANTMENT_DATA = {
     Enchantment.INFINITY_GAUNTLET: {"name": "无限手套", "desc": "鼠标位置将始终附着无限手套，鼠标点击敌人可对其造成各种伤害，伤害 = 攻击力 * 波数 ** 2 * (1 + 对应元素强化 + 均衡强化)", "cost": 1600},
     Enchantment.UNSTABLE_CRYSTAL: {"name": "不稳定水晶", "desc": "TNT类炮塔子弹爆炸有10%概率在周围道路格生成不稳定水晶，敌人碰到后受到其1%最大生命伤害并引发爆炸；核弹/凋零核弹爆炸时全场每个道路格各有10%概率生成", "cost": 1600},
     Enchantment.POWER_V: {"name": "力量V", "desc": "箭矢伤害+125%", "cost": 300},
-    Enchantment.LANTERN: {"name": "灯火通明", "desc": "场上存在3座满级星焰提灯时：燃烧伤害*5，火系伤害+80%，并永久驱散全场迷雾", "cost": 1000},
+    Enchantment.LANTERN: {"name": "灯火通明", "desc": "场上存在3座满级星焰提灯时：燃烧伤害*1.5，火系伤害+80%，并永久驱散全场迷雾", "cost": 1000},
 }
 
 GAUNTLET_ATTACKS = [
@@ -208,7 +208,7 @@ LANTERN_BASE_DAMAGE = 1600
 LANTERN_TEMP_MULT = 2
 LANTERN_BURN_FRAMES = 4 * 60     # 燃烧 4 秒
 LANTERN_ENCHANT_TOWERS = 3       # 「灯火通明」需要的满级提灯数量
-LANTERN_BURN_MULT = 5            # 灯火通明：全局燃烧伤害倍率（乘算）
+LANTERN_BURN_MULT = 1.5          # 灯火通明：全局燃烧伤害倍率（乘算）
 LANTERN_FIRE_BONUS = 80          # 灯火通明：火系伤害加成（加算，百分点）
 
 
@@ -314,18 +314,18 @@ FINAL_BOSS_LAYERS_PER_PHASE = FINAL_BOSS_LAYERS // 4   # 100 层 -> 每阶段 25
 
 # ==========================================================================================
 #  中毒（每 1.25 秒一跳）：纯平坦伤害，永久持续、无限叠层，不做百分比
-#  跳伤 = (基础毒伤 + 中毒层数) * POISON_TICK_FLAT_MULT
+#  跳伤 = (基础毒伤 + 中毒层数) * (1 + 毒系伤害加成)
 #  试毒合约：中毒敌人被击败有 POISON_CONTRACT_TRIGGER_CHANCE 概率触发
-#  爆炸 = (基础毒伤 + 触发者层数) * POISON_CONTRACT_BURST_MULT
+#  爆炸 = (基础毒伤 + 触发者层数) * POISON_CONTRACT_BURST_MULT * (1 + 毒系伤害加成)
 # ==========================================================================================
-POISON_TICK_FLAT_MULT = 6.0
+# 原本是 6.0（跳伤 ×6）；按新公式改为 1.0。要恢复原来的手感，把它改回 6.0 即可。
 POISON_CONTRACT_TRIGGER_CHANCE = 0.10
 POISON_CONTRACT_BURST_MULT = 18
 
 # BOSS 核心画面尺寸（比最初版本放大 50%：256 -> 384）
 FINAL_BOSS_CORE_SIZE = 384
-# 余烬重生的陨石（1,000,000,007）可以一次打穿 5 层
-FINAL_BOSS_METEOR_LAYERS = 5
+# 余烬重生的陨石（1,000,000,007）只打穿当前这一层，溢出伤害不再带到下一层
+FINAL_BOSS_METEOR_DAMAGE = 1000000007
 # 不稳定水晶的绘制尺寸
 UNSTABLE_CRYSTAL_SIZE = TILE_SIZE
 # 最终 BOSS 同屏伤害飘字上限（超出时移除最旧的，避免糊成一团）

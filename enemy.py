@@ -233,22 +233,17 @@ class Enemy(pygame.sprite.Sprite):
         if self.burn_time > 0:
             self.burn_time -= 1
             if self.burn_time % 30 == 0:
-                dmg = self.burn_damage
-                if Enchantment.BURN in self.game.enchantments:
-                    dmg *= 2
-                if Enchantment.BLAZE_POWDER in self.game.enchantments:
-                    dmg *= 1.3
-                if self.game.lantern_active():
-                    dmg *= LANTERN_BURN_MULT
-                reward = self.take_damage(int(dmg), color=ORANGE, scale=1.0, element="fire")
+                # 燃烧跳伤 = 温度 × 烈焰粉 × 高温燃烧 × 灯火通明 × (1 + 火系伤害加成)
+                dmg = self.game.burn_tick_damage(self.burn_damage)
+                reward = self.take_damage(dmg, color=ORANGE, scale=1.0, element="fire")
                 self.game.coins += reward
 
         if self.poison_stacks > 0:
             self.poison_timer += 1
             if self.poison_timer >= 75:
                 self.poison_timer = 0
-                poison_damage = int((self.game.poison_base_damage + self.poison_stacks)
-                                   * POISON_TICK_FLAT_MULT)
+                # 中毒跳伤 = (基础毒伤 + 中毒层数) × (1 + 毒系伤害加成)
+                poison_damage = int((self.game.poison_base_damage + self.poison_stacks) * self.game.get_element_damage_multiplier("poison"))
                 reward = self.take_damage(poison_damage, color=GREEN, scale=1.0, element="poison")
                 self.game.coins += reward
 
@@ -454,6 +449,7 @@ class Enemy(pygame.sprite.Sprite):
             if self.wind_mark_tower is not None:
                 t = self.wind_mark_tower
                 exp_dmg = 5000 if Enchantment.WIND_BURST in self.game.enchantments else t.damage
+                exp_dmg = int(exp_dmg * self.game.get_element_damage_multiplier("wind"))
                 exp = WindExplosion(self.rect.centerx, self.rect.centery,
                                    exp_dmg, t.wind_knockback, self.game, element="wind")
                 self.game.wind_explosions.append(exp)

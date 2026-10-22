@@ -82,27 +82,27 @@ def get_tower_info(game, tower):
         if tower.level >= 11:
             if tower.flame_branch == 3:
                 info = [f"星焰提灯 Lv{tower.level}", f"伤害:{tower.lantern_damage()}",
-                        f"燃烧:{game.temperature}/s,持续4s",
+                        f"燃烧:{game.burn_tick_damage(game.temperature)}/s,持续4s",
                         f"范围:{LANTERN_RANGE_TILES.get(tower.level, 3.5)}格",
                         "冲击波:范围内全体敌人",
                         f"攻击间隔:{LANTERN_FIRE_RATE / 60}s 迷雾照明",
                         "按 R 切换形态"]
             elif tower.flame_branch == 2:
                 fire_dmg = {11: 36, 12: 72, 13: 108, 14: 144, 15: 180}
-                info = [f"唤龙火晶石 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
+                info = [f"唤龙火晶石 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.burn_tick_damage(game.temperature)}/s,持续4s",
                         f"5%召唤火龙:{fire_dmg.get(tower.level,36)}倍温度+燃烧", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
             else:
                 dmg_mult = (tower.level - 10) * 10
-                info = [f"龙息 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
+                info = [f"龙息 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.burn_tick_damage(game.temperature)}/s,持续4s",
                         f"龙息:{dmg_mult}倍温度/s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
                 if Enchantment.EMBER_REBIRTH in game.enchantments and tower.level == 15:
                     cost = 50000 * (2 ** game.sacrifices)
                     info.append(f"Q 献祭:{cost}金币")
         elif tower.level >= 6:
-            info = [f"火球 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
+            info = [f"火球 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.burn_tick_damage(game.temperature)}/s,持续4s",
                     f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
         else:
-            info = [f"火焰弹 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.temperature}/s,持续4s",
+            info = [f"火焰弹 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.burn_tick_damage(game.temperature)}/s,持续4s",
                     f"攻击间隔:{tower.fire_rate / 60}s"]
     elif tower.type == TowerType.TRIDENT:
         if tower.level >= 11:

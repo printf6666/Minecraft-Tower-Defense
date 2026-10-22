@@ -51,7 +51,9 @@ class EndlessGreedExplosion:
             dy = enemy.rect.centery - y
             if (dx * dx + dy * dy) <= self.radius * self.radius:
                 pct_dmg = max(1, int(enemy.max_health * 0.01))
-                reward = enemy.take_damage(pct_dmg, color=WHITE, scale=1.0, element="explosion")
+                # 百分比伤害 = 真实伤害，不吃加成也不吃减伤
+                reward = enemy.take_damage(pct_dmg, color=WHITE, scale=1.0,
+                                           ignore_armor=True, element="explosion")
                 game.coins += reward
 
     def update(self):
@@ -161,7 +163,7 @@ class DragonBreathPool:
         self.radius = 128
         self.duration = 10
         dmg_mult = (tower_level - 10) * 10
-        dmg = int(temperature * dmg_mult)
+        dmg = int(temperature * dmg_mult * game.get_element_damage_multiplier("fire"))
         for enemy in game.enemies:
             if enemy.health <= 0:
                 continue
@@ -252,6 +254,7 @@ class PoisonSplash:
         self.y = y
         self.duration = 6
         self.radius = 128
+        damage = int(damage * game.get_element_damage_multiplier("poison"))
         for enemy in game.enemies:
             if enemy.health <= 0:
                 continue
@@ -281,8 +284,9 @@ class PoisonContractExplosion:
         self.radius = 128
         self.stacks = max(0, int(stacks))
         # 用触发时（+1 之前）的基础毒伤结算，避免奖励层数反过来放大本次爆炸
-        # 线性公式：(基础毒伤 + 层数) * 18，避免 base × stacks 的平方爆炸
-        damage = int((game.poison_base_damage + self.stacks) * POISON_CONTRACT_BURST_MULT)
+        # 线性公式：(基础毒伤 + 层数) * 18 * (1 + 毒系伤害加成)，避免 base × stacks 的平方爆炸
+        damage = int((game.poison_base_damage + self.stacks) * POISON_CONTRACT_BURST_MULT
+                     * game.get_element_damage_multiplier("poison"))
         game.poison_base_damage += 1
         for enemy in game.enemies:
             if enemy.health <= 0:
@@ -393,12 +397,15 @@ class MushroomExplosion:
             fixed_damage = [2000, 4000, 6000, 8000, 10000][tower_level - 11]
             if game.wither_rose_active():
                 percent_damage += 0.008
+            fixed_damage = int(fixed_damage * game.get_enchant_damage_multiplier(TowerType.BOMB))
             for enemy in game.enemies:
                 if enemy.health <= 0:
                     continue
                 percent_dmg = int(enemy.max_health * percent_damage)
                 element = getattr(game, "damage_element", None)
-                reward = enemy.take_damage(percent_dmg, color=RED, scale=1.2, element=element)
+                # 百分比部分 = 真实伤害，固定部分吃爆炸加成
+                reward = enemy.take_damage(percent_dmg, color=RED, scale=1.2,
+                                           ignore_armor=True, element=element)
                 reward += enemy.take_damage(fixed_damage, color=RED, scale=1.2, element=element)
                 game.coins += reward
                 enemy.apply_stun(120)
@@ -706,7 +713,9 @@ class UnstableCrystal:
                 continue
             if enemy.rect.colliderect(self.rect):
                 pct = max(1, int(enemy.max_health * 0.01))
-                reward = enemy.take_damage(pct, color=WHITE, scale=1.0, element="explosion")
+                # 百分比伤害 = 真实伤害，不吃加成也不吃减伤
+                reward = enemy.take_damage(pct, color=WHITE, scale=1.0,
+                                           ignore_armor=True, element="explosion")
                 self.game.coins += reward
                 touched = True
         if touched:

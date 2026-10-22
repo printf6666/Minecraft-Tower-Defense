@@ -827,7 +827,7 @@ class FinalBoss(Enemy):
                 drift_x)
 
     def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, layers=1, element=None):
-        """layers>1 表示一次打穿多层（余烬重生的陨石会传 5）。"""
+        """layers>1 会无视当前层剩余血量直接击穿多层（现版本已无调用方，陨石改为只打穿 1 层）。"""
         if self.dying or self.health <= 0:
             return 0
         if self.invuln_timer > 0:
