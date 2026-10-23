@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# 工作区本地数据
+.workbuddy-ai/
+
+# 存档（运行时会写到用户目录，此处仅防御性忽略）
+save.json
+save.json.tmp
+save.json.bak
+save.json.corrupt.bak
+crash.log

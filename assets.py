@@ -36,6 +36,9 @@ tnt_explosion_frames = []
 mushroom_cloud_frames = []
 endless_greed_frames = []
 ice_explosion_frames = []
+# 共振风暴序列：raw 是原尺寸（282x282），雷神之锤命中爆裂直接用它、不缩放；
+# frames 是放大 4 倍的版本，给全屏规模的共振风暴用。
+resonance_storm_raw_frames = []
 resonance_storm_frames = []
 
 icon0 = None
@@ -146,14 +149,18 @@ def init_assets():
         except:
             pass
 
-    global resonance_storm_frames
+    global resonance_storm_frames, resonance_storm_raw_frames
     resonance_storm_frames.clear()
+    resonance_storm_raw_frames.clear()
     for i in range(1, 17):
         try:
             img = load_image(f"tower/resonance_storm{i:02d}.png")
-            resonance_storm_frames.append(pygame.transform.scale(img, (img.get_width() * 4, img.get_height() * 4)))
-        except:
-            pass
+        except Exception:
+            # 13~16 已从素材里删掉，加载到 12 帧就自然结束
+            break
+        resonance_storm_raw_frames.append(img)
+        resonance_storm_frames.append(
+            pygame.transform.scale(img, (img.get_width() * 4, img.get_height() * 4)))
 
 
     global mushroom_cloud_frames, endless_greed_frames

@@ -27,7 +27,8 @@ ELEMENTS = [
     ("wind", "风系伤害", Enchantment.WIND, (150, 255, 180)),
     ("poison", "毒系伤害", Enchantment.POISON, (130, 225, 90)),
     ("explosion", "爆炸伤害", Enchantment.BOMB, (255, 75, 75)),
-    ("sword", "剑系伤害", None, (255, 215, 90)),
+    # 剑系颜色直接引用配置，避免「飘字黄了、统计条还是金的」这种两处漂移
+    ("sword", "剑系伤害", None, SWORD_DAMAGE_COLOR),
 ]
 
 ELEMENT_NAME = {key: name for key, name, _, _ in ELEMENTS}

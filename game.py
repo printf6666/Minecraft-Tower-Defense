@@ -679,9 +679,13 @@ class Game:
         self.sword_combo += hits
         self.sword_combo_timer = SWORD_COMBO_TIMEOUT
 
-    def sword_text_scale(self, base=1.2):
-        """飘字随连击轻微放大，封顶 1.8 避免糊屏。"""
-        return min(1.8, base + self.sword_combo * 0.002)
+    def sword_text_scale(self):
+        """剑系飘字缩放：固定 1.3，不随连击变化。
+
+        之前会随连击涨到 1.8，铺几座剑塔数字就糊成一片；
+        现在统一成一个值，视觉稳定、不同伤害数字大小一致。
+        """
+        return SWORD_TEXT_SCALE
 
     def tick_sword_combo(self):
         """每帧递减维持计时；归零时清空连击。"""
@@ -1041,6 +1045,11 @@ class Game:
     def add_lightning(self, x, y, is_golden):
         effect = LightningEffect(x, y, is_golden)
         self.lightning_effects.append(effect)
+
+    def add_resonance_burst(self, x, y):
+        """雷神之锤子弹命中爆裂：用 resonance_storm 原尺寸帧，不缩放。"""
+        burst = ResonanceStorm(x, y, frames=assets.resonance_storm_raw_frames)
+        self.resonance_storms.append(burst)
 
     def add_lantern_shockwave(self, x, y, radius):
         self.lantern_shockwaves.append(LanternShockwave(x, y, radius))

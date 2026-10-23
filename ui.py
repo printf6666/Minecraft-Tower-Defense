@@ -121,9 +121,11 @@ def get_tower_info(game, tower):
     elif tower.type == TowerType.WIND:
         if tower.level >= 11:
             if tower.wind_branch == 2:
-                dmg_map = {11: 2000, 12: 4000, 13: 6000, 14: 8000, 15: 10000}
                 info = [f"雷神之锤 Lv{tower.level}", f"伤害:{tower.damage}",
-                        f"子弹命中释放竖向闪电:{dmg_map.get(tower.level,2500)}", "按 R 切换分支", f"攻击间隔:0.5s"]
+                        f"命中落雷:{WIND_STORM_DAMAGE.get(tower.level, 2500)}",
+                        f"AOE半径:{WIND_STORM_RADIUS}px",
+                        f"落雷特效每{WIND_STORM_VISUAL_EVERY}次命中播1次",
+                        "按 R 切换分支", f"攻击间隔:0.5s"]
             else:
                 per_px = {11: 8, 12: 10, 13: 12, 14: 14, 15: 16}
                 info = [f"山崩地裂之锤 Lv{tower.level}", f"伤害:{tower.damage}+{per_px.get(tower.level,8)}/px",
@@ -233,7 +235,7 @@ def get_tower_info(game, tower):
                 info = [f"星怒 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
                         "整圆范围伤害", "附带天降星星", "按 R 切换分支"]
             elif tower.sword_branch == 2:
-                info = [f"炽铁剑 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
+                info = [f"火山剑 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
                         "整圆范围伤害", "命中燃烧15秒", "按 R 切换分支"]
             else:
                 info = [f"草剑 Lv{tower.level}", f"挥砍伤害:{tower.damage}",

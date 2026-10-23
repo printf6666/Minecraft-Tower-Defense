@@ -71,24 +71,52 @@ class EndlessGreedExplosion:
 
 
 class ResonanceStorm:
-    def __init__(self, x, y):
+    """共振风暴 / 雷神之锤命中爆裂共用的闪电序列（resonance_storm01~12）。
+
+    frames 可配：共振风暴触发用放大 4 倍的全屏版本；
+    雷神之锤子弹命中爆裂用原尺寸帧（282x282），不缩放。
+
+    对齐方式：这套素材是「雷从天上劈下来」，闪电落点不在图片正中，
+    而在 y≈0.88H 处（第 3~7 帧的爆裂底部）。所以默认按「底边对齐命中点」
+    绘制，让雷劈在敌人身上而不是敌人上方一屏处；锚点用 anchor_y 调。
+    """
+
+    # 落点在图片高度的比例（0=顶边，1=底边）。
+    # 原尺寸帧（282px）实测：冲击光环最亮行在 y≈0.77H，半宽 127px。
+    # 放大 4 倍的帧给全屏共振风暴用，本来就铺满地图、不需要对齐落点，
+    # 用居中(0.5)避免整体上移出屏。
+    ANCHOR_Y_RAW = 0.77
+    ANCHOR_Y_BIG = 0.5
+
+    def __init__(self, x, y, frames=None, frame_duration=3, anchor_y=None):
         self.x = x
         self.y = y
+        self.frames = assets.resonance_storm_frames if frames is None else frames
+        self.frame_duration = max(1, frame_duration)
+        if anchor_y is not None:
+            self.anchor_y = anchor_y
+        elif self.frames is assets.resonance_storm_raw_frames:
+            self.anchor_y = self.ANCHOR_Y_RAW
+        else:
+            self.anchor_y = self.ANCHOR_Y_BIG
         self.frame_index = 0
         self.frame_accum = 0
 
     def update(self):
         self.frame_accum += 1
-        if self.frame_accum >= 3:
+        if self.frame_accum >= self.frame_duration:
             self.frame_accum = 0
             self.frame_index += 1
-        return self.frame_index < len(assets.resonance_storm_frames)
+        return self.frame_index < len(self.frames)
 
     def draw(self, surface):
-        if self.frame_index >= len(assets.resonance_storm_frames):
+        if self.frame_index >= len(self.frames):
             return
-        img = assets.resonance_storm_frames[self.frame_index]
-        surface.blit(img, img.get_rect(center=(self.x, self.y)))
+        img = self.frames[self.frame_index]
+        # 让图片的 anchor_y 高度处对准 (x, y)
+        left = int(self.x) - img.get_width() // 2
+        top = int(self.y) - int(img.get_height() * self.anchor_y)
+        surface.blit(img, (left, top))
 
 
 class HellRay:
@@ -847,7 +875,7 @@ class FallingStar:
                 if math.hypot(e.rect.centerx - self.tx,
                               e.rect.centery - self.ty) <= TILE_SIZE:
                     reward = e.take_damage(dmg, color=SWORD_DAMAGE_COLOR,
-                                           scale=self.game.sword_text_scale(1.3),
+                                           scale=self.game.sword_text_scale(),
                                            element="sword")
                     self.game.coins += reward
                     hits += 1
@@ -924,7 +952,7 @@ class StarWrath:
                     try:
                         reward = e.take_damage(
                             dmg, color=SWORD_DAMAGE_COLOR,
-                            scale=self.game.sword_text_scale(1.2), element="sword")
+                            scale=self.game.sword_text_scale(), element="sword")
                         self.game.coins += reward
                     finally:
                         self.game.damage_element = prev

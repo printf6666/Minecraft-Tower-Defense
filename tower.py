@@ -122,6 +122,7 @@ class Tower(pygame.sprite.Sprite):
         self.sword_spinning = False     # 是否处于「有敌人可打」的持续旋转状态
         self.sword_spin = None          # SwordSpin 实例（视觉，挂在 game.sword_sweeps）
         self.ice_explosion_visual = 0
+        self.wind_storm_visual = 0      # 雷神之锤命中特效隔次播放计数器
 
         self.attack_speed_buff = 0
         self.production_buff = 0.0
@@ -612,7 +613,7 @@ class Tower(pygame.sprite.Sprite):
 
         self.game.add_lantern_shockwave(cx, cy, radius)
         for enemy in targets:
-            reward = enemy.take_damage(damage, color=(255, 205, 90), scale=1.3)
+            reward = enemy.take_damage(damage, color=LANTERN_DAMAGE_COLOR, scale=1.3)
             self.game.coins += reward
             enemy.apply_burn(self.game.temperature, LANTERN_BURN_FRAMES)
         return []
@@ -706,7 +707,7 @@ class Tower(pygame.sprite.Sprite):
                 if e.health <= 0 or not e.alive():
                     continue
                 reward = e.take_damage(dmg, color=SWORD_DAMAGE_COLOR,
-                                       scale=self.game.sword_text_scale(1.2),
+                                       scale=self.game.sword_text_scale(),
                                        element="sword")
                 self.game.coins += reward
                 hits += 1
@@ -1130,16 +1131,27 @@ class Bullet(pygame.sprite.Sprite):
                 if self.tower_level >= 6 and enemy.enemy_type not in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED):
                     enemy.wind_mark_tower = self.source_tower
             if self.source_tower and self.source_tower.wind_branch == 2 and self.tower_level >= 11:
-                dmg_map = {11: 2000, 12: 4000, 13: 6000, 14: 8000, 15: 10000}
-                lightning_dmg = dmg_map.get(self.tower_level, 2500)
+                lightning_dmg = WIND_STORM_DAMAGE.get(self.tower_level, 2500)
                 lightning_dmg = int(lightning_dmg * self.game.get_enchant_damage_multiplier(TowerType.WIND))
-                col = enemy.rect.centerx // TILE_SIZE
+                # 落雷点是子弹命中的那名敌人，AOE 以它为圆心
+                bx, by = enemy.rect.centerx, enemy.rect.centery
+                radius_sq = WIND_STORM_RADIUS * WIND_STORM_RADIUS
                 for e in self.game.enemies:
-                    e_col = e.rect.centerx // TILE_SIZE
-                    if e_col == col and e.health > 0:
-                        reward = e.take_damage(lightning_dmg, color=ELECTRIC_PURPLE)
-                        self.game.coins += reward
-                self.game.add_lightning(enemy.rect.centerx, 800, False)
+                    if e.health <= 0:
+                        continue
+                    if (e.rect.centerx - bx) ** 2 + (e.rect.centery - by) ** 2 > radius_sq:
+                        continue
+                    # 雷神之锤的闪电飘字用薄荷色，和风系伤害保持一致
+                    # （不要用 ELECTRIC_PURPLE，那是三叉戟电系的颜色）
+                    reward = e.take_damage(lightning_dmg, color=MINT, element="wind")
+                    self.game.coins += reward
+                # 雷神之锤的命中特效固定用 resonance_storm 原尺寸帧，不缩放。
+                # 隔次播放（和冰霜炸弹同一个套路）：这套 12 帧 × 282px 的爆裂
+                # 每次都放会明显掉帧，一半频率肉眼几乎看不出差别。
+                self.source_tower.wind_storm_visual += 1
+                # 每 N 次命中播一次：取余落在 1..N 中的首个周期时触发
+                if (self.source_tower.wind_storm_visual - 1) % WIND_STORM_VISUAL_EVERY == 0:
+                    self.game.add_resonance_burst(bx, by)
         if self.tower_type == TowerType.POISON and self.poison_stacks > 0:
             enemy.apply_poison(self.poison_stacks)
             if self.tower_level >= 6 and (not self.source_tower or self.source_tower.poison_branch != 3):
@@ -1388,7 +1400,7 @@ class TerraBeam(pygame.sprite.Sprite):
                             dmg = max(1, int(self.damage * self.combo_mult))
                             reward = enemy.take_damage(
                                 dmg, color=SWORD_DAMAGE_COLOR,
-                                scale=self.game.sword_text_scale(1.3),
+                                scale=self.game.sword_text_scale(),
                                 element="sword")
                             self.game.coins += reward
                             hits += 1
