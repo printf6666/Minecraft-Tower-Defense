@@ -455,9 +455,14 @@ class UIManager:
                                   badge.get_width() + 8, badge.get_height() + 8))
                 self.game.screen.blit(badge, (rect.right - badge.get_width() - 4, rect.bottom - badge.get_height() - 4))
 
-        pygame.draw.rect(self.game.screen, RESTART_BTN_COLOR,
+        # 「重新开始」需要连点两次才生效（见 game.handle_events）。
+        # 处于确认窗口时按钮变红并改文案，让玩家知道这一下会真的重置。
+        confirm_pending = getattr(self.game, "confirm_reset", 0) > 0
+        restart_color = (170, 40, 40) if confirm_pending else RESTART_BTN_COLOR
+        pygame.draw.rect(self.game.screen, restart_color,
                          (RESTART_BTN_X, RESTART_BTN_Y, RESTART_BTN_WIDTH, RESTART_BTN_HEIGHT))
-        restart_text = assets.font_small.render("重新开始", True, WHITE)
+        restart_label = "再点一次确认" if confirm_pending else "重新开始"
+        restart_text = assets.font_small.render(restart_label, True, WHITE)
         self.game.screen.blit(restart_text, (RESTART_BTN_X + 40, RESTART_BTN_Y + 10))
 
         pygame.draw.rect(self.game.screen, EXIT_BTN_COLOR,
@@ -751,8 +756,12 @@ class UIManager:
         self.game.screen.fill(BLACK)
         text1 = assets.font_large.render("游戏结束!", True, RED)
         self.game.screen.blit(text1, (SCREEN_WIDTH // 2 - text1.get_width() // 2, 400))
-        pygame.draw.rect(self.game.screen, GREEN, (900, 850, 760, 80))
-        restart_text = assets.font_medium.render("重新开始", True, WHITE)
+        # 与游戏内「重新开始」一致，需要连点两次（见 game.handle_events）
+        confirm_pending = getattr(self.game, "confirm_reset", 0) > 0
+        pygame.draw.rect(self.game.screen, (170, 40, 40) if confirm_pending else GREEN,
+                         (900, 850, 760, 80))
+        restart_label = "再点一次确认（会覆盖存档）" if confirm_pending else "重新开始"
+        restart_text = assets.font_medium.render(restart_label, True, WHITE)
         self.game.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
         hint = assets.font_tower_level.render("按 TAB 查看伤害统计", True, (190, 190, 190))
         self.game.screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 970))
@@ -978,8 +987,11 @@ class UIManager:
         self.game.screen.fill(BLACK)
         text1 = assets.font_large.render("胜利!", True, GREEN)
         self.game.screen.blit(text1, (SCREEN_WIDTH // 2 - text1.get_width() // 2, 400))
-        pygame.draw.rect(self.game.screen, GREEN, (900, 850, 760, 80))
-        restart_text = assets.font_medium.render("重新开始", True, WHITE)
+        confirm_pending = getattr(self.game, "confirm_reset", 0) > 0
+        pygame.draw.rect(self.game.screen, (140, 110, 30) if confirm_pending else GREEN,
+                         (900, 850, 760, 80))
+        restart_label = "再点一次确认（会覆盖存档）" if confirm_pending else "重新开始"
+        restart_text = assets.font_medium.render(restart_label, True, WHITE)
         self.game.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
         hint = assets.font_tower_level.render("按 TAB 查看伤害统计", True, (190, 190, 190))
         self.game.screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 970))

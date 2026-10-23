@@ -55,6 +55,12 @@ EXIT_BTN_WIDTH = SCREEN_WIDTH - EXIT_BTN_X
 EXIT_BTN_HEIGHT = 60
 EXIT_BTN_COLOR = (120, 30, 30)
 
+# 「重新开始」二次确认的有效帧数（60fps 下约 3 秒）。
+# 主菜单右下角曾有一块 512x60 的隐形热区，点一下就无声删档；
+# 即便修掉热区，游戏内误点「重新开始」仍然是不可撤销的丢档操作，
+# 所以要求连点两次、且两次间隔不能超过这个窗口。
+CONFIRM_RESET_FRAMES = 180
+
 # 右上角提示面板（最终BOSS「指令覆写」提示用）
 TOP_PANEL_X = 2050
 TOP_PANEL_Y = 10

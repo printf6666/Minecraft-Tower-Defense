@@ -4,8 +4,10 @@ import math
 import json
 import sys
 import os
+import time
 from types import SimpleNamespace
 import assets
+import audio
 from config import *
 from enemy import Enemy, DamageText
 from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet, MAP_CENTER_X, MAP_CENTER_Y
@@ -100,6 +102,7 @@ class Game:
         self.damage_stats = stats.DamageStats()
         self.damage_element = None
         self.stats_open = False
+        self.confirm_reset = 0      # 「重新开始」二次确认倒计时（帧）
         self.coins = 2500
         self.emeralds = 100
         self.wave_manager = WaveManager()
@@ -248,6 +251,52 @@ class Game:
         pygame.quit()
         sys.exit()
 
+    def handle_game_click(self, mouse_x, mouse_y, grid_x, grid_y):
+        """游戏内左键单击：选塔图标 / 无限手套打怪 / 选塔 / 建塔。
+
+        从 handle_events 抽出来的，因为那里还要先处理「重新开始」「退出」
+        两个按钮判定，混在一起会让 elif 分支层级变深、容易再把按钮判定
+        写到 MENU 分支外面（那正是隐形热区删档 bug 的成因）。
+        """
+        icon_clicked = None
+        for rect, ttype, key_label in self.ui_manager.get_tower_icon_rects():
+            if rect.collidepoint(mouse_x, mouse_y):
+                icon_clicked = ttype
+                break
+        if icon_clicked is not None:
+            self.selected_tower = None
+            self.selected_tower_type = icon_clicked
+            self.show_range = False
+        elif Enchantment.INFINITY_GAUNTLET in self.enchantments:
+            gauntlet_hit = False
+            for e in self.enemies:
+                if e.health > 0 and e.rect.collidepoint(mouse_x, mouse_y):
+                    self.gauntlet_attack(e)
+                    gauntlet_hit = True
+                    break
+            if not gauntlet_hit:
+                clicked_tower = self.get_tower_at(grid_x, grid_y)
+                if clicked_tower:
+                    self.selected_tower = clicked_tower
+                    self.selected_tower_type = None
+                    self.show_range = True
+                else:
+                    self.selected_tower = None
+                    self.show_range = False
+                    if self.selected_tower_type and self.can_build_tower(grid_x, grid_y):
+                        self.build_tower(grid_x, grid_y, self.selected_tower_type)
+        else:
+            clicked_tower = self.get_tower_at(grid_x, grid_y)
+            if clicked_tower:
+                self.selected_tower = clicked_tower
+                self.selected_tower_type = None
+                self.show_range = True
+            else:
+                self.selected_tower = None
+                self.show_range = False
+                if self.selected_tower_type and self.can_build_tower(grid_x, grid_y):
+                    self.build_tower(grid_x, grid_y, self.selected_tower_type)
+
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -276,15 +325,6 @@ class Game:
                         self.stats_open = True
                         return
 
-                    if (RESTART_BTN_X <= mouse_x <= RESTART_BTN_X + RESTART_BTN_WIDTH and
-                            RESTART_BTN_Y <= mouse_y <= RESTART_BTN_Y + RESTART_BTN_HEIGHT):
-                        self.reset_game()
-                        return
-
-                    if (EXIT_BTN_X <= mouse_x <= EXIT_BTN_X + EXIT_BTN_WIDTH and
-                            EXIT_BTN_Y <= mouse_y <= EXIT_BTN_Y + EXIT_BTN_HEIGHT):
-                        self.quit_game()
-
                     grid_x = mouse_x // TILE_SIZE
                     grid_y = mouse_y // TILE_SIZE
 
@@ -297,45 +337,28 @@ class Game:
                         elif 900 <= mouse_x <= 1660 and 1020 <= mouse_y <= 1100:
                             self.quit_game()
 
-                    elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION):
-                        icon_clicked = None
-                        for rect, ttype, key_label in self.ui_manager.get_tower_icon_rects():
-                            if rect.collidepoint(mouse_x, mouse_y):
-                                icon_clicked = ttype
-                                break
-                        if icon_clicked is not None:
-                            self.selected_tower = None
-                            self.selected_tower_type = icon_clicked
-                            self.show_range = False
-                        elif Enchantment.INFINITY_GAUNTLET in self.enchantments:
-                            gauntlet_hit = False
-                            for e in self.enemies:
-                                if e.health > 0 and e.rect.collidepoint(mouse_x, mouse_y):
-                                    self.gauntlet_attack(e)
-                                    gauntlet_hit = True
-                                    break
-                            if not gauntlet_hit:
-                                clicked_tower = self.get_tower_at(grid_x, grid_y)
-                                if clicked_tower:
-                                    self.selected_tower = clicked_tower
-                                    self.selected_tower_type = None
-                                    self.show_range = True
-                                else:
-                                    self.selected_tower = None
-                                    self.show_range = False
-                                    if self.selected_tower_type and self.can_build_tower(grid_x, grid_y):
-                                        self.build_tower(grid_x, grid_y, self.selected_tower_type)
-                        else:
-                            clicked_tower = self.get_tower_at(grid_x, grid_y)
-                            if clicked_tower:
-                                self.selected_tower = clicked_tower
-                                self.selected_tower_type = None
-                                self.show_range = True
+                    elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION,
+                                        GameState.PAUSED):
+                        # 重新开始 / 退出按钮只在游戏内绘制（ui.py 的 draw_ui）。
+                        # 判定必须放在 MENU 分支之外：曾把这两段写在这里之前 →
+                        # 主菜单右下角 (2048~2560, 1044~1104) 成了看不见的热区，
+                        # 玩家点一下就 reset_game() 无声删档。
+                        if (RESTART_BTN_X <= mouse_x <= RESTART_BTN_X + RESTART_BTN_WIDTH and
+                                RESTART_BTN_Y <= mouse_y <= RESTART_BTN_Y + RESTART_BTN_HEIGHT):
+                            # 二次确认：第一下只亮提示，窗口期内再点才真重置
+                            if self.confirm_reset > 0:
+                                self.confirm_reset = 0
+                                self.reset_game()
                             else:
-                                self.selected_tower = None
-                                self.show_range = False
-                                if self.selected_tower_type and self.can_build_tower(grid_x, grid_y):
-                                    self.build_tower(grid_x, grid_y, self.selected_tower_type)
+                                self.confirm_reset = CONFIRM_RESET_FRAMES
+                            return
+
+                        if (EXIT_BTN_X <= mouse_x <= EXIT_BTN_X + EXIT_BTN_WIDTH and
+                                EXIT_BTN_Y <= mouse_y <= EXIT_BTN_Y + EXIT_BTN_HEIGHT):
+                            self.quit_game()
+                            return
+
+                        self.handle_game_click(mouse_x, mouse_y, grid_x, grid_y)
 
                     elif self.state == GameState.SHOP:
                         bought = False
@@ -351,7 +374,14 @@ class Game:
 
                     elif self.state in (GameState.GAME_OVER, GameState.VICTORY):
                         if 900 <= mouse_x <= 1660 and 850 <= mouse_y <= 930:
-                            self.reset_game()
+                            # 结算页的「重新开始」同样要二次确认：
+                            # 这一下会覆盖存档，手滑的代价是整局白打。
+                            # 提示靠 draw_game_over 的按钮文案切换（见 ui.py）。
+                            if self.confirm_reset > 0:
+                                self.confirm_reset = 0
+                                self.reset_game()
+                            else:
+                                self.confirm_reset = CONFIRM_RESET_FRAMES
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_c:
@@ -374,7 +404,7 @@ class Game:
                             old_effect = self.get_bomb_temp_effect(tower) if tower.type == TowerType.BOMB else 0
                             tower.upgrade()
                             if assets.level_up_sound and tower.level in (6, 11):
-                                assets.level_up_sound.play()
+                                audio.play_sound(assets.level_up_sound)
                             if tower.type in (TowerType.FLAME, TowerType.TRIDENT):
                                 self.temperature += 1
                             elif tower.type == TowerType.ICE:
@@ -393,7 +423,7 @@ class Game:
                             old_effect = self.get_bomb_temp_effect(tower) if tower.type == TowerType.BOMB else 0
                             tower.upgrade()
                             if assets.level_up_sound and tower.level in (6, 11):
-                                assets.level_up_sound.play()
+                                audio.play_sound(assets.level_up_sound)
                             if tower.type in (TowerType.FLAME, TowerType.TRIDENT):
                                 self.temperature += 1
                             elif tower.type == TowerType.ICE:
@@ -744,8 +774,17 @@ class Game:
                 "gold_ore_positions": [list(p) for p in self.gold_ore_positions],
                 "towers": towers_data,
             }
-            with open(get_save_path(), "w") as f:
+            # 原子写：先写 .tmp 并 fsync，再 os.replace 覆盖。
+            # 原实现直接 open(path,"w") 后 json.dump —— 写到一半断电/被关窗口
+            # 就会留下半截 JSON，下次启动必然读档失败（配合旧的窄 try 就是闪退）。
+            # os.replace 在同一分区上是原子的，进程被杀也不会出现半截存档。
+            save_path = get_save_path()
+            tmp_path = save_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, save_path)
         except Exception as e:
             print(f"Save failed: {e}")
 
@@ -760,6 +799,7 @@ class Game:
         self.damage_stats.reset()
         self.damage_element = None
         self.stats_open = False
+        self.confirm_reset = 0      # 「重新开始」二次确认倒计时（帧）
         self.coins = 2500
         self.emeralds = 100
         self.wave_manager = WaveManager()
@@ -891,8 +931,7 @@ class Game:
     def play_boss_bgm(self):
         for bgm in assets.bgm_files:
             if "Celestial Fury" in bgm or "The End" in bgm:
-                pygame.mixer.music.load(assets.resource_path(bgm))
-                pygame.mixer.music.play(-1)
+                audio.play_music(assets.resource_path(bgm), -1)
                 return
 
     def force_boss_weather(self):
@@ -929,7 +968,7 @@ class Game:
         self.set_boss_banner(f"{FINAL_BOSS_NAME} 降临 —— {FINAL_BOSS_TITLE}", 240)
         self.boss_flash = 120
         if assets.explode_sound:
-            assets.explode_sound.play()
+            audio.play_sound(assets.explode_sound)
 
     def load_game(self):
         new_path = get_save_path()
@@ -944,10 +983,44 @@ class Game:
             except Exception:
                 pass
         try:
-            with open(new_path) as f:
+            with open(new_path, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
             return False
+
+        # 反序列化全程保护。
+        #
+        # 原实现只保护了上面那个 json.load，:998 的 Enchantment(v)、
+        # :1013 的 TowerType(td["type"])、:1029 的 BombSubType(sv) 全是
+        # 裸枚举转换 —— 存档里出现一个已删除/改名的枚举值就直接崩到桌面。
+        # 玩家看到的现象是「游戏更新后打不开了」，而且越玩得久越容易触发。
+        #
+        # 失败时必须再做一次 _reset_state()：此时对象已经停在半初始化状态
+        # （path 改了、towers 加了一半），不回滚的话即使返回 False，
+        # 后续 draw/update 依然会踩到脏数据。
+        try:
+            self._apply_save_data(data, new_path)
+        except Exception as e:
+            self._reset_state()
+            # 不删档：改名保留，用户还能手工修复或反馈给我们。
+            # 加序号避免连续两次损坏时把第一次的备份覆盖掉。
+            try:
+                backup = new_path + ".corrupt.bak"
+                if os.path.exists(backup):
+                    backup = new_path + f".corrupt.{int(time.time())}.bak"
+                os.replace(new_path, backup)
+            except Exception:
+                pass
+            print(f"Load failed, save backed up: {e}")
+            return False
+        return True
+
+    def _apply_save_data(self, data, save_path):
+        """把已解析的存档字典套用到当前实例上。
+
+        单独成方法是为了让 load_game 能用一个大 try 包住全流程；
+        这里允许抛异常，由调用方负责回滚与备份。
+        """
         self._reset_state()
         seed_idx = data.get("seed", 0)
         if 0 <= seed_idx < len(SEED_PATHS):
@@ -1030,13 +1103,11 @@ class Game:
         self.weather_banner_timer = 180
         if self.weather == Weather.ENDLESS_NIGHT:
             self._build_background(night_mode=True, gold_ore_positions=saved_ore)
-            pygame.mixer.music.stop()
+            audio.stop_music()
             for bgm in assets.bgm_files:
                 if "Celestial Fury" in bgm or "The End" in bgm:
-                    pygame.mixer.music.load(assets.resource_path(bgm))
-                    pygame.mixer.music.play(-1)
+                    audio.play_music(assets.resource_path(bgm), -1)
                     break
-        return True
 
     def add_dragon_breath(self, x, y, temperature, tower_level, stun_time):
         pool = DragonBreathPool(x, y, temperature, tower_level, stun_time, self)
@@ -1390,10 +1461,16 @@ class Game:
         if ench in self.shop_offers:
             self.shop_offers.remove(ench)
         if assets.trader_accept_sound:
-            assets.trader_accept_sound.play()
+            audio.play_sound(assets.trader_accept_sound)
         self.save_game()
 
     def update(self):
+        # 「重新开始」二次确认窗口：放在所有提前返回之前，
+        # 保证暂停 / 统计弹窗 / 图鉴打开时窗口也会正常过期，
+        # 不会出现「很久以前点过一次，回来一点就删档」的情况。
+        if self.confirm_reset > 0:
+            self.confirm_reset -= 1
+
         if self.stats_open or self.codex.open:
             return
         if self.state == GameState.PAUSED:
@@ -1540,17 +1617,16 @@ class Game:
                         self.tnt_explosions.append(explosion)
 
             if self.wave_manager.current_wave in (50, FINAL_BOSS_WAVE):
-                if not pygame.mixer.music.get_busy():
+                if not audio.music_busy():
                     boss_bgm = None
                     for bgm in assets.bgm_files:
                         if "Celestial Fury" in bgm or "The End" in bgm:
                             boss_bgm = bgm
                             break
                     if boss_bgm:
-                        pygame.mixer.music.load(assets.resource_path(boss_bgm))
-                        pygame.mixer.music.play(-1)
+                        audio.play_music(assets.resource_path(boss_bgm), -1)
             else:
-                if not pygame.mixer.music.get_busy():
+                if not audio.music_busy():
                     self.play_random_bgm()
 
             for pool in self.dragon_breath_pools[:]:
@@ -1759,15 +1835,14 @@ class Game:
             self.bee_spawn_remaining = 10
             self.bee_spawn_timer = 0
         if self.weather == Weather.ENDLESS_NIGHT and not self.herobrine_spawned:
-            pygame.mixer.music.stop()
+            audio.stop_music()
             boss_bgm = None
             for bgm in assets.bgm_files:
                 if "Celestial Fury" in bgm or "The End" in bgm:
                     boss_bgm = bgm
                     break
             if boss_bgm:
-                pygame.mixer.music.load(assets.resource_path(boss_bgm))
-                pygame.mixer.music.play(-1)
+                audio.play_music(assets.resource_path(boss_bgm), -1)
         if self.weather == Weather.ACID_RAIN:
             if Enchantment.WAX not in self.enchantments:
                 self.apply_acid_rain_downgrade()
@@ -1798,8 +1873,7 @@ class Game:
             available = [i for i in range(len(assets.bgm_files)) if i != assets.bgm_index]
             idx = random.choice(available)
         assets.bgm_index = idx
-        pygame.mixer.music.load(assets.resource_path(assets.bgm_files[idx]))
-        pygame.mixer.music.play()
+        audio.play_music(assets.resource_path(assets.bgm_files[idx]), 0)
 
     def update_weather_particles(self):
         if self.weather in (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN):
@@ -1919,10 +1993,16 @@ class Game:
         self.weather_banner_timer = 240
 
     def reset_game(self):
-        try:
-            os.remove(get_save_path())
-        except Exception:
-            pass
+        # 存档不删除，改成改名备份：.bak 会被下一次 save_game 覆盖，
+        # 但至少在「开新局后立刻后悔」的窗口里还能捞回来。
+        # 原先是 os.remove —— 配合菜单隐形热区，等于点一下就永久丢档。
+        save_path = get_save_path()
+        if os.path.exists(save_path):
+            try:
+                os.replace(save_path, save_path + ".bak")
+            except Exception:
+                pass
+        self.confirm_reset = 0
         self.path = random.choice(SEED_PATHS)
         self.start_point = self.path[0]
         self.end_point = self.path[-1]
@@ -1995,8 +2075,29 @@ class Game:
         self.start_game()
 
     def run(self):
-        while True:
-            self.handle_events()
-            self.update()
-            self.draw()
-            self.clock.tick(self.fps)
+        """主循环。
+
+        包一层 crash log：玩家报告「游戏闪退了」时，没有日志就只能靠猜。
+        日志写到存档同目录（一定有写权限），把完整 traceback 落盘，
+        同时仍然抛出，保留正常的非零退出码。
+        """
+        try:
+            while True:
+                self.handle_events()
+                self.update()
+                self.draw()
+                self.clock.tick(self.fps)
+        except SystemExit:
+            raise
+        except Exception:
+            import traceback
+            detail = traceback.format_exc()
+            try:
+                log_path = os.path.join(os.path.dirname(get_save_path()), "crash.log")
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
+                    f.write(detail)
+            except Exception:
+                pass
+            print(detail)
+            raise
