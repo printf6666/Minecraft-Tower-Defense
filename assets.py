@@ -49,6 +49,7 @@ icon7 = None
 icon8 = None
 icon9 = None
 icon10 = None
+icon11 = None
 
 gold_img = None
 emerald_img = None
@@ -100,7 +101,7 @@ teleport_sound = None
 
 def init_assets():
     global font_large, font_medium, font_small, font_tower_level, font_damage
-    global icon0, icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9, icon10, tower_icons, buff_icons
+    global icon0, icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9, icon10, icon11, tower_icons, buff_icons
     global gold_img, clock_img, emerald_img
     global white_lightning_frames, golden_lightning_frames
     global white_lightning_h_frames, golden_lightning_h_frames
@@ -122,10 +123,13 @@ def init_assets():
     tower_icons.clear()
     for ttype in TowerType:
         try:
-            tower_icons.append(load_image(f"tower/{ttype.value}-1.png", (icon_size, icon_size)))
+            # 统一命名规则：tower/{塔序号}-{阶级}-{分支}.png，底栏取一阶分支 1
+            tower_icons.append(load_image(f"tower/{ttype.value}-1-1.png", (icon_size, icon_size)))
         except:
             tower_icons.append(pygame.Surface((icon_size, icon_size)))
-    icon0, icon1, icon2, icon3, icon4, icon5, icon6, icon7, icon8, icon9, icon10 = tower_icons
+    # 切片解包：以后再加塔也不会因为元组长度不匹配而崩
+    icon0, icon1, icon2, icon3, icon4, icon5 = tower_icons[:6]
+    icon6, icon7, icon8, icon9, icon10, icon11 = tower_icons[6:12]
 
     global tnt_explosion_frames
     tnt_explosion_frames.clear()
@@ -168,7 +172,7 @@ def init_assets():
     for n in range(1, 21):
         endless_greed_frames.append(load_image(f"tower/star{n:02d}.png"))
 
-    gold_img = load_image("tower/2-1.png", (64, 64))
+    gold_img = load_image("tower/2-1-1.png", (64, 64))
     emerald_img = load_image("tower/emerald.png", (80, 80))
 
     global enchantment_icons, enchantment_icons_raw, trader_img

@@ -216,6 +216,37 @@ def get_tower_info(game, tower):
                     extra, "按 R 切换分支", "攻击间隔:2s"]
         else:
             info = [f"TNT Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:2s"]
+    elif tower.type == TowerType.SWORD:
+        if tower.level >= 11:
+            if tower.sword_branch == 1:
+                info = [f"泰拉刃 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
+                        "整圆范围伤害", f"剑气:{tower.sword_beam_damage()} 无限穿透",
+                        "按 R 切换分支"]
+            else:
+                info = [f"狂星之怒 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
+                        "整圆范围伤害",
+                        f"星星:{tower.sword_star_damage()}x{SWORD_STAR_COUNT} 自动锁敌",
+                        "按 R 切换分支"]
+        elif tower.level >= 6:
+            poison = SWORD_POISON_BASE + SWORD_POISON_PER_LV * (tower.level - 6)
+            if tower.sword_branch == 1:
+                info = [f"星怒 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
+                        "整圆范围伤害", "附带天降星星", "按 R 切换分支"]
+            elif tower.sword_branch == 2:
+                info = [f"炽铁剑 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
+                        "整圆范围伤害", "命中燃烧15秒", "按 R 切换分支"]
+            else:
+                info = [f"草剑 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
+                        "整圆范围伤害", f"命中中毒{poison}层", "按 R 切换分支"]
+        else:
+            info = [f"铁剑 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
+                    "整圆范围伤害", f"攻击间隔:{tower.fire_rate / 60}s"]
+        # 连击是全局共享的，所以只在有连击时补一行
+        if game.sword_combo > 0:
+            ct = (f"{SWORD_COMBO_CAP}+" if game.sword_combo > SWORD_COMBO_CAP
+                  else str(game.sword_combo))
+            info.append(f"连击:{ct}层 x"
+                        f"{stats.format_multiplier(game.sword_combo_mult())}")
     upgrade_str = "MAX" if tower.level >= 15 else str(tower.upgrade_cost)
     if tower.type == TowerType.BOMB and tower.is_nuclear:
         info.extend([f"升级:{upgrade_str}"])
@@ -340,6 +371,11 @@ class UIManager:
             explosion.draw(self.game.screen)
         for bee in self.game.bees:
             bee.draw(self.game.screen)
+        # 剑系：挥砍剑身与锁敌星星压在敌人之上，避免被怪挡住
+        for sweep in self.game.sword_sweeps:
+            sweep.draw(self.game.screen)
+        for star in self.game.stars:
+            star.draw(self.game.screen)
         self.game.damage_texts.draw(self.game.screen)
 
         self.draw_boss_screen_fx()
@@ -438,6 +474,52 @@ class UIManager:
         for i, text in enumerate(instructions):
             self.game.screen.blit(assets.font_small.render(text, True, WHITE), (2156, 1144 + i * 48))
 
+        self.draw_sword_combo_hud()
+
+    def draw_sword_combo_hud(self):
+        """剑系连击 HUD：层数 + 倍率 + 2.5 秒维持进度条。
+
+        顶栏 x=780~1560 本来是空的，正好放这里。Herobrine 血条已挪到 y=86
+        （和最终 BOSS 血条同一行），不会打架。
+        """
+        combo = self.game.sword_combo
+        if combo <= 0:
+            return
+        screen = self.game.screen
+
+        # 层数封顶 999：超过就显示 999+（倍率也已在 999 层封顶）
+        if combo > SWORD_COMBO_CAP:
+            combo_text = f"{SWORD_COMBO_CAP}+"
+        else:
+            combo_text = str(combo)
+
+        if combo < 100:
+            color = SWORD_DAMAGE_COLOR
+            font = assets.font_medium
+        elif combo < 300:
+            color = (255, 170, 70)
+            font = assets.font_large
+        else:
+            color = (255, 110, 60)
+            font = assets.font_large
+
+        label = font.render(f"连击 {combo_text}", True, color)
+        screen.blit(label, (790, 2))
+
+        mult = self.game.sword_combo_mult()
+        mult_label = assets.font_medium.render(
+            f"x{stats.format_multiplier(mult)}", True, color)
+        screen.blit(mult_label, (790 + label.get_width() + 24, 6))
+
+        # 维持进度条：底槽 + 填充 + 描边（同 BOSS 读条写法）
+        ratio = max(0.0, self.game.sword_combo_timer / SWORD_COMBO_TIMEOUT)
+        bar = pygame.Rect(790, 62, 760, 12)
+        pygame.draw.rect(screen, (40, 30, 12), bar)
+        if ratio > 0:
+            pygame.draw.rect(screen, color,
+                             (bar.x, bar.y, int(bar.width * ratio), bar.height))
+        pygame.draw.rect(screen, (255, 240, 200), bar, 2)
+
     def get_enchant_icon_rects(self):
         rects = []
         counts = {}
@@ -463,7 +545,7 @@ class UIManager:
         bar_right = INFO_BORDER_X - 40
         start_x = bar_left + (bar_right - bar_left - total_w) // 2
         iy = SCREEN_HEIGHT - 114
-        keys = (1, 2, 3, 4, 5, 6, 7, 8, 9, 0, '-')
+        keys = (1, 2, 3, 4, 5, 6, 7, 8, 9, 0, '-', 'X')
         rects = []
         for i, (ttype, name, cost, key) in enumerate(self.game.TOWER_DATA):
             ix = start_x + i * step
@@ -873,10 +955,12 @@ class UIManager:
     def draw_herobrine_health_bar(self):
         for enemy in self.game.enemies:
             if enemy.enemy_type == EnemyType.HEROBRINE:
+                # y=86 和最终 BOSS 血条同一行（两者永不共存：第 50 波 / 第 100 波），
+                # 顶栏 0~80 让给剑系连击 HUD
                 bar_x = 810
-                bar_y = 20
+                bar_y = 86
                 bar_width = 740
-                bar_height = 50
+                bar_height = 44
                 pygame.draw.rect(self.game.screen, (100, 0, 0), (bar_x, bar_y, bar_width, bar_height))
                 health_ratio = enemy.health / enemy.max_health
                 fill_width = int(bar_width * health_ratio)

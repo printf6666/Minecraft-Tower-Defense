@@ -1,11 +1,11 @@
 """按属性统计伤害。
 
-七种属性：物理 / 火系 / 冰系 / 电系 / 风系 / 毒系 / 爆炸。
-图标直接复用对应「强化附魔」的图标。
+八种属性：物理 / 火系 / 冰系 / 电系 / 风系 / 毒系 / 爆炸 / 剑系。
+前七种图标复用对应「强化附魔」的图标，剑系没有对应附魔，直接用剑塔图标。
 
 归因约定：
 - 塔的伤害：箭塔/传送塔 = 物理，冰塔 = 冰系，火塔 = 火系，三叉戟 = 电系，
-  风塔 = 风系，毒塔 = 毒系，TNT/核弹 = 爆炸。
+  风塔 = 风系，毒塔 = 毒系，TNT/核弹 = 爆炸，**剑系 = 剑系（独立一行）**。
 - 减益：燃烧 = 火系，中毒 = 毒系，**凋零 = 毒系**（凋零由毒塔体系施加，
   单独拆一行意义不大），蓄风爆炸 = 风系。
 - 附魔：无尽贪婪奇点 = 爆炸，余烬重生陨石 = 火系，试毒合约爆炸 = 毒系，
@@ -18,6 +18,7 @@ import assets
 from config import *
 
 # (key, 显示名, 对应强化附魔, 条形图颜色)
+# 剑系没有专属附魔，第 3 项填 None，icon() 会退回用剑塔图标
 ELEMENTS = [
     ("physical", "物理伤害", Enchantment.PHYSICAL, (235, 235, 235)),
     ("fire", "火系伤害", Enchantment.FLAME, (255, 128, 56)),
@@ -25,7 +26,8 @@ ELEMENTS = [
     ("electric", "电系伤害", Enchantment.TRIDENT, (205, 130, 255)),
     ("wind", "风系伤害", Enchantment.WIND, (150, 255, 180)),
     ("poison", "毒系伤害", Enchantment.POISON, (130, 225, 90)),
-    ("explosion", "爆炸伤害", Enchantment.BOMB, (255, 185, 70)),
+    ("explosion", "爆炸伤害", Enchantment.BOMB, (255, 75, 75)),
+    ("sword", "剑系伤害", None, (255, 215, 90)),
 ]
 
 ELEMENT_NAME = {key: name for key, name, _, _ in ELEMENTS}
@@ -42,6 +44,7 @@ TOWER_ELEMENT = {
     TowerType.WIND: "wind",
     TowerType.POISON: "poison",
     TowerType.BOMB: "explosion",
+    TowerType.SWORD: "sword",
 }
 
 
@@ -51,11 +54,27 @@ def tower_element(tower_type):
 
 def format_damage(value):
     value = int(value)
+    if value >= 1_000_000_000_000:
+        return f"{value / 1_000_000_000_000:.2f}兆"
     if value >= 100_000_000:
         return f"{value / 100_000_000:.2f}亿"
     if value >= 10_000:
+        # 99999999 若直接按万显示会变成 "10000.0万"，读起来很怪，进位到亿
+        if value / 10_000 >= 9999.95:
+            return f"{value / 100_000_000:.2f}亿"
         return f"{value / 10_000:.1f}万"
     return str(value)
+
+
+def format_multiplier(mult):
+    """连击倍率的紧凑显示：×3.57 / ×145 / ×1.2万 / ×4.4亿。"""
+    if mult < 100:
+        return f"{mult:.2f}"
+    if mult < 10_000:
+        return f"{mult:.0f}"
+    if mult < 100_000_000:
+        return f"{mult / 10_000:.1f}万"
+    return f"{mult / 100_000_000:.1f}亿"
 
 
 class DamageStats:
@@ -87,7 +106,7 @@ class DamageStats:
         return {key: int(self.damage.get(key, 0)) for key, _, _, _ in ELEMENTS}
 
     def load_dict(self, data):
-        """从存档恢复七属性伤害；缺省或非法值按 0 处理。"""
+        """从存档恢复八属性伤害；缺省或非法值按 0 处理。"""
         self.reset()
         if not isinstance(data, dict):
             return
@@ -102,9 +121,15 @@ class DamageStats:
     def icon(self, key):
         if key not in self._icons:
             ench = ELEMENT_ENCHANT[key]
-            raw = assets.enchantment_icons_raw.get(ench)
-            if raw is None:
-                raw = assets.enchantment_icons.get(ench)
+            if ench is None:
+                # 剑系没有专属附魔，用剑塔底栏图标
+                raw = None
+                if len(assets.tower_icons) > TowerType.SWORD.value:
+                    raw = assets.tower_icons[TowerType.SWORD.value]
+            else:
+                raw = assets.enchantment_icons_raw.get(ench)
+                if raw is None:
+                    raw = assets.enchantment_icons.get(ench)
             if raw is not None:
                 self._icons[key] = pygame.transform.smoothscale(raw, (56, 56))
             else:

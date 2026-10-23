@@ -13,6 +13,7 @@ class TowerType(Enum):
     POISON = 8
     BOMB = 9
     TIME = 10
+    SWORD = 11
 
 TOWER_DATA = [
     (TowerType.PHYSICAL,   "物理", 100,  pygame.K_1),
@@ -25,7 +26,8 @@ TOWER_DATA = [
     (TowerType.POISON,     "毒系", 175,  pygame.K_8),
     (TowerType.BOMB,       "TNT", 500,  pygame.K_9),
     (TowerType.SHIELD,     "盾塔", 225,  pygame.K_0),
-    (TowerType.TIME,       "时间", 125,  pygame.K_MINUS)
+    (TowerType.TIME,       "时间", 125,  pygame.K_MINUS),
+    (TowerType.SWORD,      "剑系", 750,  pygame.K_x)
     ]
 
 SCREEN_WIDTH = 2560
@@ -217,6 +219,61 @@ LANTERN_BURN_FRAMES = 4 * 60     # 燃烧 4 秒
 LANTERN_ENCHANT_TOWERS = 3       # 「灯火通明」需要的满级提灯数量
 LANTERN_BURN_MULT = 1.5          # 灯火通明：全局燃烧伤害倍率（乘算）
 LANTERN_FIRE_BONUS = 80          # 灯火通明：火系伤害加成（加算，百分点）
+
+
+# ==========================================================================================
+#  剑系（SWORD）—— 第 12 座塔，造价 750
+#  攻击方式：召唤剑贴图并放大，以【剑的左下角】为轴心顺时针挥砍，整圆范围伤害
+#  一阶 铁剑 / 二阶 星怒·炽铁剑·草剑 / 三阶 泰拉刃·狂星之怒
+# ==========================================================================================
+SWORD_RANGE_TILES = 2.50         # 射程恒定 2.5 格，不随等级增长
+                                 # （后期主要靠三阶弹幕打伤害，本体挥砍只是保底）
+SWORD_BASE_DAMAGE = 80
+SWORD_DAMAGE_PER_LV = 30
+SWORD_FIRE_RATE = 60             # 一阶攻击间隔（帧，60 FPS = 1 秒）
+SWORD_FIRE_RATE_MIN = 30
+
+SWORD_SPIN_SPEED = 6.0           # 每秒旋转角度（度/帧）；6°/帧 = 60 帧转一圈 = 1 秒一圈
+SWORD_SPIN_SIZE = 256            # 旋转贴图边长（放大 2 倍）
+SWORD_ART_OFFSET = -45.0         # 贴图剑尖初始朝右上 45°，此值把它校正到正上方
+
+# 剑系伤害飘字颜色（金色，与独立的「剑系伤害」统计行一致）
+SWORD_DAMAGE_COLOR = (255, 215, 90)
+
+# 二阶分支效果
+SWORD_BURN_FRAMES = 15 * 60      # 炽铁剑：燃烧 15 秒
+SWORD_BURN_RATIO = 0.15          # 炽铁剑：每跳燃烧伤害 = 本次伤害 * 该比例
+SWORD_POISON_BASE = 200          # 草剑：基础中毒层数
+SWORD_POISON_PER_LV = 40         # 草剑：每级增加层数
+
+# 星怒（二阶分支 1）：攻击时从天而降一颗星星
+SWORD_METEOR_DAMAGE_RATIO = 0.8  # 陨星伤害 = 本次挥砍伤害 * 该比例
+SWORD_METEOR_SPEED = 16
+
+# 三阶分支 1：泰拉刃 —— 无限穿透、无衰减的剑气弹幕
+SWORD_BEAM_DAMAGE = 350
+SWORD_BEAM_PER_LV = 60
+SWORD_BEAM_SPEED = 22
+SWORD_BEAM_HEAD_RADIUS = 70      # 只用弹头做圆判定（竖图旋转后的包围盒太大）
+SWORD_BEAM_MAX_DIST = 3200
+
+# 三阶分支 2：狂星之怒 —— 从地图右上角发射大量锁敌星星
+SWORD_STAR_COUNT = 10
+SWORD_STAR_INTERVAL = 2          # 每 N 帧发射一颗
+SWORD_STAR_DAMAGE = 180
+SWORD_STAR_PER_LV = 30
+SWORD_STAR_SPEED = 15.0
+SWORD_STAR_TURN_GAIN = 0.18      # 每帧修正剩余夹角的比例
+SWORD_STAR_MAX_TURN = 14.0       # 单帧最大转角（度）
+
+# ------------------------------------------------------------------------------------------
+#  剑系连击系统（全局共享：场上所有剑塔共用一个连击池）
+#  每次命中一名敌人 +1 层，伤害 = 原伤害 × SWORD_COMBO_GROWTH ** 层数
+#  连续 SWORD_COMBO_TIMEOUT 帧没有任何剑系命中则清零
+# ------------------------------------------------------------------------------------------
+SWORD_COMBO_GROWTH = 1.01        # 每层加成；1.01^100 ≈ 2.70x，1.01^999 ≈ 20700x
+SWORD_COMBO_TIMEOUT = 150        # 2.5 秒（60 FPS）没命中就清空
+SWORD_COMBO_CAP = 999            # 玩法上限：层数可以继续涨（UI 显示 999+），但倍率封顶在 1.01^999
 
 
 
