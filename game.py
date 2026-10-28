@@ -30,7 +30,6 @@ ELEMENT_TO_TOWER_TYPE = {
     "wind": TowerType.WIND,
     "poison": TowerType.POISON,
     "explosion": TowerType.BOMB,
-    "sword": TowerType.SWORD,
 }
 
 WEATHER_POOL = [
@@ -76,16 +75,6 @@ def grid_to_path(grid):
 
 with open(resource_path("seed.json")) as f:
     SEED_PATHS = [grid_to_path(grid) for grid in json.load(f)["seed_paths"]]
-
-
-def sword_combo_multiplier(stacks):
-    """剑系连击倍率：1.01 ** 层数，封顶在 SWORD_COMBO_CAP 层。
-
-    层数本身可以继续往上涨（UI 显示 999+），但倍率不再变化。
-    """
-    if stacks <= 0:
-        return 1.0
-    return SWORD_COMBO_GROWTH ** min(int(stacks), SWORD_COMBO_CAP)
 
 
 class Game:
@@ -149,17 +138,11 @@ class Game:
         self.bee_spawn_timer = 0
         self.crystals = []
         self.lantern_shockwaves = []
-        self.sword_sweeps = []
         self.stars = []
         self.ice_star_bursts = []
         self.masterpiece_shockwaves = []
         self.ultimate_video = None
         self.masterpiece_pending = False   # 视频播完才结算，标记「这一发还没落地」
-        # 剑系连击：全局共享，所有剑塔共用一个池
-        self.sword_combo = 0
-        self.sword_combo_timer = 0
-        self._sword_target_cache = None
-        self._sword_target_time = -1
         self._lantern_towers = 0
 
         self.fog_timer = 0
@@ -477,19 +460,6 @@ class Game:
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
                         self.selected_tower.shield_branch = self.selected_tower.shield_branch % 3 + 1
                         self.selected_tower.update_sprite()
-                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.SWORD:
-                        t = self.selected_tower
-                        if t.level >= 11:
-                            # 三阶只有泰拉刃 / 狂星之怒两个分支
-                            t.sword_branch = 3 - t.sword_branch
-                        elif t.level >= 6:
-                            # 二阶三分支：星怒 / 炽铁剑 / 草剑
-                            t.sword_branch = t.sword_branch % 3 + 1
-                        else:
-                            # 一阶只有铁剑，没有可切换的分支
-                            pass
-                        t.recalculate_stats()
-                        t.update_sprite()
                     elif event.key == pygame.K_q and self.selected_tower and self.ember_rebirth_active():
                         if self.selected_tower.type == TowerType.FLAME and self.selected_tower.level == 15 and self.selected_tower.flame_branch == 1:
                             self.sacrifice_tower()
@@ -690,57 +660,13 @@ class Game:
             if len(alive) >= BOSS_DAMAGE_TEXT_LIMIT:
                 oldest = max(alive, key=lambda t: t.timer)
                 oldest.kill()
-        # 剑系连击后伤害会出现 12 位以上数字，单条飘字能吃掉四分之一屏宽。
-        # 阈值取 1 亿：现有最高伤害是地狱弩的 99999999（8 位），正好在阈值下方，
-        # 所以旧飘字一个都不会变。
+        # 超长数字（1 亿以上）压缩成「x.xx亿」，否则单条飘字能吃掉四分之一屏宽。
         if isinstance(value, int) and value >= 100_000_000:
             value = stats.format_damage(value)
         text = DamageText(value, pos[0], pos[1], color=color, scale=scale,
                           speed_x=speed_x, speed_y=speed_y)
         text.is_boss = boss
         self.damage_texts.add(text)
-
-    # ------------------------------------------------------------ 剑系连击
-    def sword_combo_mult(self):
-        return sword_combo_multiplier(self.sword_combo)
-
-    def register_sword_hits(self, hits):
-        """一次攻击实例结算完后统一加层（整次攻击共用一个倍率）。"""
-        if hits <= 0:
-            return
-        self.sword_combo += hits
-        self.sword_combo_timer = SWORD_COMBO_TIMEOUT
-
-    def sword_text_scale(self):
-        """剑系飘字缩放：固定 1.3，不随连击变化。
-
-        之前会随连击涨到 1.8，铺几座剑塔数字就糊成一片；
-        现在统一成一个值，视觉稳定、不同伤害数字大小一致。
-        """
-        return SWORD_TEXT_SCALE
-
-    def tick_sword_combo(self):
-        """每帧递减维持计时；归零时清空连击。"""
-        if self.sword_combo_timer > 0:
-            self.sword_combo_timer -= 1
-            if self.sword_combo_timer == 0:
-                self.sword_combo = 0
-
-    def sword_best_target(self, remaining_fn):
-        """狂星之怒的锁敌结果，同一帧最多重算一次。
-
-        一轮 10 颗星同帧创建，本来就会选同一个敌人；缓存把 10 次全表扫描压到 1 次。
-        """
-        t = self.game_time
-        cached = self._sword_target_cache
-        if (self._sword_target_time == t and cached is not None
-                and cached.health > 0 and cached.alive()):
-            return cached
-        alive = [e for e in self.enemies if e.health > 0]
-        best = min(alive, key=remaining_fn) if alive else None
-        self._sword_target_cache = best
-        self._sword_target_time = t
-        return best
 
     def save_game(self):
         try:
@@ -753,7 +679,6 @@ class Game:
                     "poison_branch": t.poison_branch, "bomb_branch": t.bomb_branch,
                     "trident_branch": t.trident_branch, "teleport_branch": t.teleport_branch,
                     "shield_branch": t.shield_branch,
-                    "sword_branch": t.sword_branch,
                     "bomb_subtype": t.bomb_subtype.value if hasattr(t, 'bomb_subtype') and t.bomb_subtype else None,
                     "is_nuclear": getattr(t, 'is_nuclear', False),
                     "has_shield": getattr(t, 'has_shield', False),
@@ -843,17 +768,11 @@ class Game:
         self.bee_spawn_timer = 0
         self.crystals = []
         self.lantern_shockwaves = []
-        self.sword_sweeps = []
         self.stars = []
         self.ice_star_bursts = []
         self.masterpiece_shockwaves = []
         self.ultimate_video = None
         self.masterpiece_pending = False   # 视频播完才结算，标记「这一发还没落地」
-        # 剑系连击：全局共享，所有剑塔共用一个池
-        self.sword_combo = 0
-        self.sword_combo_timer = 0
-        self._sword_target_cache = None
-        self._sword_target_time = -1
         self._lantern_towers = 0
         self.enemy_grid = {}
         self.fog_timer = 0
@@ -1060,7 +979,11 @@ class Game:
         wave_num = max(1, data.get("wave", 1))
         self.wave_manager.current_wave = wave_num - 1
         for td in data.get("towers", []):
-            ttype = TowerType(td["type"])
+            try:
+                ttype = TowerType(td["type"])
+            except ValueError:
+                # 旧存档里可能有已经删掉的塔（比如剑系 type=11），跳过而不是让整份存档读不出来
+                continue
             t = Tower(ttype, td["x"], td["y"], self)
             while t.level < td["level"]:
                 t.upgrade()
@@ -1073,7 +996,6 @@ class Game:
             t.trident_branch = td.get("trident_branch", 1)
             t.teleport_branch = td.get("teleport_branch", 1)
             t.shield_branch = td.get("shield_branch", 1)
-            t.sword_branch = td.get("sword_branch", 1)
             if hasattr(t, 'bomb_subtype'):
                 sv = td.get("bomb_subtype")
                 t.bomb_subtype = BombSubType(sv) if sv is not None else BombSubType.SNOW
@@ -1082,8 +1004,7 @@ class Game:
             t.has_shield = td.get("has_shield", False)
             # 分支是在升级之后才套用的，所以带分支数值的塔必须整体重算一次，
             # 否则读档后神锅会保留「普通冰塔」的数值（伤害 55 而不是 500+）
-            if ttype in (TowerType.TELEPORT, TowerType.FLAME, TowerType.SWORD,
-                         TowerType.ICE):
+            if ttype in (TowerType.TELEPORT, TowerType.FLAME, TowerType.ICE):
                 t.recalculate_stats()
             t.update_sprite()
             self.towers.add(t)
@@ -1203,7 +1124,7 @@ class Game:
         bonus = 0
         bonus += 5 * self.enchantments.count(Enchantment.BALANCED)
         type_map = {
-            Enchantment.PHYSICAL: (TowerType.PHYSICAL, TowerType.TELEPORT, TowerType.SWORD),
+            Enchantment.PHYSICAL: (TowerType.PHYSICAL, TowerType.TELEPORT),
             Enchantment.ICE: (TowerType.ICE,),
             Enchantment.FLAME: (TowerType.FLAME,),
             Enchantment.TRIDENT: (TowerType.TRIDENT,),
@@ -1550,11 +1471,6 @@ class Game:
             return
         if self.state == GameState.PAUSED:
             return
-        # 剑系连击衰减：放在暂停早退之后 → 暂停/统计/图鉴时冻结；
-        # 放在 PLAYING 判断之前 → 波间准备与商店也会正常走完 2.5 秒。
-        # （game_time 在这两个状态不递增，所以不能用它做超时判定）
-        self.tick_sword_combo()
-
         # 大招动画独立于游戏状态推进：暂停时冻结、结束后自动清空并结算
         if self.ultimate_video is not None:
             if not self.ultimate_video.update():
@@ -1600,8 +1516,6 @@ class Game:
             for tower in self.towers:
                 if tower.disabled_timer > 0:
                     tower.disabled_timer -= 1
-                # 剑系：范围内有敌人（三阶：场上有敌人）就一直转，与攻击频率解耦
-                tower.update_sword_spin()
                 if tower.type not in (TowerType.PRODUCTION, TowerType.TIME):
                     if frozen_by_boss or tower.disabled_timer > 0:
                         tower.update_shield_tower()
@@ -1753,10 +1667,6 @@ class Game:
             for wave_fx in self.lantern_shockwaves[:]:
                 if not wave_fx.update():
                     self.lantern_shockwaves.remove(wave_fx)
-
-            for sweep in self.sword_sweeps[:]:
-                if not sweep.update():
-                    self.sword_sweeps.remove(sweep)
 
             for star in self.stars[:]:
                 if not star.update():
@@ -2146,17 +2056,11 @@ class Game:
         self.bee_spawn_timer = 0
         self.crystals = []
         self.lantern_shockwaves = []
-        self.sword_sweeps = []
         self.stars = []
         self.ice_star_bursts = []
         self.masterpiece_shockwaves = []
         self.ultimate_video = None
         self.masterpiece_pending = False   # 视频播完才结算，标记「这一发还没落地」
-        # 剑系连击：全局共享，所有剑塔共用一个池
-        self.sword_combo = 0
-        self.sword_combo_timer = 0
-        self._sword_target_cache = None
-        self._sword_target_time = -1
         self._lantern_towers = 0
         self.enemy_grid = {}
         self.fog_timer = 0

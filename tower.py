@@ -4,7 +4,7 @@ import math
 import assets
 import stats
 from config import *
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, IceWall, HellRay, SwordSpin, StarWrath, FallingStar
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, IceWall, HellRay
 from dragons import Dragon
 
 MAP_CENTER_X = GRID_WIDTH * TILE_SIZE // 2
@@ -32,7 +32,6 @@ MAX_BRANCH = {
     TowerType.POISON:     {1: 2, 2: 2, 3: 3},
     TowerType.BOMB:       {1: 1, 2: 5, 3: 2},
     TowerType.TIME:       {1: 1, 2: 1, 3: 1},
-    TowerType.SWORD:      {1: 1, 2: 3, 3: 2},
 }
 
 
@@ -72,9 +71,6 @@ def tower_sprite_path(ttype, level, **br):
             b = BOMB_SUBTYPE_ORDER.index(sub) + 1
         elif stage == 3:
             b = br.get("bomb_branch", 1)
-    elif ttype == TowerType.SWORD and stage >= 2:
-        # 剑系一阶只有铁剑一种形态，二阶 3 分支、三阶 2 分支
-        b = br.get("sword_branch", 1)
     # 兜底 clamp：任何非法分支值都退回合法范围，绝不去 load 不存在的 png
     b = min(max(1, int(b)), MAX_BRANCH.get(ttype, {}).get(stage, 1))
     return f"tower/{ttype.value}-{stage}-{b}.png"
@@ -118,9 +114,6 @@ class Tower(pygame.sprite.Sprite):
         self.trident_branch = 1
         self.teleport_branch = 1
         self.shield_branch = 1
-        self.sword_branch = 1
-        self.sword_spinning = False     # 是否处于「有敌人可打」的持续旋转状态
-        self.sword_spin = None          # SwordSpin 实例（视觉，挂在 game.sword_sweeps）
         self.ice_explosion_visual = 0
         self.wind_storm_visual = 0      # 雷神之锤命中特效隔次播放计数器
 
@@ -215,10 +208,6 @@ class Tower(pygame.sprite.Sprite):
             self.upgrade_cost = 190
             self.attack_speed_buff = 0
             self.production_buff = 0.0
-        elif self.type == TowerType.SWORD:
-            self.cost = 750
-            self.upgrade_cost = 1125
-            self._recalc_sword()
 
     def upgrade(self):
         if self.level >= 15:
@@ -283,7 +272,7 @@ class Tower(pygame.sprite.Sprite):
                 self.range = 0
                 self.fire_rate = 35 * 60
 
-        if self.type in (TowerType.FLAME, TowerType.SWORD, TowerType.ICE):
+        if self.type in (TowerType.FLAME, TowerType.ICE):
             self.recalculate_stats()
 
         self.update_sprite()
@@ -291,9 +280,6 @@ class Tower(pygame.sprite.Sprite):
     def recalculate_stats(self):
         if self.type == TowerType.FLAME:
             self._recalc_flame()
-            return
-        if self.type == TowerType.SWORD:
-            self._recalc_sword()
             return
         if self.type == TowerType.ICE:
             self._recalc_ice()
@@ -361,36 +347,6 @@ class Tower(pygame.sprite.Sprite):
                + HOLY_POT_DAMAGE_TEMP.get(lv, 10) * abs(self.game.temperature))
         return max(1, int(raw * self.game.get_enchant_damage_multiplier(TowerType.ICE)))
 
-    def _recalc_sword(self):
-        """剑系数值按等级整体重算（挥砍本体）。三阶两种弹幕的伤害另算。"""
-        lv = self.level
-        # 分支数随阶级变化：一阶只有铁剑，二阶 3 个，三阶 2 个。
-        # 二阶升到三阶时 branch 可能是 3（草剑），必须夹到 2，
-        # 否则 update_sprite 会去找不存在的 11-3-3.png 而崩。
-        if lv >= 11:
-            self.sword_branch = min(max(1, self.sword_branch), 2)
-        elif lv >= 6:
-            self.sword_branch = min(max(1, self.sword_branch), 3)
-        else:
-            self.sword_branch = 1
-        self.damage = SWORD_BASE_DAMAGE + SWORD_DAMAGE_PER_LV * (lv - 1)
-        # 射程恒定，不随等级增长：后期主要靠三阶弹幕输出，本体挥砍只是保底
-        self.range = int(TILE_SIZE * SWORD_RANGE_TILES)
-        self.fire_rate = max(SWORD_FIRE_RATE_MIN,
-                             SWORD_FIRE_RATE - 2 * (lv - 1))
-
-    def sword_beam_damage(self):
-        """泰拉刃弹幕单次伤害（吃物理系附魔加成）。"""
-        lv = self.level
-        mult = self.game.get_enchant_damage_multiplier(TowerType.SWORD)
-        return max(1, int((SWORD_BEAM_DAMAGE + SWORD_BEAM_PER_LV * (lv - 11)) * mult))
-
-    def sword_star_damage(self):
-        """狂星之怒单颗星星伤害（吃物理系附魔加成）。"""
-        lv = self.level
-        mult = self.game.get_enchant_damage_multiplier(TowerType.SWORD)
-        return max(1, int((SWORD_STAR_DAMAGE + SWORD_STAR_PER_LV * (lv - 11)) * mult))
-
     def lantern_damage(self):
         """星焰提灯冲击波的单次伤害（含火系 / 均衡附魔加成）。
 
@@ -413,7 +369,6 @@ class Tower(pygame.sprite.Sprite):
             teleport_branch=self.teleport_branch,
             bomb_branch=self.bomb_branch,
             bomb_subtype=getattr(self, "bomb_subtype", BombSubType.SNOW),
-            sword_branch=self.sword_branch,
         )
         self.image = assets.load_image(img)
         self.rect = self.image.get_rect()
@@ -482,11 +437,6 @@ class Tower(pygame.sprite.Sprite):
             return self._holy_pot_attack()
 
         check_range = self.get_effective_range() + TILE_SIZE // 2
-
-        # 剑系：一阶/二阶要求射程内有敌人，三阶只要场上有敌人就攻击
-        # （放在九宫格 has_target 检测之前，顺便省掉这次扫描）
-        if self.type == TowerType.SWORD:
-            return self._sword_attack(check_range)
 
         tc = self.rect.centerx // TILE_SIZE
         tr = self.rect.centery // TILE_SIZE
@@ -603,12 +553,12 @@ class Tower(pygame.sprite.Sprite):
                 self.game.trigger_resonance_storm()
 
         if self.type == TowerType.ICE and self.level >= 11 and self.ice_branch == 2:
-            if random.random() < 0.02:
+            if random.random() < DRAGON_SUMMON_CHANCE:
                 dragon = Dragon(self.game.path, "ice", self.level, self.game)
                 self.game.dragons.add(dragon)
 
         if self.type == TowerType.FLAME and self.level >= 11 and self.flame_branch == 2:
-            if random.random() < 0.05:
+            if random.random() < DRAGON_SUMMON_CHANCE:
                 dragon = Dragon(self.game.path, "fire", self.level, self.game)
                 self.game.dragons.add(dragon)
 
@@ -675,143 +625,6 @@ class Tower(pygame.sprite.Sprite):
                 self.game.masterpiece_counter = 0
                 self.game.trigger_masterpiece_ultimate()
         return [bolt]
-
-    # ------------------------------------------------------------ 剑系
-    def _remaining_to_end(self, e):
-        """敌人距离终点的剩余路程（越小越靠近终点）。
-
-        GHOST / WITHER 直线飞向终点、path_index 恒为 0；FinalBoss 不走路径，
-        这三类必须改用「到终点的直线距离」，否则会被误判成离终点最远。
-        """
-        end_px = (self.game.end_point[0] * TILE_SIZE + TILE_SIZE // 2,
-                  self.game.end_point[1] * TILE_SIZE + TILE_SIZE // 2)
-        if (e.enemy_type in (EnemyType.GHOST, EnemyType.WITHER)
-                or getattr(e, "is_boss", False)):
-            return math.hypot(e.rect.centerx - end_px[0],
-                              e.rect.centery - end_px[1])
-        path = self.game.path
-        n = len(path) - 1
-        idx = getattr(e, "path_index", 0)
-        if idx >= n:
-            return math.hypot(e.rect.centerx - end_px[0],
-                              e.rect.centery - end_px[1])
-        nx = path[idx + 1][0] * TILE_SIZE + TILE_SIZE // 2
-        ny = path[idx + 1][1] * TILE_SIZE + TILE_SIZE // 2
-        return (math.hypot(e.rect.centerx - nx, e.rect.centery - ny)
-                + (n - (idx + 1)) * TILE_SIZE)
-
-    def _sword_attack(self, radius):
-        """挥砍：整圆范围伤害，三阶追加弹幕。
-
-        三阶（Lv11+）只要场上有敌人就攻击，不要求敌人进入 2.5 格射程——
-        伤害主要靠剑气 / 星星，本体挥砍只是保底。
-
-        伤害在攻击瞬间立即结算（不再延迟到动画某一帧）：剑现在是持续旋转的，
-        没有「扫到某一帧」的概念，视觉与伤害频率解耦。
-        """
-        alive = [e for e in self.game.enemies if e.health > 0]
-        if not alive:
-            return []
-        cx, cy = self.rect.centerx, self.rect.centery
-        targets = [e for e in alive
-                   if (e.rect.centerx - cx) ** 2 + (e.rect.centery - cy) ** 2 <= radius * radius]
-
-        # 一阶 / 二阶：圈内没敌人就不攻击
-        if self.level < 11 and not targets:
-            return []
-
-        # 有敌人可打 -> 进入持续旋转状态（三阶即使圈内没人也要转）
-        self.sword_spinning = True
-        self._ensure_sword_spin()
-
-        if targets:
-            self._apply_sword_damage(targets)
-
-        # 二阶分支 1「星怒」：攻击时从天而降一颗星星
-        if self.level < 11 and self.sword_branch == 1 and targets:
-            best = min(targets, key=self._remaining_to_end)
-            self.game.stars.append(FallingStar(
-                best.rect.centerx, best.rect.centery,
-                int(self.damage * SWORD_METEOR_DAMAGE_RATIO), self.game))
-
-        # 三阶分支 1「泰拉刃」：向离终点最近的敌人发射穿透剑气（全场索敌）
-        if self.level >= 11 and self.sword_branch == 1:
-            best = min(alive, key=self._remaining_to_end)
-            return [TerraBeam(cx, cy, best.rect.centerx, best.rect.centery,
-                              self.sword_beam_damage(), self.game)]
-
-        # 三阶分支 2「狂星之怒」：从地图右上角发射大量锁敌星星（全场索敌）
-        elif self.level >= 11 and self.sword_branch == 2:
-            sx = GRID_WIDTH * TILE_SIZE - 120
-            sy = 96
-            base = math.atan2((GRID_HEIGHT * TILE_SIZE) / 2 - sy,
-                              (GRID_WIDTH * TILE_SIZE) / 2 - sx)
-            dmg = self.sword_star_damage()
-            for _ in range(SWORD_STAR_COUNT):
-                ang = base + random.uniform(-0.6, 0.6)
-                self.game.stars.append(StarWrath(sx, sy, ang, dmg, self.game,
-                                                 self._remaining_to_end))
-        return []
-
-    def _apply_sword_damage(self, targets):
-        """挥砍本体结算：整次攻击读一次倍率，结算完再按命中数加层。"""
-        mult = self.game.sword_combo_mult()
-        dmg = max(1, int(self.damage * mult))
-        hits = 0
-        prev = self.game.damage_element
-        self.game.damage_element = "sword"
-        try:
-            for e in targets:
-                if e.health <= 0 or not e.alive():
-                    continue
-                reward = e.take_damage(dmg, color=SWORD_DAMAGE_COLOR,
-                                       scale=self.game.sword_text_scale(),
-                                       element="sword")
-                self.game.coins += reward
-                hits += 1
-                # 燃烧 / 中毒不吃连击：派生 DoT 乘上去等于双重收益，
-                # 而且燃烧在统计里归火系，乘连击会污染火系归因
-                if self.level >= 6 and self.sword_branch == 2:
-                    e.apply_burn(int(self.damage * SWORD_BURN_RATIO),
-                                 SWORD_BURN_FRAMES)
-                elif self.level >= 6 and self.sword_branch == 3:
-                    e.apply_poison(SWORD_POISON_BASE
-                                   + SWORD_POISON_PER_LV * (self.level - 6))
-        finally:
-            self.game.damage_element = prev
-        self.game.register_sword_hits(hits)
-
-    def _ensure_sword_spin(self):
-        """确保旋转特效存在，且贴图与当前等级/分支一致。"""
-        img = tower_sprite_path(self.type, self.level,
-                                sword_branch=self.sword_branch)
-        spin = self.sword_spin
-        if spin is not None and spin.img_path == img:
-            return
-        if spin is not None and spin in self.game.sword_sweeps:
-            self.game.sword_sweeps.remove(spin)
-        # 用坐标做相位偏移，让多座剑塔的剑不同步，看起来更自然
-        phase = (self.x * 37 + self.y * 61) % 360
-        self.sword_spin = SwordSpin(self, self.game, img, phase)
-        self.game.sword_sweeps.append(self.sword_spin)
-
-    def update_sword_spin(self):
-        """每帧检查：范围内有敌人（三阶：场上有敌人）就一直转。"""
-        if self.type != TowerType.SWORD:
-            return
-        if self.level >= 11:
-            has = any(e.health > 0 for e in self.game.enemies)
-        else:
-            r = self.get_effective_range()
-            cx, cy = self.rect.centerx, self.rect.centery
-            has = any(e.health > 0
-                      and (e.rect.centerx - cx) ** 2 + (e.rect.centery - cy) ** 2 <= r * r
-                      for e in self.game.enemies)
-        if has:
-            self.sword_spinning = True
-            self._ensure_sword_spin()
-        else:
-            self.sword_spinning = False
 
     def draw_range(self, surface):
         if self.type == TowerType.SHIELD or self.type == TowerType.TIME:
@@ -1183,7 +996,7 @@ class Bullet(pygame.sprite.Sprite):
                             e.on_lightning_hit()
                     h_effect = HorizontalLightningEffect(1024, row * TILE_SIZE + TILE_SIZE // 2, not is_golden)
                     self.game.horizontal_lightning_effects.append(h_effect)
-                elif random.random() < 0.05:
+                elif random.random() < DRAGON_SUMMON_CHANCE:
                     dragon = Dragon(self.game.path, 'electric', self.tower_level, self.game)
                     self.game.dragons.add(dragon)
         if self.tower_type == TowerType.WIND:
@@ -1389,86 +1202,6 @@ class WitherBullet(pygame.sprite.Sprite):
 
         self.kill()
         self.game.damage_element = prev_element
-
-class TerraBeam(pygame.sprite.Sprite):
-    """泰拉刃的剑气弹幕：无限穿透、无衰减，对经过的敌人各结算一次。
-
-    不继承 Bullet 的原因：Bullet.on_hit 结尾无条件 kill()（penetrate 是死代码），
-    且构造里写死了给斜 45° 箭矢用的 rotate_angle = angle - 45，不适配竖版剑气图。
-    """
-
-    SPEED = SWORD_BEAM_SPEED
-    HEAD_RADIUS = SWORD_BEAM_HEAD_RADIUS
-
-    def __init__(self, x, y, tx, ty, damage, game):
-        super().__init__()
-        self.game = game
-        self.x = float(x)
-        self.y = float(y)
-        dx, dy = tx - x, ty - y
-        dist = math.hypot(dx, dy) or 1.0
-        self.dx = dx / dist
-        self.dy = dy / dist
-        self.damage = damage
-        self.traveled = 0.0
-        self.max_distance = SWORD_BEAM_MAX_DIST
-        self.hit_enemies = set()          # 去重，保证同一敌人只掉一次血
-        self.damage_element = getattr(game, "damage_element", None)
-        # 连击倍率：首次命中时冻结，整条剑气共用一个值。
-        # 若每帧重读，剑气自己前面的命中会给后面的命中加伤，等于"边打边加"。
-        self.combo_mult = None
-
-        raw = assets.load_image("tower/terra_beam.png")
-        # 剑气的【凸面】在原图的右侧，要让凸面朝向飞行方向：
-        #   让局部向量 (1,0) 旋转后等于 (dx, dy)
-        #   解方程 x'=cos(a)=dx, y'=-sin(a)=dy  =>  a = atan2(-dy, dx)
-        # （pygame 正角为逆时针）。只在生成时转一次，之后只改 rect.center。
-        self.image = pygame.transform.rotate(
-            raw, math.degrees(math.atan2(-self.dy, self.dx)))
-        self.rect = self.image.get_rect(center=(int(x), int(y)))
-
-    def update(self):
-        self.x += self.dx * self.SPEED
-        self.y += self.dy * self.SPEED
-        self.traveled += self.SPEED
-        self.rect.center = (int(self.x), int(self.y))
-
-        if (self.traveled >= self.max_distance
-                or self.rect.right < -600 or self.rect.left > SCREEN_WIDTH + 600
-                or self.rect.bottom < -600 or self.rect.top > SCREEN_HEIGHT + 600):
-            self.kill()
-            return
-
-        col = int(self.x) // TILE_SIZE
-        row = int(self.y) // TILE_SIZE
-        grid = self.game.enemy_grid
-        prev = self.game.damage_element
-        self.game.damage_element = self.damage_element
-        hits = 0
-        try:
-            for dc in (-1, 0, 1):
-                for dr in (-1, 0, 1):
-                    for enemy in grid.get((col + dc, row + dr), ()):
-                        if enemy.health <= 0 or enemy in self.hit_enemies:
-                            continue
-                        # 只用弹头做圆判定：旋转后的 297x520 轴对齐包围盒太大，
-                        # 会把剑气两侧一大片空气也判成命中
-                        if math.hypot(enemy.rect.centerx - self.x,
-                                      enemy.rect.centery - self.y) <= self.HEAD_RADIUS:
-                            self.hit_enemies.add(enemy)
-                            if self.combo_mult is None:
-                                self.combo_mult = self.game.sword_combo_mult()
-                            dmg = max(1, int(self.damage * self.combo_mult))
-                            reward = enemy.take_damage(
-                                dmg, color=SWORD_DAMAGE_COLOR,
-                                scale=self.game.sword_text_scale(),
-                                element="sword")
-                            self.game.coins += reward
-                            hits += 1
-        finally:
-            self.game.damage_element = prev
-        self.game.register_sword_hits(hits)
-
 
 class IceStarBolt(pygame.sprite.Sprite):
     """神锅的冰系四芒星子弹：锁定单个目标飞行，命中后单体结算 + 永久冰系破甲。

@@ -25,15 +25,15 @@ def get_tower_info(game, tower):
     if tower.type == TowerType.PHYSICAL:
         if tower.level >= 11:
             if tower.physical_branch == 2:
-                info = [f"天堂陨落长弓 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"将当前金币的1%作为伤害加成", f"12方向散射", "按 R 切换分支"]
+                info = [f"天堂陨落长弓 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"金币1%作为伤害加成", f"12方向散射", "按 R 切换分支"]
             elif tower.physical_branch == 3:
                 info = [f"地狱升华之弩 Lv{tower.level}", "发射黑色射线", "随机秒杀一个敌人",
                         "对BOSS造成5%最大生命伤害", f"攻击间隔:{(19 - tower.level)}s", "按 R 切换分支"]
             else:
                 info = [f"时空撕裂之矢 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s",
-                        f"将当前金币的1%作为伤害加成", f"破甲:受伤永久增加20%", "按 R 切换分支"]
+                        f"金币1%作为伤害加成", f"破甲:受伤永久增加20%", "按 R 切换分支"]
         elif tower.level >= 6:
-            info = [f"黄金箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"将当前金币的1%作为伤害加成"]
+            info = [f"黄金箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"金币1%作为伤害加成"]
         else:
             info = [f"箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
     elif tower.type == TowerType.PRODUCTION:
@@ -62,7 +62,8 @@ def get_tower_info(game, tower):
             elif tower.ice_branch == 2:
                 ice_dmg = {11: 30, 12: 60, 13: 90, 14: 120, 15: 150}
                 info = [f"唤龙冰晶石 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
-                        f"2%召唤冰龙:{ice_dmg.get(tower.level,30)}倍|温度|+冰冻3s", f"攻击间隔:0.5s", "按R切换形态"]
+                        f"5%召唤冰龙:{ice_dmg.get(tower.level,30)}倍|温度|",
+                        "附加1%最大生命真实伤害", f"攻击间隔:0.5s", "按R切换形态"]
             elif tower.ice_branch == 3:
                 wall_duration = {11: 2, 12: 2.5, 13: 3, 14: 3.5, 15: 4}
                 info = [f"冰墙 Lv{tower.level}", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
@@ -113,7 +114,8 @@ def get_tower_info(game, tower):
             elif tower.flame_branch == 2:
                 fire_dmg = {11: 36, 12: 72, 13: 108, 14: 144, 15: 180}
                 info = [f"唤龙火晶石 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{burn_preview(game)}/s,持续4s",
-                        f"5%召唤火龙:{fire_dmg.get(tower.level,36)}倍|温度|+燃烧", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
+                        f"5%召唤火龙:{fire_dmg.get(tower.level,36)}倍|温度|",
+                        "附加2%最大生命真实伤害", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
             else:
                 dmg_mult = (tower.level - 10) * 10
                 info = [f"龙息 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{burn_preview(game)}/s,持续4s",
@@ -131,13 +133,14 @@ def get_tower_info(game, tower):
         if tower.level >= 11:
             if tower.trident_branch == 2:
                 info = [f"唤龙电晶石 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
-                        f"将当前金币的1%作为伤害加成", f"5%召唤电龙:{(tower.level-10)*50}倍|温度|+麻痹1s", f"攻击间隔:0.5s", "按 R 切换形态"]
+                        f"金币1%作为伤害加成", f"5%召唤电龙:{(tower.level-10)*50}倍|温度|",
+                        "附加3%最大生命真实伤害", f"攻击间隔:0.5s", "按 R 切换形态"]
             else:
                 info = [f"海渊裂空之戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
-                        f"将当前金币的1%作为伤害加成", f"攻击施放十字闪电", f"攻击间隔:0.5s", "按 R 切换形态"]
+                        f"金币1%作为伤害加成", f"攻击施放十字闪电", f"攻击间隔:0.5s", "按 R 切换形态"]
         elif tower.level >= 6:
             info = [f"黄金三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
-                    f"将当前金币的1%作为伤害加成", f"攻击间隔:0.5s"]
+                    f"金币1%作为伤害加成", f"攻击间隔:0.5s"]
         else:
             info = [f"三叉戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
                     f"攻击间隔:{tower.fire_rate / 60}s"]
@@ -242,37 +245,6 @@ def get_tower_info(game, tower):
                     extra, "按 R 切换分支", "攻击间隔:2s"]
         else:
             info = [f"TNT Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:2s"]
-    elif tower.type == TowerType.SWORD:
-        if tower.level >= 11:
-            if tower.sword_branch == 1:
-                info = [f"泰拉刃 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
-                        "整圆范围伤害", f"剑气:{tower.sword_beam_damage()} 无限穿透",
-                        "按 R 切换分支"]
-            else:
-                info = [f"狂星之怒 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
-                        "整圆范围伤害",
-                        f"星星:{tower.sword_star_damage()}x{SWORD_STAR_COUNT} 自动锁敌",
-                        "按 R 切换分支"]
-        elif tower.level >= 6:
-            poison = SWORD_POISON_BASE + SWORD_POISON_PER_LV * (tower.level - 6)
-            if tower.sword_branch == 1:
-                info = [f"星怒 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
-                        "整圆范围伤害", "附带天降星星", "按 R 切换分支"]
-            elif tower.sword_branch == 2:
-                info = [f"火山剑 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
-                        "整圆范围伤害", "命中燃烧15秒", "按 R 切换分支"]
-            else:
-                info = [f"草剑 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
-                        "整圆范围伤害", f"命中中毒{poison}层", "按 R 切换分支"]
-        else:
-            info = [f"铁剑 Lv{tower.level}", f"挥砍伤害:{tower.damage}",
-                    "整圆范围伤害", f"攻击间隔:{tower.fire_rate / 60}s"]
-        # 连击是全局共享的，所以只在有连击时补一行
-        if game.sword_combo > 0:
-            ct = (f"{SWORD_COMBO_CAP}+" if game.sword_combo > SWORD_COMBO_CAP
-                  else str(game.sword_combo))
-            info.append(f"连击:{ct}层 x"
-                        f"{stats.format_multiplier(game.sword_combo_mult())}")
     upgrade_str = "MAX" if tower.level >= 15 else str(tower.upgrade_cost)
     if tower.type == TowerType.BOMB and tower.is_nuclear:
         info.extend([f"升级:{upgrade_str}"])
@@ -402,11 +374,6 @@ class UIManager:
             explosion.draw(self.game.screen)
         for bee in self.game.bees:
             bee.draw(self.game.screen)
-        # 剑系：挥砍剑身与锁敌星星压在敌人之上，避免被怪挡住
-        for sweep in self.game.sword_sweeps:
-            sweep.draw(self.game.screen)
-        for star in self.game.stars:
-            star.draw(self.game.screen)
         # 「臻品呈现」大招冲击波：压在其它特效之上、伤害飘字之下，
         # 这样炸开的一瞬间数字是浮在光波上面的
         for wave_fx in self.game.masterpiece_shockwaves:
@@ -520,55 +487,9 @@ class UIManager:
         self.game.screen.blit(stats_label, (stats_btn.centerx - stats_label.get_width() // 2,
                                             stats_btn.centery - stats_label.get_height() // 2))
 
-        instructions = ["操作说明:", "0~9,X选择炮塔", "U升级 S出售", "R切换分支 E升5级", "ESC暂停"]
+        instructions = ["操作说明:", "0~9选择炮塔", "U升级 S出售", "R切换分支 E升5级", "ESC暂停"]
         for i, text in enumerate(instructions):
             self.game.screen.blit(assets.font_small.render(text, True, WHITE), (2156, 1144 + i * 48))
-
-        self.draw_sword_combo_hud()
-
-    def draw_sword_combo_hud(self):
-        """剑系连击 HUD：层数 + 倍率 + 2.5 秒维持进度条。
-
-        顶栏 x=780~1560 本来是空的，正好放这里。Herobrine 血条已挪到 y=86
-        （和最终 BOSS 血条同一行），不会打架。
-        """
-        combo = self.game.sword_combo
-        if combo <= 0:
-            return
-        screen = self.game.screen
-
-        # 层数封顶 999：超过就显示 999+（倍率也已在 999 层封顶）
-        if combo > SWORD_COMBO_CAP:
-            combo_text = f"{SWORD_COMBO_CAP}+"
-        else:
-            combo_text = str(combo)
-
-        if combo < 100:
-            color = SWORD_DAMAGE_COLOR
-            font = assets.font_medium
-        elif combo < 300:
-            color = (255, 170, 70)
-            font = assets.font_large
-        else:
-            color = (255, 110, 60)
-            font = assets.font_large
-
-        label = font.render(f"连击 {combo_text}", True, color)
-        screen.blit(label, (790, 2))
-
-        mult = self.game.sword_combo_mult()
-        mult_label = assets.font_medium.render(
-            f"x{stats.format_multiplier(mult)}", True, color)
-        screen.blit(mult_label, (790 + label.get_width() + 24, 6))
-
-        # 维持进度条：底槽 + 填充 + 描边（同 BOSS 读条写法）
-        ratio = max(0.0, self.game.sword_combo_timer / SWORD_COMBO_TIMEOUT)
-        bar = pygame.Rect(790, 62, 760, 12)
-        pygame.draw.rect(screen, (40, 30, 12), bar)
-        if ratio > 0:
-            pygame.draw.rect(screen, color,
-                             (bar.x, bar.y, int(bar.width * ratio), bar.height))
-        pygame.draw.rect(screen, (255, 240, 200), bar, 2)
 
     def get_enchant_icon_rects(self):
         rects = []
@@ -933,7 +854,9 @@ class UIManager:
         return pygame.Rect(STATS_BTN_X, STATS_BTN_Y, STATS_BTN_WIDTH, STATS_BTN_HEIGHT)
 
     def get_stats_panel_rect(self):
-        return pygame.Rect(580, 250, 1400, 1020)
+        # 高度跟着属性条数走：剑系删掉后只剩 7 行，写死 1020 会在底部空出一大块
+        height = 160 + len(stats.ELEMENTS) * 92 + 110
+        return pygame.Rect(580, (SCREEN_HEIGHT - height) // 2, 1400, height)
 
     def get_stats_close_rect(self):
         panel = self.get_stats_panel_rect()
@@ -1009,8 +932,7 @@ class UIManager:
     def draw_herobrine_health_bar(self):
         for enemy in self.game.enemies:
             if enemy.enemy_type == EnemyType.HEROBRINE:
-                # y=86 和最终 BOSS 血条同一行（两者永不共存：第 50 波 / 第 100 波），
-                # 顶栏 0~80 让给剑系连击 HUD
+                # y=86 和最终 BOSS 血条同一行（两者永不共存：第 50 波 / 第 100 波）
                 bar_x = 810
                 bar_y = 86
                 bar_width = 740

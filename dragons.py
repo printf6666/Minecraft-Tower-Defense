@@ -122,6 +122,7 @@ class Dragon(pygame.sprite.Sprite):
             color = ICE_BLUE
             reward = enemy.take_damage(damage, color=color, element="ice")
             self.game.coins += reward
+            self._deal_hp_pct_damage(enemy)
             enemy.apply_freeze(self.freeze_duration)
         elif self.dragon_type == "electric":
             damage = multiplier * abs(self.game.temperature)
@@ -129,6 +130,7 @@ class Dragon(pygame.sprite.Sprite):
             color = ELECTRIC_PURPLE
             reward = enemy.take_damage(damage, color=color, element="electric")
             self.game.coins += reward
+            self._deal_hp_pct_damage(enemy)
             enemy.apply_stun(self.stun_duration)
         else:
             damage = multiplier * abs(self.game.temperature)
@@ -136,7 +138,28 @@ class Dragon(pygame.sprite.Sprite):
             color = ORANGE
             reward = enemy.take_damage(damage, color=color, element="fire")
             self.game.coins += reward
+            self._deal_hp_pct_damage(enemy)
             enemy.apply_burn(self.game.temperature, self.burn_duration)
+
+    def _deal_hp_pct_damage(self, enemy):
+        """额外真实伤害：目标最大生命的 1% / 2% / 3%（冰 / 火 / 电）。
+
+        走 ignore_armor=True，所以护甲减免、破甲增伤、冰系破甲、元素附魔加成
+        全都不参与结算 —— 这一部分就是纯真实伤害。
+        龙族传说会把这一百分比再翻一倍。
+        """
+        pct = DRAGON_HP_PCT.get(self.dragon_type, 0.0)
+        if pct <= 0 or enemy.health <= 0:
+            return 0
+        if self.game.dragon_legend_active():
+            pct *= DRAGON_LEGEND_PCT_MULT
+        dmg = int(enemy.max_health * pct)
+        if dmg <= 0:
+            return 0
+        reward = enemy.take_damage(dmg, color=DRAGON_TRUE_DAMAGE_COLOR, scale=0.85,
+                                   ignore_armor=True, element=self.dragon_type)
+        self.game.coins += reward
+        return dmg
 
     def draw(self, screen):
         screen.blit(self.current_image, self.rect)
