@@ -8,6 +8,48 @@ from enemy import EnemyType
 from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash
 
 
+# ==========================================================================================
+#  商店卡片布局
+#  卡片高度必须按「最长的一条附魔描述」来算，否则像「余烬重生」这种 9 行的会被切掉。
+#  行数只在第一次用到时算一次并缓存（字体在 assets.init_assets() 之后才存在）。
+# ==========================================================================================
+SHOP_SLOT_W = 340
+SHOP_SLOT_GAP = 24
+SHOP_DESC_TOP = 250          # 描述文字相对卡片顶部的 y
+SHOP_LINE_H = 34             # 描述行距
+SHOP_DESC_PAD = 24           # 最后一行到卡片底边的留白
+SHOP_PANEL_W = 1200
+
+_shop_desc_lines = None
+
+
+def shop_desc_line_count():
+    global _shop_desc_lines
+    if _shop_desc_lines is None:
+        font = assets.font_tower_level
+        if font is None:
+            return 6                      # 字体还没加载，给个安全值
+        max_w = SHOP_SLOT_W - 40
+        longest = 1
+        for ench in ENCHANTMENT_ORDER:
+            text = ENCHANTMENT_DATA[ench]["desc"]
+            n = 1
+            line = ""
+            for ch in text:
+                if font.render(line + ch, True, (0, 0, 0)).get_width() > max_w:
+                    n += 1
+                    line = ch
+                else:
+                    line += ch
+            longest = max(longest, n)
+        _shop_desc_lines = longest
+    return _shop_desc_lines
+
+
+def shop_slot_height():
+    return SHOP_DESC_TOP + shop_desc_line_count() * SHOP_LINE_H + SHOP_DESC_PAD
+
+
 def burn_preview(game):
     """面板里的「燃烧 X/s」预览。
 
@@ -69,11 +111,13 @@ def get_tower_info(game, tower):
                 info = [f"冰墙 Lv{tower.level}", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
                         f"子弹经过的道路4%生成冰墙",
                         f"冰墙持续:{wall_duration.get(tower.level, 2)}s",
-                        f"每道冰墙降低5度温度", "阻挡地面怪物", "按R切换形态"]
+                        f"每道冰墙降低{ICE_WALL_TEMP_DROP}度温度", "阻挡地面怪物", "按R切换形态"]
             else:
-                bonus_pct = 300 * (tower.level - 10)
+                bomb_k = ICE_BOMB_TEMP_MULT.get(tower.level, 15)
+                bomb_dmg = tower.damage + bomb_k * abs(game.temperature)
                 info = [f"冰霜炸弹 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
-                        f"对冻结+{bonus_pct}%温度伤害", f"攻击间隔:0.5s", "按R切换形态"]
+                        f"AOE:{bomb_dmg} {tower.damage}+{bomb_k}*|温度|",
+                        f"攻击间隔:0.5s", "按R切换形态"]
         elif tower.level >= 6:
             info = [f"冰球 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
                     f"攻击间隔:0.5s"]
@@ -541,34 +585,41 @@ class UIManager:
             text = text[len(line):]
         return lines
 
+    def get_shop_panel_rect(self):
+        """面板高度 = 标题区 + 卡片 + 底部按钮区，跟着卡片高度走。"""
+        height = 110 + shop_slot_height() + 150
+        return pygame.Rect(SCREEN_WIDTH // 2 - SHOP_PANEL_W // 2,
+                           (SCREEN_HEIGHT - height) // 2,
+                           SHOP_PANEL_W, height)
+
     def get_shop_slots(self):
-        panel = pygame.Rect(SCREEN_WIDTH // 2 - 600, 150, 1200, 1150)
+        panel = self.get_shop_panel_rect()
         offers = self.game.shop_offers
         if not offers:
             return []
-        slot_w = 340
-        slot_h = 420
-        gap = 24
-        total_w = len(offers) * slot_w + (len(offers) - 1) * gap
+        slot_h = shop_slot_height()
+        total_w = len(offers) * SHOP_SLOT_W + (len(offers) - 1) * SHOP_SLOT_GAP
         start_x = panel.x + (panel.w - total_w) // 2
         y = panel.y + 110
-        return [(pygame.Rect(start_x + i * (slot_w + gap), y, slot_w, slot_h), ench)
+        return [(pygame.Rect(start_x + i * (SHOP_SLOT_W + SHOP_SLOT_GAP), y,
+                             SHOP_SLOT_W, slot_h), ench)
                 for i, ench in enumerate(offers)]
 
     def get_shop_continue_rect(self):
-        panel = pygame.Rect(SCREEN_WIDTH // 2 - 600, 150, 1200, 1150)
+        panel = self.get_shop_panel_rect()
         return pygame.Rect(panel.right - 260, panel.bottom - 90, 220, 60)
 
     def get_shop_refresh_rect(self):
-        panel = pygame.Rect(SCREEN_WIDTH // 2 - 600, 150, 1200, 1150)
-        return pygame.Rect(panel.x + 40, panel.bottom - 90, 220, 60)
+        # 「刷新 (20绿宝石)」用 font_small 量出来 289px，原来按钮只有 220px，字会溢出到框外
+        panel = self.get_shop_panel_rect()
+        return pygame.Rect(panel.x + 40, panel.bottom - 90, 320, 60)
 
     def draw_shop(self):
         pygame.mouse.set_visible(True)
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
         self.game.screen.blit(overlay, (0, 0))
-        panel = pygame.Rect(SCREEN_WIDTH // 2 - 600, 150, 1200, 1150)
+        panel = self.get_shop_panel_rect()
         pygame.draw.rect(self.game.screen, (45, 45, 45), panel)
         pygame.draw.rect(self.game.screen, WHITE, panel, 4)
         title = assets.font_large.render("流浪商人商店", True, WHITE)
@@ -602,7 +653,7 @@ class UIManager:
             desc_lines = self.wrap_text(ench_data["desc"], assets.font_tower_level, rect.width - 40)
             for li, line in enumerate(desc_lines):
                 desc_surf = assets.font_tower_level.render(line, True, (180, 180, 180))
-                self.game.screen.blit(desc_surf, (rect.centerx - desc_surf.get_width() // 2, rect.y + 250 + li * 34))
+                self.game.screen.blit(desc_surf, (rect.centerx - desc_surf.get_width() // 2, rect.y + SHOP_DESC_TOP + li * SHOP_LINE_H))
 
         if not self.game.shop_offers:
             empty_text = assets.font_medium.render("已拥有全部附魔", True, (200, 200, 200))
@@ -715,20 +766,42 @@ class UIManager:
         self.game.screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
         self.game.screen.blit(continue_text, (SCREEN_WIDTH // 2 - continue_text.get_width() // 2, SCREEN_HEIGHT // 2 + 20))
 
+    def get_gameover_restart_wave_rect(self):
+        return pygame.Rect(620, 850, 620, 80)
+
+    def get_gameover_restart_run_rect(self):
+        return pygame.Rect(1320, 850, 620, 80)
+
     def draw_game_over(self):
         pygame.mouse.set_visible(True)
         self.game.screen.fill(BLACK)
         text1 = assets.font_large.render("游戏结束!", True, RED)
         self.game.screen.blit(text1, (SCREEN_WIDTH // 2 - text1.get_width() // 2, 400))
-        # 与游戏内「重新开始」一致，需要连点两次（见 game.handle_events）
+
+        # 左：重来本波。只清场重打，不动存档也不动炮塔，所以单击即可
+        wave_rect = self.get_gameover_restart_wave_rect()
+        pygame.draw.rect(self.game.screen, (45, 95, 155), wave_rect)
+        pygame.draw.rect(self.game.screen, (140, 195, 255), wave_rect, 3)
+        wave_text = assets.font_medium.render("重新开始本波", True, WHITE)
+        self.game.screen.blit(wave_text, (wave_rect.centerx - wave_text.get_width() // 2,
+                                          wave_rect.centery - wave_text.get_height() // 2))
+
+        # 右：重来本局。会覆盖存档，沿用连点两次确认（见 game.handle_events）
         confirm_pending = getattr(self.game, "confirm_reset", 0) > 0
-        pygame.draw.rect(self.game.screen, (170, 40, 40) if confirm_pending else GREEN,
-                         (900, 850, 760, 80))
-        restart_label = "再点一次确认（会覆盖存档）" if confirm_pending else "重新开始"
-        restart_text = assets.font_medium.render(restart_label, True, WHITE)
-        self.game.screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, 855))
-        hint = assets.font_tower_level.render("按 TAB 查看伤害统计", True, (190, 190, 190))
-        self.game.screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 970))
+        run_rect = self.get_gameover_restart_run_rect()
+        pygame.draw.rect(self.game.screen, (170, 40, 40) if confirm_pending else GREEN, run_rect)
+        pygame.draw.rect(self.game.screen, (255, 150, 150) if confirm_pending else (170, 255, 170),
+                         run_rect, 3)
+        run_label = "再点一次确认" if confirm_pending else "重新开始本局"
+        run_text = assets.font_medium.render(run_label, True, WHITE)
+        self.game.screen.blit(run_text, (run_rect.centerx - run_text.get_width() // 2,
+                                         run_rect.centery - run_text.get_height() // 2))
+
+        hint = assets.font_small.render(
+            "本波重来保留炮塔、金币与附魔；本局重开会覆盖存档", True, (190, 190, 190))
+        self.game.screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 990))
+        hint2 = assets.font_small.render("按 TAB 查看伤害统计", True, (160, 160, 160))
+        self.game.screen.blit(hint2, (SCREEN_WIDTH // 2 - hint2.get_width() // 2, 1038))
 
     # ------------------------------------------------------------------ 最终BOSS HUD
 

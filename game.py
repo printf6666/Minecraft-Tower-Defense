@@ -361,11 +361,21 @@ class Game:
                         elif self.ui_manager.get_shop_refresh_rect().collidepoint(mouse_x, mouse_y):
                             self.refresh_shop()
 
-                    elif self.state in (GameState.GAME_OVER, GameState.VICTORY):
+                    elif self.state == GameState.GAME_OVER:
+                        if self.ui_manager.get_gameover_restart_wave_rect().collidepoint(mouse_x, mouse_y):
+                            # 本波重来不碰存档，单击即可
+                            self.restart_wave()
+                        elif self.ui_manager.get_gameover_restart_run_rect().collidepoint(mouse_x, mouse_y):
+                            # 本局重开会覆盖存档，仍然要二次确认（文案见 draw_game_over）
+                            if self.confirm_reset > 0:
+                                self.confirm_reset = 0
+                                self.reset_game()
+                            else:
+                                self.confirm_reset = CONFIRM_RESET_FRAMES
+
+                    elif self.state == GameState.VICTORY:
                         if 900 <= mouse_x <= 1660 and 850 <= mouse_y <= 930:
-                            # 结算页的「重新开始」同样要二次确认：
-                            # 这一下会覆盖存档，手滑的代价是整局白打。
-                            # 提示靠 draw_game_over 的按钮文案切换（见 ui.py）。
+                            # 通关页只有一个「重新开始」，同样二次确认
                             if self.confirm_reset > 0:
                                 self.confirm_reset = 0
                                 self.reset_game()
@@ -1991,6 +2001,61 @@ class Game:
         self.pending_first_wave_weather = True
         self.weather_banner_text = "准备时间"
         self.weather_banner_timer = 240
+
+    def restart_wave(self):
+        """从本波开头重来：炮塔 / 金币 / 附魔 / 温度全部保留，只把这一波清场重打。
+
+        和 reset_game 的区别是「不碰存档、不碰炮塔」，所以只需要清掉场上的敌人、
+        子弹和一次性特效，再把 wave_manager 的生成进度归零 —— 不调用 start_new_wave，
+        波数保持不变，同一波从头再打一遍。
+        """
+        self.enemies.empty()
+        self.bullets.empty()
+        self.dragons.empty()
+        self.damage_texts.empty()
+
+        for attr in ("dragon_breath_pools", "lightning_effects", "wind_explosions",
+                     "endless_greed_explosions", "ice_explosions", "hell_rays",
+                     "resonance_storms", "poison_splashes", "wither_splashes",
+                     "horizontal_lightning_effects", "tnt_explosions",
+                     "mushroom_explosions", "shockwave_effects", "meteors", "bees",
+                     "crystals", "lantern_shockwaves", "stars", "ice_star_bursts",
+                     "masterpiece_shockwaves", "weather_particles",
+                     "command_blocks", "ice_walls"):
+            getattr(self, attr, []).clear()
+
+        # 第 50 / 100 波死亡重来时，BOSS 相关状态必须一起复位，否则不会重新召唤
+        self._init_boss_state()
+        self.herobrine = None
+        self.herobrine_spawned = False
+        self.herobrine_summon_timer = 0
+        self.herobrine_phase = 0
+        self.herobrine_summon_queue = []
+
+        self.bee_spawn_remaining = 0
+        self.bee_spawn_timer = 0
+        self.thunderstorm_timer = 0
+        self.fog_timer = 0
+        self.fog_visible = False
+        self.night_dark_timer = 0
+        self.enemy_grid = {}
+        self._lantern_towers = 0
+        self.ultimate_video = None
+        self.masterpiece_pending = False
+
+        # 本波从头再打：只把生成进度归零，波数不变
+        wm = self.wave_manager
+        wm.enemies_spawned = 0
+        wm.gold_armored_spawned = 0
+        wm.ghost_spawned = 0
+        wm.spawn_timer = 0
+        wm.wave_timer = 0
+
+        self.state = GameState.PLAYING
+        self.stats_open = False
+        self.confirm_reset = 0
+        self.selected_tower = None
+        self.weather_banner_timer = 0
 
     def reset_game(self):
         # 存档不删除，改成改名备份：.bak 会被下一次 save_game 覆盖，

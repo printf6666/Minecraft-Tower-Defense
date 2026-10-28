@@ -603,7 +603,7 @@ class IceWall:
         self.duration = 0
         self.rect = pygame.Rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
         self.image = assets.ice_wall_img
-        game.temperature -= 5
+        game.temperature -= ICE_WALL_TEMP_DROP
 
     def update(self):
         self.timer += 1

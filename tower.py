@@ -872,11 +872,6 @@ class Bullet(pygame.sprite.Sprite):
         if self.damage_element is not None:
             self.game.damage_element = self.damage_element
         final_dmg = self.calculate_final_damage()
-        mult = self.game.get_enchant_damage_multiplier(self.tower_type)
-
-        if self.tower_type == TowerType.ICE and self.tower_level >= 11 and self.ice_branch == 1 and enemy.freeze_time > 0:
-            bonus = int(abs(self.game.temperature) * 3 * (self.tower_level - 10))
-            final_dmg += int(bonus * mult)
 
         if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11 and self.teleport_branch == 1:
             hp_ratios = {11: 0.004, 12: 0.008, 13: 0.012, 14: 0.016, 15: 0.02}
@@ -913,8 +908,10 @@ class Bullet(pygame.sprite.Sprite):
                 freeze_frames_for_exp = freeze_frames
                 if self.freeze_time <= 0:
                     freeze_frames_for_exp = 60
+                # 冰霜炸弹的伤害全部走这次 AOE：基础攻击力 + 3/6/9/12/15 * |温度|
+                bomb_dmg = self.damage + ICE_BOMB_TEMP_MULT.get(self.tower_level, 15) * abs(self.game.temperature)
                 exp = IceExplosion(enemy.rect.centerx, enemy.rect.centery,
-                                   int(self.damage * self.game.get_element_damage_multiplier("ice")),
+                                   max(1, int(bomb_dmg * self.game.get_element_damage_multiplier("ice"))),
                                    freeze_frames_for_exp, self.game)
                 if self.source_tower is not None:
                     self.source_tower.ice_explosion_visual += 1
