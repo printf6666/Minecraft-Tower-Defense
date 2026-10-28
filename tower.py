@@ -24,7 +24,7 @@ MAX_BRANCH = {
     TowerType.SHIELD:     {1: 1, 2: 1, 3: 3},
     TowerType.PHYSICAL:   {1: 1, 2: 1, 3: 3},
     TowerType.PRODUCTION: {1: 1, 2: 1, 3: 1},
-    TowerType.ICE:        {1: 1, 2: 1, 3: 3},
+    TowerType.ICE:        {1: 1, 2: 1, 3: 4},
     TowerType.TELEPORT:   {1: 2, 2: 2, 3: 2},
     TowerType.FLAME:      {1: 1, 2: 1, 3: 3},
     TowerType.TRIDENT:    {1: 1, 2: 1, 3: 2},
@@ -283,7 +283,7 @@ class Tower(pygame.sprite.Sprite):
                 self.range = 0
                 self.fire_rate = 35 * 60
 
-        if self.type in (TowerType.FLAME, TowerType.SWORD):
+        if self.type in (TowerType.FLAME, TowerType.SWORD, TowerType.ICE):
             self.recalculate_stats()
 
         self.update_sprite()
@@ -294,6 +294,9 @@ class Tower(pygame.sprite.Sprite):
             return
         if self.type == TowerType.SWORD:
             self._recalc_sword()
+            return
+        if self.type == TowerType.ICE:
+            self._recalc_ice()
             return
         if self.type != TowerType.TELEPORT:
             return
@@ -327,6 +330,36 @@ class Tower(pygame.sprite.Sprite):
         """星焰提灯：火系 Lv11+ 分支 3。"""
         return (self.type == TowerType.FLAME and self.level >= 11
                 and self.flame_branch == 3)
+
+    def is_holy_pot(self):
+        """神锅：冰系 Lv11+ 分支 4（射程全屏、随机单体、附带永久冰系破甲）。"""
+        return (self.type == TowerType.ICE and self.level >= 11
+                and self.ice_branch == HOLY_POT_BRANCH)
+
+    def _recalc_ice(self):
+        """冰系数值按等级整体重算；分支 4（神锅）走独立数值表。
+
+        神锅的伤害随温度变化，self.damage 只存「基础值」，
+        真正结算时用 holy_pot_damage() 现算（温度每帧都可能变）。
+        """
+        lv = self.level
+        self.damage = 5 + 5 * (lv - 1)
+        self.range = TILE_SIZE * 1.5 + (lv - 1) * (TILE_SIZE // 4)
+        self.fire_rate = max(30, 60 - (lv - 1) * 6)
+        self.freeze_time = round(0.1 * max(0, lv - 5), 1) if lv >= 6 else 0
+        if self.is_holy_pot():
+            # 全屏射程：取整张地图的对角线，保证任何位置都算在范围内
+            self.range = int(math.hypot(GRID_WIDTH * TILE_SIZE, GRID_HEIGHT * TILE_SIZE))
+            self.fire_rate = HOLY_POT_FIRE_RATE
+            self.freeze_time = 0          # 神锅本体不冻结，控场交给大招
+            self.damage = HOLY_POT_DAMAGE_BASE.get(lv, 500)
+
+    def holy_pot_damage(self):
+        """神锅单次攻击伤害 = (基础值 + 系数 * |温度|) * 冰系伤害加成。"""
+        lv = self.level
+        raw = (HOLY_POT_DAMAGE_BASE.get(lv, 500)
+               + HOLY_POT_DAMAGE_TEMP.get(lv, 10) * abs(self.game.temperature))
+        return max(1, int(raw * self.game.get_enchant_damage_multiplier(TowerType.ICE)))
 
     def _recalc_sword(self):
         """剑系数值按等级整体重算（挥砍本体）。三阶两种弹幕的伤害另算。"""
@@ -444,6 +477,9 @@ class Tower(pygame.sprite.Sprite):
 
         if self.is_lantern():
             return self._lantern_attack()
+
+        if self.is_holy_pot():
+            return self._holy_pot_attack()
 
         check_range = self.get_effective_range() + TILE_SIZE // 2
 
@@ -618,6 +654,28 @@ class Tower(pygame.sprite.Sprite):
             enemy.apply_burn(self.game.temperature, LANTERN_BURN_FRAMES)
         return []
 
+    def _holy_pot_attack(self):
+        """神锅：向全场随机 1 名敌人发射一枚冰系四芒星，命中后单体结算。
+
+        不走常规的九宫格射程检测 —— 射程就是全屏，直接在全场活着的敌人里抽一个。
+        """
+        alive = [e for e in self.game.enemies if e.health > 0]
+        if not alive:
+            return []
+        target = random.choice(alive)
+        bolt = IceStarBolt(self.rect.centerx, self.rect.centery, target,
+                           self.holy_pot_damage(), self.game)
+        # 「臻品呈现」：场上所有神锅共用同一个计数，凑满 MASTERPIECE_ATTACKS 次就放大招。
+        # 这里刻意对齐雷神之锤的 resonance_counter —— 按塔各算各的话，
+        # 一座锅要自己打满 120 次（1 秒 1 发 = 2 分钟）才有反应，铺了 9 座也还是 2 分钟，
+        # 体感就是「打了半天无事发生」。
+        if Enchantment.MASTERPIECE in self.game.enchantments:
+            self.game.masterpiece_counter += 1
+            if self.game.masterpiece_counter >= MASTERPIECE_ATTACKS:
+                self.game.masterpiece_counter = 0
+                self.game.trigger_masterpiece_ultimate()
+        return [bolt]
+
     # ------------------------------------------------------------ 剑系
     def _remaining_to_end(self, e):
         """敌人距离终点的剩余路程（越小越靠近终点）。
@@ -769,6 +827,9 @@ class Tower(pygame.sprite.Sprite):
             rect = pygame.Rect(0, 0, side, side)
             rect.center = (cx, cy)
             pygame.draw.rect(surface, (255, 255, 255, 50), rect, 2)
+        elif self.is_holy_pot():
+            # 射程就是全屏，画圆没意义（半径比屏幕还大），直接不画
+            return
         elif self.type != TowerType.PRODUCTION and not (self.type == TowerType.BOMB and self.is_nuclear):
             pygame.draw.circle(surface, (255, 255, 255, 50), self.rect.center, self.get_effective_range(), 2)
 
@@ -1407,3 +1468,79 @@ class TerraBeam(pygame.sprite.Sprite):
         finally:
             self.game.damage_element = prev
         self.game.register_sword_hits(hits)
+
+
+class IceStarBolt(pygame.sprite.Sprite):
+    """神锅的冰系四芒星子弹：锁定单个目标飞行，命中后单体结算 + 永久冰系破甲。
+
+    为什么不继承 Bullet：Bullet 是「给定方向直线飞行 + 射程耗尽自灭」的模型，
+    而这里要的是追踪单个敌人、命中即结算，两者除了都用贴图之外没有共性。
+    """
+
+    MAX_LIFE = 300          # 5 秒还没命中就自毁，避免目标反复消失时子弹乱飞
+
+    def __init__(self, x, y, target, damage, game):
+        super().__init__()
+        self.game = game
+        self.x = float(x)
+        self.y = float(y)
+        self.target = target
+        self.damage = damage
+        self.speed = HOLY_POT_BOLT_SPEED
+        self.spin = 0.0
+        self.life = 0
+        self.raw = assets.ice_star_img
+        self.image = self.raw
+        self.rect = self.image.get_rect(center=(int(x), int(y)))
+
+    def _retarget(self):
+        """原目标死了就改打最近的活敌人；一个都没有就返回 None。"""
+        best, best_d = None, None
+        for e in self.game.enemies:
+            if e.health <= 0 or not e.alive():
+                continue
+            d = (e.rect.centerx - self.x) ** 2 + (e.rect.centery - self.y) ** 2
+            if best_d is None or d < best_d:
+                best, best_d = e, d
+        return best
+
+    def update(self):
+        self.life += 1
+        if self.life > self.MAX_LIFE:
+            self.kill()
+            return
+
+        target = self.target
+        if target is None or target.health <= 0 or not target.alive():
+            target = self._retarget()
+            self.target = target
+        if target is None:
+            self.kill()
+            return
+
+        tx, ty = target.rect.center
+        dx = tx - self.x
+        dy = ty - self.y
+        dist = math.hypot(dx, dy)
+        if dist <= self.speed + 10:
+            self._hit(target)
+            return
+
+        self.x += dx / dist * self.speed
+        self.y += dy / dist * self.speed
+        self.spin = (self.spin + HOLY_POT_BOLT_SPIN) % 360
+        self.image = pygame.transform.rotate(self.raw, self.spin)
+        self.rect = self.image.get_rect(center=(int(self.x), int(self.y)))
+
+    def _hit(self, enemy):
+        prev_element = self.game.damage_element
+        self.game.damage_element = "ice"
+        try:
+            reward = enemy.take_damage(self.damage, color=ICE_BLUE, scale=1.2,
+                                       element="ice")
+            self.game.coins += reward
+            enemy.apply_ice_broken()
+            self.game.add_ice_star_burst(enemy.rect.centerx, enemy.rect.centery)
+        finally:
+            self.game.damage_element = prev_element
+        self.kill()

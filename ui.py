@@ -8,6 +8,17 @@ from enemy import EnemyType
 from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash
 
 
+def burn_preview(game):
+    """面板里的「燃烧 X/s」预览。
+
+    温度 <= 0 时火系根本点不着（apply_burn 直接 return），
+    直接拿温度去算会显示成负数，看着像在倒扣血，所以这里按 0 显示。
+    """
+    if game.temperature <= 0:
+        return 0
+    return game.burn_tick_damage(game.temperature)
+
+
 def get_tower_info(game, tower):
     base_cost_map = {ttype: cost for ttype, name, cost, key in TOWER_DATA}
     info = []
@@ -36,10 +47,22 @@ def get_tower_info(game, tower):
             info = [f"金矿 Lv{tower.level}", f"全局产量:{game.gold_per_second}/s", "放置在金矿石上时产出+100%"]
     elif tower.type == TowerType.ICE:
         if tower.level >= 11:
-            if tower.ice_branch == 2:
+            if tower.ice_branch == HOLY_POT_BRANCH:
+                base = HOLY_POT_DAMAGE_BASE.get(tower.level, 500)
+                per = HOLY_POT_DAMAGE_TEMP.get(tower.level, 10)
+                info = [f"神锅 Lv{tower.level}",
+                        f"伤害:{tower.holy_pot_damage()}",
+                        f"公式:{base}+{per}*温度",
+                        f"攻击间隔:{HOLY_POT_FIRE_RATE / 60}s 射程:全屏",
+                        "随机1名敌人 单体伤害",
+                        "命中永久冰系破甲+100%",
+                        "按R切换形态"]
+                if Enchantment.MASTERPIECE in game.enchantments:
+                    info.append(f"大招:{game.masterpiece_counter}/{MASTERPIECE_ATTACKS}")
+            elif tower.ice_branch == 2:
                 ice_dmg = {11: 30, 12: 60, 13: 90, 14: 120, 15: 150}
                 info = [f"唤龙冰晶石 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
-                        f"2%召唤冰龙:{ice_dmg.get(tower.level,30)}倍温度+冰冻3s", f"攻击间隔:0.5s", "按R切换形态"]
+                        f"2%召唤冰龙:{ice_dmg.get(tower.level,30)}倍|温度|+冰冻3s", f"攻击间隔:0.5s", "按R切换形态"]
             elif tower.ice_branch == 3:
                 wall_duration = {11: 2, 12: 2.5, 13: 3, 14: 3.5, 15: 4}
                 info = [f"冰墙 Lv{tower.level}", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
@@ -82,33 +105,33 @@ def get_tower_info(game, tower):
         if tower.level >= 11:
             if tower.flame_branch == 3:
                 info = [f"星焰提灯 Lv{tower.level}", f"伤害:{tower.lantern_damage()}",
-                        f"燃烧:{game.burn_tick_damage(game.temperature)}/s,持续4s",
+                        f"燃烧:{burn_preview(game)}/s,持续4s",
                         f"范围:{LANTERN_RANGE_TILES.get(tower.level, 3.5)}格",
                         "冲击波:范围内全体敌人",
                         f"攻击间隔:{LANTERN_FIRE_RATE / 60}s 迷雾照明",
                         "按 R 切换形态"]
             elif tower.flame_branch == 2:
                 fire_dmg = {11: 36, 12: 72, 13: 108, 14: 144, 15: 180}
-                info = [f"唤龙火晶石 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.burn_tick_damage(game.temperature)}/s,持续4s",
-                        f"5%召唤火龙:{fire_dmg.get(tower.level,36)}倍温度+燃烧", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
+                info = [f"唤龙火晶石 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{burn_preview(game)}/s,持续4s",
+                        f"5%召唤火龙:{fire_dmg.get(tower.level,36)}倍|温度|+燃烧", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
             else:
                 dmg_mult = (tower.level - 10) * 10
-                info = [f"龙息 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.burn_tick_damage(game.temperature)}/s,持续4s",
-                        f"龙息:{dmg_mult}倍温度/s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
+                info = [f"龙息 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{burn_preview(game)}/s,持续4s",
+                        f"龙息:{dmg_mult}倍|温度|/s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
                 if Enchantment.EMBER_REBIRTH in game.enchantments and tower.level == 15:
                     cost = 50000 * (2 ** game.sacrifices)
                     info.append(f"Q 献祭:{cost}金币")
         elif tower.level >= 6:
-            info = [f"火球 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.burn_tick_damage(game.temperature)}/s,持续4s",
+            info = [f"火球 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{burn_preview(game)}/s,持续4s",
                     f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
         else:
-            info = [f"火焰弹 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{game.burn_tick_damage(game.temperature)}/s,持续4s",
+            info = [f"火焰弹 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{burn_preview(game)}/s,持续4s",
                     f"攻击间隔:{tower.fire_rate / 60}s"]
     elif tower.type == TowerType.TRIDENT:
         if tower.level >= 11:
             if tower.trident_branch == 2:
                 info = [f"唤龙电晶石 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
-                        f"将当前金币的1%作为伤害加成", f"5%召唤电龙:{(tower.level-10)*50}倍温度+麻痹1s", f"攻击间隔:0.5s", "按 R 切换形态"]
+                        f"将当前金币的1%作为伤害加成", f"5%召唤电龙:{(tower.level-10)*50}倍|温度|+麻痹1s", f"攻击间隔:0.5s", "按 R 切换形态"]
             else:
                 info = [f"海渊裂空之戟 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
                         f"将当前金币的1%作为伤害加成", f"攻击施放十字闪电", f"攻击间隔:0.5s", "按 R 切换形态"]
@@ -195,8 +218,9 @@ def get_tower_info(game, tower):
                         f"击晕:2s", f"凋零:10s",
                         f"射程:全屏", f"攻击间隔:35s", "按 R 切换形态"]
             else:
-                dmg = (40000 + 400 * game.temperature) * (tower.level - 10)
-                info = [f"核弹 Lv{tower.level}", f"伤害:{dmg}(受温度影响)",
+                # 与实际结算保持一致：伤害吃 |温度|，高温低温都增伤
+                dmg = max(1, (40000 + 400 * abs(game.temperature)) * (tower.level - 10))
+                info = [f"核弹 Lv{tower.level}", f"伤害:{dmg}(|温度|)",
                         f"击晕:2s", f"中毒:{tower.level * 10}层",
                         f"射程:全屏", f"攻击间隔:35s", "按 R 切换形态"]
         elif tower.level >= 6:
@@ -253,6 +277,9 @@ def get_tower_info(game, tower):
     if tower.type == TowerType.BOMB and tower.is_nuclear:
         info.extend([f"升级:{upgrade_str}"])
     elif tower.type == TowerType.SHIELD:
+        info.extend([f"升级:{upgrade_str}"])
+    elif getattr(tower, "is_holy_pot", None) and tower.is_holy_pot():
+        # 射程是全屏，信息里已经写了，不用再显示「射程:18.9」这种没意义的数字
         info.extend([f"升级:{upgrade_str}"])
     else:
         info.extend([f"射程:{round(tower.get_effective_range() / TILE_SIZE, 1)}", f"升级:{upgrade_str}"])
@@ -349,6 +376,8 @@ class UIManager:
             explosion.draw(self.game.screen)
         for exp in self.game.ice_explosions:
             exp.draw(self.game.screen)
+        for burst in self.game.ice_star_bursts:
+            burst.draw(self.game.screen)
         for wave_fx in self.game.lantern_shockwaves:
             wave_fx.draw(self.game.screen)
         for ray in self.game.hell_rays:
@@ -378,12 +407,23 @@ class UIManager:
             sweep.draw(self.game.screen)
         for star in self.game.stars:
             star.draw(self.game.screen)
+        # 「臻品呈现」大招冲击波：压在其它特效之上、伤害飘字之下，
+        # 这样炸开的一瞬间数字是浮在光波上面的
+        for wave_fx in self.game.masterpiece_shockwaves:
+            wave_fx.draw(self.game.screen)
         self.game.damage_texts.draw(self.game.screen)
 
         self.draw_boss_screen_fx()
         self.draw_ui()
         self.draw_boss_hud()
         self.draw_herobrine_health_bar()
+
+        # 「臻品呈现」大招动画：盖住整个界面（含塔信息、金币条），
+        # 但暂停遮罩要压在它上面，否则暂停时看到的是被冻住的一帧视频。
+        video_active = self.game.ultimate_video is not None
+        if video_active:
+            self.game.ultimate_video.draw(self.game.screen)
+
         if self.game.state == GameState.PAUSED:
             self.draw_pause_overlay()
 
@@ -391,7 +431,7 @@ class UIManager:
             Enchantment.INFINITY_GAUNTLET in self.game.enchantments
             and self.game.state in (GameState.PLAYING, GameState.WAVE_PREPARATION, GameState.PAUSED)
         )
-        pygame.mouse.set_visible(not gauntlet_cursor)
+        pygame.mouse.set_visible(not (gauntlet_cursor or video_active))
         if gauntlet_cursor:
             icon = assets.enchantment_icons_raw.get(Enchantment.INFINITY_GAUNTLET)
             if icon:
@@ -440,9 +480,12 @@ class UIManager:
                          (INFO_BORDER_X, INFO_BORDER_Y, INFO_BORDER_SIZE, INFO_BORDER_SIZE), INFO_BORDER_WIDTH)
         if self.game.selected_tower:
             infos = get_tower_info(self.game, self.game.selected_tower)
+            # 行距 40：font_small 的实际字高是 37px，原来的 32px 会让相邻两行
+            # 叠在一起（三阶分支信息一多就糊成一片）。40px 下最多 11 行也只到
+            # y=457，仍在外框 512px 之内。
             for i, info in enumerate(infos):
                 self.game.screen.blit(assets.font_small.render(info, True, WHITE),
-                                     (INFO_BORDER_X + 20, INFO_BORDER_Y + 20 + i * 32))
+                                     (INFO_BORDER_X + 20, INFO_BORDER_Y + 20 + i * 40))
         pygame.draw.rect(self.game.screen, INFO_BORDER_COLOR,
                          (INFO_BORDER_X, ENCHANT_BOX_Y, ENCHANT_BOX_WIDTH, ENCHANT_BOX_HEIGHT), INFO_BORDER_WIDTH)
         for rect, ench, cnt in self.get_enchant_icon_rects():

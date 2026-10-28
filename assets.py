@@ -92,6 +92,7 @@ command_block_img = None
 ice_wall_img = None
 bee_img = None
 unstable_crystal_img = None
+ice_star_img = None          # 神锅的冰系四芒星子弹
 
 ice_dragon_img = None
 fire_dragon_img = None
@@ -211,6 +212,7 @@ def init_assets():
     buff_icons["burn"] = load_image("debuff/burn.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["slow"] = load_image("debuff/slow.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["broken"] = load_image("debuff/broken.png", (BUFF_SIZE, BUFF_SIZE))
+    buff_icons["ice_broken"] = load_image("debuff/ice_broken.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["poison"] = load_image("debuff/poison.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["wind"] = load_image("debuff/wind.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["speed"] = load_image("debuff/speed.png", (BUFF_SIZE, BUFF_SIZE))
@@ -336,6 +338,16 @@ def init_assets():
         unstable_crystal_img = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
         pygame.draw.rect(unstable_crystal_img, (178, 0, 255),
                          (16, 16, TILE_SIZE - 32, TILE_SIZE - 32))
+
+    global ice_star_img
+    try:
+        # 素材本身就是 96x96（32 像素原稿的 3 倍整数放大），不再二次缩放，保住像素边
+        ice_star_img = load_image("tower/ice_star.png")
+    except:
+        ice_star_img = pygame.Surface((HOLY_POT_BOLT_SIZE, HOLY_POT_BOLT_SIZE), pygame.SRCALPHA)
+        pygame.draw.polygon(ice_star_img, (150, 220, 255), [
+            (HOLY_POT_BOLT_SIZE // 2, 0), (HOLY_POT_BOLT_SIZE, HOLY_POT_BOLT_SIZE // 2),
+            (HOLY_POT_BOLT_SIZE // 2, HOLY_POT_BOLT_SIZE), (0, HOLY_POT_BOLT_SIZE // 2)])
 
     global ice_dragon_img, fire_dragon_img, electric_dragon_img
     try:

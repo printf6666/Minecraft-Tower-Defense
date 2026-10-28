@@ -45,6 +45,7 @@ class Enemy(pygame.sprite.Sprite):
         self.burn_time = 0
         self.burn_damage = 0
         self.broken = False
+        self.ice_broken = False
         self.wind_mark_tower = None
         self.contaminated = False
         self.contaminated_timer = 0
@@ -158,6 +159,14 @@ class Enemy(pygame.sprite.Sprite):
         if duration > self.wither_time:
             self.wither_time = duration
             self.wither_timer = 0
+
+    def apply_ice_broken(self):
+        """冰系破甲：永久生效，受到的冰系伤害 +100%。
+
+        和普通破甲（broken）不同，这个只对冰系伤害生效，且不解除护甲减免，
+        而是在 take_damage 的护甲乘区里再乘一次 ICE_BROKEN_MULT。
+        """
+        self.ice_broken = True
 
     def on_lightning_hit(self):
         if self.enemy_type == EnemyType.CREEPER and not self.charged:
@@ -325,6 +334,8 @@ class Enemy(pygame.sprite.Sprite):
         buff_list = []
         if self.broken:
             buff_list.append("broken")
+        if self.ice_broken:
+            buff_list.append("ice_broken")
         if self.slow_time > 0 or self.weather_slowed:
             buff_list.append("slow")
         if self.burn_time > 0:
@@ -382,7 +393,8 @@ class Enemy(pygame.sprite.Sprite):
                     break
         self.rect.center = (self.pos_x, self.pos_y)
 
-    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, element=None):
+    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, element=None,
+                    text_speed_x=0.0):
         if self.health <= 0:
             return 0
 
@@ -400,11 +412,15 @@ class Enemy(pygame.sprite.Sprite):
                 final_dmg *= 0.1
             if self.broken:
                 final_dmg *= 1.2
+            # 冰系破甲：和上面几条在同一个乘区（先护甲减免、再破甲增伤、再冰系破甲）
+            if self.ice_broken and (element or getattr(self.game, "damage_element", None)) == "ice":
+                final_dmg *= ICE_BROKEN_MULT
         final_dmg = int(final_dmg)
         self.health -= final_dmg
 
         if self.game:
-            self.game.spawn_damage_text(final_dmg, self.rect.center, color=color, scale=scale)
+            self.game.spawn_damage_text(final_dmg, self.rect.center, color=color, scale=scale,
+                                        speed_x=text_speed_x)
             if final_dmg > 0 and getattr(self.game, "damage_stats", None) is not None:
                 elem = element or getattr(self.game, "damage_element", None)
                 self.game.damage_stats.add(elem, final_dmg)

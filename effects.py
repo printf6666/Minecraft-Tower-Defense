@@ -191,7 +191,9 @@ class DragonBreathPool:
         self.radius = 128
         self.duration = 10
         dmg_mult = (tower_level - 10) * 10
-        dmg = int(temperature * dmg_mult * game.get_element_damage_multiplier("fire"))
+        # 取绝对值：高温、低温都能打出伤害。火系塔每级 +1 温度，玩低温流会丢掉燃烧
+        # 和一堆火系附魔，这里只是让「强行压低温度」不再变成给敌人回血 / 零伤害。
+        dmg = max(1, int(abs(temperature) * dmg_mult * game.get_element_damage_multiplier("fire")))
         for enemy in game.enemies:
             if enemy.health <= 0:
                 continue
@@ -411,8 +413,10 @@ class MushroomExplosion:
             assets.explode_sound.play()
 
         if bomb_branch == 1:
-            final_damage = (40000 + 400 * game.temperature) * (tower_level - 10)
+            # 同样取绝对值：高温增伤、低温也增伤，避免极寒时伤害变成负数给敌人回血
+            final_damage = (40000 + 400 * abs(game.temperature)) * (tower_level - 10)
             final_damage = int(final_damage * game.get_enchant_damage_multiplier(TowerType.BOMB))
+            final_damage = max(1, final_damage)
             for enemy in game.enemies:
                 if enemy.health <= 0:
                     continue
@@ -599,7 +603,7 @@ class IceWall:
         self.duration = 0
         self.rect = pygame.Rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
         self.image = assets.ice_wall_img
-        game.temperature = max(-273, game.temperature - 5)
+        game.temperature -= 5
 
     def update(self):
         self.timer += 1
@@ -968,3 +972,132 @@ class StarWrath:
             self._img = pygame.transform.rotate(self.raw, q)
             self._img_angle = q
         screen.blit(self._img, self._img.get_rect(center=(int(self.x), int(self.y))))
+
+
+class IceStarBurst:
+    """神锅四芒星命中的小爆点：一圈冰蓝光环 + 四道向外射出的尖刺。
+
+    刻意做得很轻：神锅 1 秒一发，如果照 IceExplosion 那种量级，
+    铺两三座锅之后满屏都是爆炸，反而看不清弹道。
+    """
+
+    DURATION = 16
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.timer = 0
+        self.done = False
+
+    def update(self):
+        self.timer += 1
+        if self.timer >= self.DURATION:
+            self.done = True
+        return not self.done
+
+    def draw(self, screen):
+        if self.done:
+            return
+        t = self.timer / self.DURATION
+        fade = 1.0 - t
+        radius = int(10 + 46 * t)
+        alpha = int(235 * fade)
+        surf = pygame.Surface((radius * 2 + 8, radius * 2 + 8), pygame.SRCALPHA)
+        c = radius + 4
+        # 冷色光晕（偏饱和的冰蓝，压在石砖背景上才看得见）
+        pygame.draw.circle(surf, (70, 170, 255, int(alpha * 0.45)), (c, c), radius)
+        pygame.draw.circle(surf, (170, 230, 255, int(alpha * 0.55)), (c, c),
+                           max(1, int(radius * 0.55)))
+        # 光环
+        pygame.draw.circle(surf, (120, 210, 255, alpha), (c, c), radius,
+                           max(1, int(5 * fade) + 1))
+        # 四道尖刺（和四芒星的朝向一致）
+        length = int(radius * 1.35)
+        for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+            pygame.draw.line(surf, (225, 248, 255, alpha),
+                             (c + dx * radius * 0.4, c + dy * radius * 0.4),
+                             (c + dx * length, c + dy * length),
+                             max(1, int(4 * fade) + 1))
+        # 命中瞬间的中心闪白
+        if t < 0.35:
+            core = max(2, int(16 * (1 - t / 0.35)))
+            pygame.draw.circle(surf, (255, 255, 255, 220), (c, c), core)
+        screen.blit(surf, (self.x - c, self.y - c))
+
+
+class MasterpieceShockwave:
+    """「臻品呈现」大招落地时的全屏冲击波。
+
+    节奏是「先放视频 → 放完从地图中心炸一下 → 炸的同时冒伤害飘字」。
+    所以这个特效必须够大够亮：半径直接取到能覆盖屏幕四角，
+    否则铺了 9 座锅、伤害数字又被别的东西糊住，玩家根本看不出是哪一下打出来的。
+
+    实现上不画「半径大小的圆」再 blit —— 最大半径 1700+ 时那张 SRCALPHA 图要 46MB。
+    这里改成一块屏幕大小的画布（16MB，实例内复用），圆心画到画布外也没关系，pygame 会自己裁。
+    """
+
+    DURATION = 40
+
+    def __init__(self, x, y, max_radius):
+        self.x = x
+        self.y = y
+        self.max_radius = max(1, int(max_radius))
+        self.timer = 0
+        self.done = False
+        self._surf = None
+
+    def update(self):
+        self.timer += 1
+        if self.timer >= self.DURATION:
+            self.done = True
+        return not self.done
+
+    def draw(self, screen):
+        if self.done:
+            return
+        w, h = screen.get_size()
+        if self._surf is None:
+            self._surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        surf = self._surf
+        surf.fill((0, 0, 0, 0))
+
+        t = self.timer / self.DURATION
+        fade = 1.0 - t
+        ease = 1 - (1 - t) ** 3          # 先快后慢：前 1/3 就冲到 70%
+        radius = int(self.max_radius * (0.06 + 0.94 * ease))
+        cx, cy = int(self.x), int(self.y)
+
+        # 起手整屏冷色闪光
+        if t < 0.4:
+            surf.fill((150, 215, 255, int(70 * (1 - t / 0.4))))
+
+        # 放射光条
+        spokes = 16
+        length = int(radius * 0.92)
+        if length > 8:
+            spoke_alpha = int(95 * fade)
+            for i in range(spokes):
+                ang = math.tau * i / spokes
+                pygame.draw.line(
+                    surf, (215, 245, 255, spoke_alpha),
+                    (cx + math.cos(ang) * radius * 0.25, cy + math.sin(ang) * radius * 0.25),
+                    (cx + math.cos(ang) * length, cy + math.sin(ang) * length),
+                    max(1, int(6 * fade) + 1))
+
+        # 主环 + 两道余波
+        pygame.draw.circle(surf, (238, 251, 255, int(245 * fade)),
+                           (cx, cy), radius, max(2, int(30 * fade) + 2))
+        pygame.draw.circle(surf, (150, 220, 255, int(150 * fade)),
+                           (cx, cy), max(1, int(radius * 0.86)), max(1, int(14 * fade) + 1))
+        pygame.draw.circle(surf, (110, 195, 255, int(90 * fade)),
+                           (cx, cy), max(1, int(radius * 0.70)), max(1, int(8 * fade) + 1))
+
+        # 中心爆闪：柔光晕 + 高亮核心（不用一整块实心圆，太挡视野）
+        if t < 0.3:
+            k = 1 - t / 0.3
+            pygame.draw.circle(surf, (170, 230, 255, int(70 * k)),
+                               (cx, cy), max(1, int(320 * k)))
+            pygame.draw.circle(surf, (255, 255, 255, int(235 * k)),
+                               (cx, cy), max(1, int(130 * k)))
+
+        screen.blit(surf, (0, 0))

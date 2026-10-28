@@ -826,7 +826,8 @@ class FinalBoss(Enemy):
                 self.rect.centery + offset_y,
                 drift_x)
 
-    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, layers=1, element=None):
+    def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, layers=1, element=None,
+                    text_speed_x=0.0):
         """layers>1 会无视当前层剩余血量直接击穿多层（现版本已无调用方，陨石改为只打穿 1 层）。"""
         if self.dying or self.health <= 0:
             return 0
@@ -842,7 +843,8 @@ class FinalBoss(Enemy):
         if self.game:
             tx, ty, tvx = self._next_dmg_text_slot()
             self.game.spawn_damage_text(final_dmg, (tx, ty), color=color, scale=scale,
-                                        speed_x=tvx, speed_y=self._dmg_text_vy, boss=True)
+                                        speed_x=tvx + text_speed_x,
+                                        speed_y=self._dmg_text_vy, boss=True)
             if final_dmg > 0 and getattr(self.game, "damage_stats", None) is not None:
                 elem = element or getattr(self.game, "damage_element", None)
                 self.game.damage_stats.add(elem, final_dmg)

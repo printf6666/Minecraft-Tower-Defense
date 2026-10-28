@@ -132,6 +132,7 @@ class Enchantment(Enum):
     UNSTABLE_CRYSTAL = 26
     POWER_V = 27
     LANTERN = 28
+    MASTERPIECE = 29
 
 ENCHANTMENT_DATA = {
     Enchantment.BALANCED: {"name": "均衡强化", "desc": "所有伤害+5%", "cost": 100},
@@ -163,6 +164,7 @@ ENCHANTMENT_DATA = {
     Enchantment.UNSTABLE_CRYSTAL: {"name": "不稳定水晶", "desc": "TNT类炮塔子弹爆炸有10%概率在周围道路格生成不稳定水晶，敌人碰到后受到其1%最大生命伤害并引发爆炸；核弹/凋零核弹爆炸时全场每个道路格各有10%概率生成", "cost": 1600},
     Enchantment.POWER_V: {"name": "力量V", "desc": "箭矢伤害+125%", "cost": 300},
     Enchantment.LANTERN: {"name": "灯火通明", "desc": "场上存在3座满级星焰提灯时：燃烧伤害*1.5，火系伤害+80%，并永久驱散全场迷雾", "cost": 1000},
+    Enchantment.MASTERPIECE: {"name": "臻品呈现", "desc": "冰系伤害+240%。神锅每攻击120次释放大招：播放「臻品呈现」动画，对全场敌人造成61803+500*|温度|伤害，并使其获得永久冰系破甲、冰冻4秒", "cost": 1600},
 }
 
 GAUNTLET_ATTACKS = [
@@ -187,6 +189,7 @@ ENCHANTMENT_ORDER = [
     Enchantment.UNSTABLE_CRYSTAL,
     Enchantment.POWER_V,
     Enchantment.LANTERN,
+    Enchantment.MASTERPIECE,
 ]
 
 NON_REPEATABLE_ENCHANTMENTS = {Enchantment.DENSE, Enchantment.WIND_BURST}
@@ -226,6 +229,32 @@ LANTERN_DAMAGE_COLOR = ORANGE    # 冲击波飘字（橙色，与火系一致）
 LANTERN_ENCHANT_TOWERS = 3       # 「灯火通明」需要的满级提灯数量
 LANTERN_BURN_MULT = 1.5          # 灯火通明：全局燃烧伤害倍率（乘算）
 LANTERN_FIRE_BONUS = 80          # 灯火通明：火系伤害加成（加算，百分点）
+
+
+# ==========================================================================================
+#  神锅 —— 冰系（ICE）第 4 分支，Lv11 起解锁
+#  射程全屏，攻击向全场随机 1 名敌人发射一枚冰系四芒星，单体结算。
+#  伤害 = 基础值 + 系数 * |温度|（温度越低越强，和冰系降温度的思路一致）。
+#  命中后施加永久「冰系破甲」：目标受到的冰系伤害 +100%，
+#  该增伤与护甲减伤 / 破甲增伤在 take_damage 里属于同一个乘区。
+# ==========================================================================================
+HOLY_POT_BRANCH = 4
+HOLY_POT_DAMAGE_BASE = {11: 100, 12: 200, 13: 300, 14: 400, 15: 500}
+HOLY_POT_DAMAGE_TEMP = {11: 2, 12: 4, 13: 6, 14: 8, 15: 10}
+HOLY_POT_FIRE_RATE = 60          # 攻击间隔 1 秒（60 FPS）
+HOLY_POT_BOLT_SPEED = 26         # 四芒星飞行速度（像素/帧）
+HOLY_POT_BOLT_SIZE = 96          # 四芒星绘制边长（32 像素素材的 3 倍整数放大）
+HOLY_POT_BOLT_SPIN = 7.0         # 四芒星自转速度（度/帧）
+ICE_BROKEN_MULT = 2.0            # 冰系破甲：受到冰系伤害 +100%（与护甲同乘区）
+
+# 「臻品呈现」附魔
+MASTERPIECE_ICE_BONUS = 240      # 冰系伤害 +240%（加算，百分点）
+MASTERPIECE_ATTACKS = 120        # 神锅每攻击 N 次释放大招
+MASTERPIECE_DAMAGE = 61803       # 大招基础伤害
+MASTERPIECE_TEMP_MULT = 500      # 大招温度系数：伤害 = 61803 + 500 * |温度|
+MASTERPIECE_FREEZE_FRAMES = 4 * 60   # 大招冰冻 4 秒
+ULTIMATE_VIDEO_ZOOM = 1.15       # 大招动画放大倍数（>1 = 比全屏更大，裁掉右下角 UID）
+ULTIMATE_VIDEO_FPS = 30
 
 
 # ==========================================================================================

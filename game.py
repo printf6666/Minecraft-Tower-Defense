@@ -11,7 +11,8 @@ import audio
 from config import *
 from enemy import Enemy, DamageText
 from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet, MAP_CENTER_X, MAP_CENTER_Y
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal, LanternShockwave
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal, LanternShockwave, IceStarBurst, MasterpieceShockwave
+from video_player import UltimateVideo
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
 from codex import Codex
@@ -140,6 +141,7 @@ class Game:
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
         self.resonance_counter = 0
+        self.masterpiece_counter = 0     # 臻品呈现：场上所有神锅共用的攻击计数
         self.sacrifices = 0
         self.meteors = []
         self.bees = []
@@ -149,6 +151,10 @@ class Game:
         self.lantern_shockwaves = []
         self.sword_sweeps = []
         self.stars = []
+        self.ice_star_bursts = []
+        self.masterpiece_shockwaves = []
+        self.ultimate_video = None
+        self.masterpiece_pending = False   # 视频播完才结算，标记「这一发还没落地」
         # 剑系连击：全局共享，所有剑塔共用一个池
         self.sword_combo = 0
         self.sword_combo_timer = 0
@@ -409,11 +415,9 @@ class Game:
                                 self.temperature += 1
                             elif tower.type == TowerType.ICE:
                                 self.temperature -= 1
-                                self.temperature = max(-273, self.temperature)
                             elif tower.type == TowerType.BOMB:
                                 new_effect = self.get_bomb_temp_effect(tower)
                                 self.temperature += (new_effect - old_effect)
-                                self.temperature = max(-273, self.temperature)
                     elif event.key == pygame.K_e and self.selected_tower:
                         for _ in range(5):
                             tower = self.selected_tower
@@ -428,11 +432,9 @@ class Game:
                                 self.temperature += 1
                             elif tower.type == TowerType.ICE:
                                 self.temperature -= 1
-                                self.temperature = max(-273, self.temperature)
                             elif tower.type == TowerType.BOMB:
                                 new_effect = self.get_bomb_temp_effect(tower)
                                 self.temperature += (new_effect - old_effect)
-                                self.temperature = max(-273, self.temperature)
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.BOMB:
                         tower = self.selected_tower
                         old_effect = self.get_bomb_temp_effect(tower)
@@ -446,7 +448,6 @@ class Game:
                             tower.update_sprite()
                         new_effect = self.get_bomb_temp_effect(tower)
                         self.temperature += (new_effect - old_effect)
-                        self.temperature = max(-273, self.temperature)
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.POISON:
                         max_branch = 3 if self.selected_tower.level >= 11 else 2
                         self.selected_tower.poison_branch = self.selected_tower.poison_branch % max_branch + 1
@@ -458,7 +459,9 @@ class Game:
                         self.selected_tower.wind_branch = 3 - self.selected_tower.wind_branch
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.ICE and self.selected_tower.level >= 11:
-                        self.selected_tower.ice_branch = self.selected_tower.ice_branch % 3 + 1
+                        # 三阶四个分支：冰霜炸弹 / 唤龙冰晶石 / 冰墙 / 神锅
+                        self.selected_tower.ice_branch = self.selected_tower.ice_branch % 4 + 1
+                        self.selected_tower.recalculate_stats()
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.FLAME and self.selected_tower.level >= 11:
                         self.selected_tower.flame_branch = self.selected_tower.flame_branch % 3 + 1
@@ -512,7 +515,6 @@ class Game:
                         elif self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
                             if self.selected_tower.shield_branch == 2:
                                 self.temperature += self.selected_tower.level
-                        self.temperature = max(-273, self.temperature)
                         self.selected_tower.kill()
                         self.selected_tower = None
                     elif event.key == pygame.K_ESCAPE:
@@ -833,6 +835,7 @@ class Game:
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
         self.resonance_counter = 0
+        self.masterpiece_counter = 0     # 臻品呈现：场上所有神锅共用的攻击计数
         self.sacrifices = 0
         self.meteors = []
         self.bees = []
@@ -842,6 +845,10 @@ class Game:
         self.lantern_shockwaves = []
         self.sword_sweeps = []
         self.stars = []
+        self.ice_star_bursts = []
+        self.masterpiece_shockwaves = []
+        self.ultimate_video = None
+        self.masterpiece_pending = False   # 视频播完才结算，标记「这一发还没落地」
         # 剑系连击：全局共享，所有剑塔共用一个池
         self.sword_combo = 0
         self.sword_combo_timer = 0
@@ -957,7 +964,6 @@ class Game:
             elif t.type == TowerType.SHIELD and t.level >= 11 and t.shield_branch == 2:
                 self.temperature -= t.level
         self.temperature += self.enchantment_temp_bonus()
-        self.temperature = max(-273, self.temperature)
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         self.play_boss_bgm()
 
@@ -1074,7 +1080,10 @@ class Game:
             if hasattr(t, 'is_nuclear'):
                 t.is_nuclear = td.get("is_nuclear", False)
             t.has_shield = td.get("has_shield", False)
-            if ttype in (TowerType.TELEPORT, TowerType.FLAME, TowerType.SWORD):
+            # 分支是在升级之后才套用的，所以带分支数值的塔必须整体重算一次，
+            # 否则读档后神锅会保留「普通冰塔」的数值（伤害 55 而不是 500+）
+            if ttype in (TowerType.TELEPORT, TowerType.FLAME, TowerType.SWORD,
+                         TowerType.ICE):
                 t.recalculate_stats()
             t.update_sprite()
             self.towers.add(t)
@@ -1091,7 +1100,6 @@ class Game:
                 if t.shield_branch == 2:
                     self.temperature -= t.level
         self.temperature += self.enchantment_temp_bonus()
-        self.temperature = max(-273, self.temperature)
         self.wave_manager.start_new_wave()
         if self.wave_manager.current_wave in (50, FINAL_BOSS_WAVE):
             # 读档直接进入 BOSS 波时不会走 select_weather，这里强制补上永夜
@@ -1125,6 +1133,68 @@ class Game:
     def add_lantern_shockwave(self, x, y, radius):
         self.lantern_shockwaves.append(LanternShockwave(x, y, radius))
 
+    def add_ice_star_burst(self, x, y):
+        """神锅四芒星命中的小爆点。"""
+        self.ice_star_bursts.append(IceStarBurst(x, y))
+
+    def add_masterpiece_shockwave(self):
+        """大招落点冲击波：从地图中心炸开，半径取到能盖住屏幕四角。"""
+        cx, cy = MAP_CENTER_X, MAP_CENTER_Y
+        radius = max(math.hypot(cx - x, cy - y)
+                     for x in (0, SCREEN_WIDTH) for y in (0, SCREEN_HEIGHT))
+        self.masterpiece_shockwaves.append(
+            MasterpieceShockwave(cx, cy, radius))
+
+    def trigger_masterpiece_ultimate(self):
+        """「臻品呈现」大招起手：先播动画，伤害等动画放完再结算。
+
+        以前是触发瞬间就结算，1.6 秒的动画把整个屏幕盖住，
+        伤害飘字全被埋在视频下面 —— 玩家只能看到血条掉，看不到打了多少。
+        现在改成「播片 → 播完冲击波炸一下 → 炸的同时飘字」。
+        """
+        if self.masterpiece_pending:
+            # 上一发还没落地就又攒满了：先把上一发结算掉，别把伤害吞了
+            self.masterpiece_pending = False
+            self.resolve_masterpiece_ultimate()
+
+        if self.ultimate_video is not None:
+            self.ultimate_video.finish()
+        self.ultimate_video = UltimateVideo()
+        if self.ultimate_video.done:
+            # 没有可用的视频帧（打包漏了 video/ 目录）：直接结算，别让大招凭空消失
+            self.ultimate_video = None
+            self.resolve_masterpiece_ultimate()
+        else:
+            self.masterpiece_pending = True
+
+    def resolve_masterpiece_ultimate(self):
+        """大招落地：全屏冲击波 + 全屏伤害 + 永久冰系破甲 + 冰冻 4 秒。
+
+        伤害属于冰系，所以吃冰系伤害加成（含本附魔自己的 +240%）。
+        冰冻沿用「寒冰盾」那套写法：先清空冰冻抗性再直接写 freeze_time，
+        否则连吃几次冰冻后抗性叠满，4 秒会被削成 1 秒多。
+        """
+        self.add_masterpiece_shockwave()
+
+        damage = int((MASTERPIECE_DAMAGE + MASTERPIECE_TEMP_MULT * abs(self.temperature))
+                     * self.get_element_damage_multiplier("ice"))
+        prev_element = self.damage_element
+        self.damage_element = "ice"
+        try:
+            for enemy in list(self.enemies):
+                if enemy.health <= 0:
+                    continue
+                # 全屏 AOE 一次打十几只，数字全叠在同一个点会糊成一坨，
+                # 给每个目标一个随机横向漂移，飘字会自然散开
+                reward = enemy.take_damage(damage, color=ICE_BLUE, scale=1.6, element="ice",
+                                           text_speed_x=random.uniform(-2.2, 2.2))
+                self.coins += reward
+                enemy.apply_ice_broken()
+                enemy.freeze_resistance = 0
+                enemy.freeze_time = max(enemy.freeze_time, MASTERPIECE_FREEZE_FRAMES)
+        finally:
+            self.damage_element = prev_element
+
     def apply_production_bonus(self):
         self.coins += 5 * self.gold_per_wave * self.wave_manager.current_wave
         self.emeralds += self.emerald_per_wave
@@ -1150,6 +1220,9 @@ class Game:
         # 灯火通明：火系伤害 +80%（加算，不随附魔重复叠加）
         if tower_type == TowerType.FLAME and self.lantern_active():
             bonus += LANTERN_FIRE_BONUS
+        # 臻品呈现：冰系伤害 +240%（加算）
+        if tower_type == TowerType.ICE:
+            bonus += MASTERPIECE_ICE_BONUS * self.enchantments.count(Enchantment.MASTERPIECE)
         return 1.0 + bonus / 100.0
 
     def burn_tick_damage(self, base):
@@ -1324,7 +1397,6 @@ class Game:
                     self.temperature -= 1
                 elif t.type == TowerType.ICE:
                     self.temperature += 1
-                self.temperature = max(-273, self.temperature)
                 destroyed.append(t)
                 continue
             if t.level <= min_level:
@@ -1353,6 +1425,9 @@ class Game:
                     if old_level >= 6:
                         t.freeze_time = round(t.freeze_time - 0.1, 1)
                     self.temperature += 1
+                    # 神锅（分支 4）的数值来自独立数值表，逐项加减会算歪；
+                    # 降到 Lv10 以下时也要顺手退回普通冰塔形态，所以整体重算一次。
+                    t.recalculate_stats()
                 elif t.type == TowerType.TELEPORT:
                     if t.teleport_branch == 2:
                         t.damage -= 100
@@ -1479,6 +1554,15 @@ class Game:
         # 放在 PLAYING 判断之前 → 波间准备与商店也会正常走完 2.5 秒。
         # （game_time 在这两个状态不递增，所以不能用它做超时判定）
         self.tick_sword_combo()
+
+        # 大招动画独立于游戏状态推进：暂停时冻结、结束后自动清空并结算
+        if self.ultimate_video is not None:
+            if not self.ultimate_video.update():
+                self.ultimate_video = None
+                if self.masterpiece_pending:
+                    self.masterpiece_pending = False
+                    self.resolve_masterpiece_ultimate()
+
         if self.state == GameState.PLAYING:
             self.game_time += 1
             self._lantern_towers = sum(
@@ -1649,6 +1733,14 @@ class Game:
             for exp in self.ice_explosions[:]:
                 if not exp.update():
                     self.ice_explosions.remove(exp)
+
+            for burst in self.ice_star_bursts[:]:
+                if not burst.update():
+                    self.ice_star_bursts.remove(burst)
+
+            for wave_fx in self.masterpiece_shockwaves[:]:
+                if not wave_fx.update():
+                    self.masterpiece_shockwaves.remove(wave_fx)
 
             for ray in self.hell_rays[:]:
                 if not ray.update():
@@ -1828,7 +1920,6 @@ class Game:
                 if t.shield_branch == 2:
                     self.temperature -= t.level
         self.temperature += self.enchantment_temp_bonus()
-        self.temperature = max(-273, self.temperature)
         self.save_game()
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         if self.weather == Weather.ACID_RAIN and Enchantment.WAX in self.enchantments:
@@ -1971,7 +2062,6 @@ class Game:
                 self.temperature += 1
             elif tower_type == TowerType.ICE:
                 self.temperature -= 1
-                self.temperature = max(-273, self.temperature)
             elif tower_type == TowerType.BOMB:
                 self.temperature += self.get_bomb_temp_effect(t)
 
@@ -2048,6 +2138,7 @@ class Game:
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
         self.resonance_counter = 0
+        self.masterpiece_counter = 0     # 臻品呈现：场上所有神锅共用的攻击计数
         self.sacrifices = 0
         self.meteors = []
         self.bees = []
@@ -2057,6 +2148,10 @@ class Game:
         self.lantern_shockwaves = []
         self.sword_sweeps = []
         self.stars = []
+        self.ice_star_bursts = []
+        self.masterpiece_shockwaves = []
+        self.ultimate_video = None
+        self.masterpiece_pending = False   # 视频播完才结算，标记「这一发还没落地」
         # 剑系连击：全局共享，所有剑塔共用一个池
         self.sword_combo = 0
         self.sword_combo_timer = 0

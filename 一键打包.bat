@@ -86,6 +86,7 @@ for %%D in (libexpat.dll libbz2.dll liblzma.dll libmpdec-4.dll ffi.dll) do (
     --add-data "enemy;enemy" ^
     --add-data "sound;sound" ^
     --add-data "tower;tower" ^
+    --add-data "video;video" ^
     --add-data "Minecraft.ttf;." ^
     --add-data "seed.json;." ^
     main.py
