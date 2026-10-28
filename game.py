@@ -11,7 +11,7 @@ import audio
 from config import *
 from enemy import Enemy, DamageText
 from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet, MAP_CENTER_X, MAP_CENTER_Y
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal, LanternShockwave, IceStarBurst, MasterpieceShockwave
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal, LanternShockwave, IceStarBurst, MasterpieceShockwave, BaguaArray
 from video_player import UltimateVideo
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
@@ -141,6 +141,7 @@ class Game:
         self.stars = []
         self.ice_star_bursts = []
         self.masterpiece_shockwaves = []
+        self.bagua_arrays = []
         self.ultimate_video = None
         self.masterpiece_pending = False   # 视频播完才结算，标记「这一发还没落地」
         self._lantern_towers = 0
@@ -461,7 +462,8 @@ class Game:
                         self.selected_tower.recalculate_stats()
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.TRIDENT and self.selected_tower.level >= 11:
-                        self.selected_tower.trident_branch = 3 - self.selected_tower.trident_branch
+                        # 三阶三分支：海渊裂空之戟 / 唤龙电晶石 / 卧龙
+                        self.selected_tower.trident_branch = self.selected_tower.trident_branch % 3 + 1
                         self.selected_tower.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.TELEPORT:
                         self.selected_tower.teleport_branch = 3 - self.selected_tower.teleport_branch
@@ -781,6 +783,7 @@ class Game:
         self.stars = []
         self.ice_star_bursts = []
         self.masterpiece_shockwaves = []
+        self.bagua_arrays = []
         self.ultimate_video = None
         self.masterpiece_pending = False   # 视频播完才结算，标记「这一发还没落地」
         self._lantern_towers = 0
@@ -859,6 +862,8 @@ class Game:
     def destroy_tower_by_boss(self, tower):
         """BOSS 指令抹除炮塔（不计入出售、不返还金币）。"""
         if tower is None or tower not in self.towers:
+            return
+        if tower.is_invincible():
             return
         if self.selected_tower is tower:
             self.selected_tower = None
@@ -1067,6 +1072,40 @@ class Game:
     def add_ice_star_burst(self, x, y):
         """神锅四芒星命中的小爆点。"""
         self.ice_star_bursts.append(IceStarBurst(x, y))
+
+    def spawn_bagua_array(self, tower):
+        """卧龙能量满 100：在道路格上放一座八卦阵（有敌人的格子优先）。"""
+        occupied = {(b.tile_x, b.tile_y) for b in self.bagua_arrays}
+        enemy_tiles = []
+        for e in self.enemies:
+            if e.health <= 0:
+                continue
+            tx = int(e.rect.centerx) // TILE_SIZE
+            ty = int(e.rect.centery) // TILE_SIZE
+            if (tx, ty) in self.path and (tx, ty) not in occupied:
+                enemy_tiles.append((tx, ty))
+        if enemy_tiles:
+            tile = random.choice(enemy_tiles)
+        else:
+            free = [p for p in self.path if p not in occupied]
+            if not free:
+                return
+            tile = random.choice(free)
+
+        lv = getattr(tower, "level", 15)
+        dmg = int(CD_BAGUA_DAMAGE.get(lv, 128) * abs(self.temperature))
+        dmg = max(1, int(dmg * self.get_element_damage_multiplier(TowerType.TRIDENT)))
+        self.bagua_arrays.append(BaguaArray(tile[0], tile[1], dmg, self))
+
+    def notify_tower_hit(self, tower):
+        """某座塔被打了（含破盾）：让 3x3 范围内的卧龙各 +50 能量。"""
+        if tower is None:
+            return
+        for t in self.towers:
+            if not t.is_crouch_dragon():
+                continue
+            if abs(t.x - tower.x) <= 1 and abs(t.y - tower.y) <= 1:
+                t.gain_energy(CD_ENERGY_PER_HIT)
 
     def add_masterpiece_shockwave(self):
         """大招落点冲击波：从地图中心炸开，半径取到能盖住屏幕四角。"""
@@ -1337,7 +1376,11 @@ class Game:
             if getattr(t, 'has_shield', False):
                 t.break_shield()
                 self.trigger_shield_burst(t)
+                self.notify_tower_hit(t)
                 continue
+            if t.is_invincible():
+                continue          # 卧龙免疫酸雨降级
+            self.notify_tower_hit(t)
             old_level = t.level
             t.level -= 1
             t.upgrade_cost = int(t.upgrade_cost / 1.5)
@@ -1612,7 +1655,11 @@ class Game:
                                 if getattr(tower, 'has_shield', False):
                                     tower.break_shield()
                                     self.trigger_shield_burst(tower)
+                                    self.notify_tower_hit(tower)
+                                elif tower.is_invincible():
+                                    continue
                                 else:
+                                    self.notify_tower_hit(tower)
                                     self.destroy_tower_by_boss(tower)
                         for wall in list(self.ice_walls):
                             dx = abs(wall.x - cb['x'])
@@ -1665,6 +1712,10 @@ class Game:
             for wave_fx in self.masterpiece_shockwaves[:]:
                 if not wave_fx.update():
                     self.masterpiece_shockwaves.remove(wave_fx)
+
+            for bagua in self.bagua_arrays[:]:
+                if not bagua.update():
+                    self.bagua_arrays.remove(bagua)
 
             for ray in self.hell_rays[:]:
                 if not ray.update():
@@ -2124,6 +2175,7 @@ class Game:
         self.stars = []
         self.ice_star_bursts = []
         self.masterpiece_shockwaves = []
+        self.bagua_arrays = []
         self.ultimate_video = None
         self.masterpiece_pending = False   # 视频播完才结算，标记「这一发还没落地」
         self._lantern_towers = 0

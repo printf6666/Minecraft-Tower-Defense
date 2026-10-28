@@ -70,10 +70,10 @@ def get_tower_info(game, tower):
                 info = [f"天堂陨落长弓 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"金币1%作为伤害加成", f"12方向散射", "按 R 切换分支"]
             elif tower.physical_branch == 3:
                 info = [f"地狱升华之弩 Lv{tower.level}", "发射黑色射线", "随机秒杀一个敌人",
-                        "对BOSS造成5%最大生命伤害", f"攻击间隔:{(19 - tower.level)}s", "按 R 切换分支"]
+                        "对BOSS造成5%生命伤害", f"攻击间隔:{(19 - tower.level)}s", "按 R 切换分支"]
             else:
                 info = [f"时空撕裂之矢 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s",
-                        f"金币1%作为伤害加成", f"破甲:受伤永久增加20%", "按 R 切换分支"]
+                        f"金币1%作为伤害加成", f"抗性降低:敌人抗性-20%", "按 R 切换分支"]
         elif tower.level >= 6:
             info = [f"黄金箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"金币1%作为伤害加成"]
         else:
@@ -175,7 +175,15 @@ def get_tower_info(game, tower):
                     f"攻击间隔:{tower.fire_rate / 60}s"]
     elif tower.type == TowerType.TRIDENT:
         if tower.level >= 11:
-            if tower.trident_branch == 2:
+            if tower.trident_branch == CROUCH_DRAGON_BRANCH:
+                bagua_k = CD_BAGUA_DAMAGE.get(tower.level, 128)
+                info = [f"卧龙 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
+                        f"金币1%作为伤害加成", "攻击施放闪电 整列敌人",
+                        "自身无敌 免疫一切伤害",
+                        f"能量:{tower.crouch_energy}/100",
+                        f"八卦阵:{bagua_k}*|温度|",
+                        "按 R 切换形态"]
+            elif tower.trident_branch == 2:
                 info = [f"唤龙电晶石 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
                         f"金币1%作为伤害加成", f"5%召唤电龙:{(tower.level-10)*50}倍|温度|",
                         "附加3%最大生命真实伤害", f"攻击间隔:0.5s", "按 R 切换形态"]
@@ -199,7 +207,7 @@ def get_tower_info(game, tower):
             else:
                 per_px = {11: 8, 12: 10, 13: 12, 14: 14, 15: 16}
                 info = [f"山崩地裂之锤 Lv{tower.level}", f"伤害:{tower.damage}+{per_px.get(tower.level,8)}/px",
-                        f"击退:{tower.wind_knockback}px", "最大距离命中:额外25%当前生命伤害",
+                        f"击退:{tower.wind_knockback}px", "满距离命中:+25%生命伤害",
                         "按 R 切换分支", f"攻击间隔:0.5s"]
         elif tower.level >= 6:
             info = [f"重锤 Lv{tower.level}", f"伤害:{tower.damage}", f"击退:{tower.wind_knockback}px",
@@ -261,7 +269,7 @@ def get_tower_info(game, tower):
         if tower.level >= 11:
             if tower.bomb_branch == 2:
                 info = [f"凋零核弹 Lv{tower.level}",
-                        f"伤害:{(tower.level - 10)*2}%最大生命+{(tower.level - 10)*2000}固定",
+                        f"伤害:{(tower.level - 10)*2}%生命+{(tower.level - 10)*2000}固定",
                         f"击晕:2s", f"凋零:10s",
                         f"射程:全屏", f"攻击间隔:35s", "按 R 切换形态"]
             else:
@@ -327,6 +335,10 @@ class UIManager:
 
     def draw_game(self):
         self.game.screen.blit(self.game.background_surface, (0, 0))
+
+        # 八卦阵是地面法阵，压在炮塔与敌人下面
+        for bagua in self.game.bagua_arrays:
+            bagua.draw(self.game.screen)
 
         self.game.towers.draw(self.game.screen)
         for wall in self.game.ice_walls:

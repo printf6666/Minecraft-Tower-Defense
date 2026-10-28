@@ -27,7 +27,7 @@ MAX_BRANCH = {
     TowerType.ICE:        {1: 1, 2: 1, 3: 4},
     TowerType.TELEPORT:   {1: 2, 2: 2, 3: 2},
     TowerType.FLAME:      {1: 1, 2: 1, 3: 3},
-    TowerType.TRIDENT:    {1: 1, 2: 1, 3: 2},
+    TowerType.TRIDENT:    {1: 1, 2: 1, 3: 3},
     TowerType.WIND:       {1: 1, 2: 1, 3: 2},
     TowerType.POISON:     {1: 2, 2: 2, 3: 3},
     TowerType.BOMB:       {1: 1, 2: 5, 3: 2},
@@ -116,6 +116,7 @@ class Tower(pygame.sprite.Sprite):
         self.shield_branch = 1
         self.ice_explosion_visual = 0
         self.wind_storm_visual = 0      # 雷神之锤命中特效隔次播放计数器
+        self.crouch_energy = 0          # 卧龙：八卦阵能量（满 100 放一座）
 
         self.attack_speed_buff = 0
         self.production_buff = 0.0
@@ -408,9 +409,13 @@ class Tower(pygame.sprite.Sprite):
         prev_element = self.game.damage_element
         self.game.damage_element = stats.tower_element(self.type)
         try:
-            return self._attack_inner(current_time)
+            bullets = self._attack_inner(current_time)
         finally:
             self.game.damage_element = prev_element
+        # 卧龙：每打出一次攻击 +1 能量
+        if bullets and self.is_crouch_dragon():
+            self.gain_energy(CD_ENERGY_PER_ATTACK)
+        return bullets
 
     def _attack_inner(self, current_time):
         prev_last_shot = self.last_shot
@@ -650,6 +655,24 @@ class Tower(pygame.sprite.Sprite):
         if Enchantment.PULSE_SHIELD not in self.game.enchantments:
             return False
         return self.shield_pulse_timer > 0
+
+    def is_crouch_dragon(self):
+        """卧龙：三叉戟塔 Lv11+ 分支 3。"""
+        return (self.type == TowerType.TRIDENT and self.level >= 11
+                and self.trident_branch == CROUCH_DRAGON_BRANCH)
+
+    def is_invincible(self):
+        """卧龙自身免疫一切伤害（锁定 / 酸雨 / 爆炸），但护盾照常会被打破。"""
+        return self.is_crouch_dragon()
+
+    def gain_energy(self, amount):
+        """加能量；每满 100 就在道路上放一座八卦阵（多余的继续留着）。"""
+        if not self.is_crouch_dragon() or amount <= 0:
+            return
+        self.crouch_energy += amount
+        while self.crouch_energy >= CD_ENERGY_FULL:
+            self.crouch_energy -= CD_ENERGY_FULL
+            self.game.spawn_bagua_array(self)
 
     def break_shield(self):
         if not getattr(self, 'has_shield', False):

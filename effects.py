@@ -896,3 +896,127 @@ class MasterpieceShockwave:
                                (cx, cy), max(1, int(130 * k)))
 
         screen.blit(surf, (0, 0))
+
+
+# ==========================================================================================
+#  卧龙的八卦阵
+# ==========================================================================================
+_BAGUA_SURF = None
+
+
+def _bagua_surface():
+    """缓存一张 128x128 的八卦阵贴图（外圈 + 八组三爻）。"""
+    global _BAGUA_SURF
+    if _BAGUA_SURF is not None:
+        return _BAGUA_SURF
+    size = BAGUA_SIZE
+    surf = pygame.Surface((size, size), pygame.SRCALPHA)
+    c = size // 2
+    r_out = int(size * 0.44)
+
+    # 内部光晕
+    for i in range(6, 0, -1):
+        rr = int(r_out * i / 6)
+        a = int(26 * (7 - i) / 6)
+        pygame.draw.circle(surf, (120, 90, 255, a), (c, c), rr)
+
+    # 外圈 + 内圈
+    pygame.draw.circle(surf, (170, 140, 255, 210), (c, c), r_out, 3)
+    pygame.draw.circle(surf, (120, 220, 255, 150), (c, c), int(r_out * 0.62), 2)
+
+    # 八组三爻：实线 = 阳，断线 = 阴
+    trigrams = [
+        (1, 1, 1), (0, 1, 1), (1, 0, 1), (0, 0, 1),
+        (1, 1, 0), (0, 1, 0), (1, 0, 0), (0, 0, 0),
+    ]
+    for k, tri in enumerate(trigrams):
+        ang = math.tau * k / 8 - math.pi / 2
+        ca, sa = math.cos(ang), math.sin(ang)
+        for row, solid in enumerate(tri):
+            dist = r_out * 0.80 - row * (r_out * 0.11)
+            half = r_out * 0.15
+            # 每一爻是垂直于半径的一小段
+            px, py = c + ca * dist, c + sa * dist
+            dx, dy = -sa * half, ca * half
+            color = (215, 245, 255, 235) if solid else (150, 190, 255, 220)
+            if solid:
+                pygame.draw.line(surf, color, (px - dx, py - dy), (px + dx, py + dy), 3)
+            else:
+                gap = 0.42
+                pygame.draw.line(surf, color, (px - dx, py - dy),
+                                 (px - dx * gap, py - dy * gap), 3)
+                pygame.draw.line(surf, color, (px + dx * gap, py + dy * gap),
+                                 (px + dx, py + dy), 3)
+    _BAGUA_SURF = surf
+    return surf
+
+
+class BaguaArray:
+    """卧龙放下的八卦阵：踩上去的敌人每秒最多吃一次电系伤害。"""
+
+    def __init__(self, tile_x, tile_y, damage, game):
+        self.tile_x = tile_x
+        self.tile_y = tile_y
+        self.x = tile_x * TILE_SIZE + TILE_SIZE // 2
+        self.y = tile_y * TILE_SIZE + TILE_SIZE // 2
+        self.damage = damage
+        self.game = game
+        self.timer = 0
+        self.done = False
+        self.r2 = CD_BAGUA_RADIUS * CD_BAGUA_RADIUS
+        self.angle = random.uniform(0, 360)     # 每座阵起始角度随机，避免整齐划一
+        self._rot = None
+        self._rot_angle = None
+
+    def update(self):
+        self.timer += 1
+        self.angle = (self.angle + CD_BAGUA_SPIN) % 360
+        if self.timer >= CD_BAGUA_DURATION:
+            self.done = True
+            return False
+
+        for e in list(self.game.enemies):
+            if e.health <= 0:
+                continue
+            dx = e.rect.centerx - self.x
+            dy = e.rect.centery - self.y
+            if dx * dx + dy * dy > self.r2:
+                continue
+            if self.game.game_time - getattr(e, "last_bagua_hit", -99999) < CD_BAGUA_TICK:
+                continue
+            e.last_bagua_hit = self.game.game_time
+            prev = self.game.damage_element
+            self.game.damage_element = "electric"
+            try:
+                reward = e.take_damage(self.damage, color=ELECTRIC_PURPLE,
+                                       scale=1.1, element="electric")
+            finally:
+                self.game.damage_element = prev
+            self.game.coins += reward
+        return True
+
+    def draw(self, screen):
+        base = getattr(assets, "bagua_img_half", None)
+        if base is None:
+            # 兜底：资源缺失时用程序画的法阵
+            surf = _bagua_surface()
+            screen.blit(surf, surf.get_rect(center=(self.x, self.y)))
+            return
+
+        # 自转：角度每变化 1° 才重新旋转一次，省掉大部分开销
+        if self._rot is None or abs(self.angle - self._rot_angle) >= 1.0:
+            self._rot = pygame.transform.rotozoom(base, -self.angle, 1.0)
+            self._rot_angle = self.angle
+
+        surf = self._rot
+        # 出现 15 帧淡入、消失前 20 帧淡出（基础透明度已经是 50%）
+        fade = 255
+        if self.timer < 15:
+            fade = int(255 * self.timer / 15)
+        left = CD_BAGUA_DURATION - self.timer
+        if left < 20:
+            fade = min(fade, int(255 * max(0, left) / 20))
+        if fade < 255:
+            surf = surf.copy()
+            surf.fill((255, 255, 255, fade), special_flags=pygame.BLEND_RGBA_MULT)
+        screen.blit(surf, surf.get_rect(center=(self.x, self.y)))

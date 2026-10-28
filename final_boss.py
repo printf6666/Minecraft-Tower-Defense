@@ -288,9 +288,13 @@ class BossStrike:
         if getattr(tower, "has_shield", False):
             tower.break_shield()
             self.game.trigger_shield_burst(tower)
+            self.game.notify_tower_hit(tower)
             return
+        if tower.is_invincible():
+            return                     # 卧龙免疫锁定
         # 指令·执行只“锁定”炮塔，真正永久删除留给抹除线与世界重载
         tower.disabled_timer = max(getattr(tower, "disabled_timer", 0), 12 * 60)
+        self.game.notify_tower_hit(tower)
         self.game.tnt_explosions.append(TNTExplosion(self.x, self.y, 0, 0, None, self.game))
 
     def draw(self, screen):
@@ -353,13 +357,18 @@ class DeleteBeam:
             if getattr(tower, "has_shield", False):
                 tower.break_shield()
                 self.game.trigger_shield_burst(tower)
+                self.game.notify_tower_hit(tower)
                 continue
+            if tower.is_invincible():
+                continue               # 卧龙免疫抹除与锁定
             if destroyed < 3:
                 # 一条删除线最多抹除 3 座炮塔，其余只被锁定，避免一波清空防线
+                self.game.notify_tower_hit(tower)
                 self.game.destroy_tower_by_boss(tower)
                 destroyed += 1
             else:
                 tower.disabled_timer = max(getattr(tower, "disabled_timer", 0), 8 * 60)
+                self.game.notify_tower_hit(tower)
         if self.vertical:
             for row in range(1, GRID_HEIGHT + 1, 2):
                 self.game.add_lightning(self.x, row * TILE_SIZE + TILE_SIZE // 2, True)
@@ -606,7 +615,10 @@ class FinalBoss(Enemy):
             if dx * dx + dy * dy <= radius * radius:
                 if tower.in_pulse():
                     continue
+                if tower.is_invincible():
+                    continue           # 卧龙免疫禁魔
                 tower.disabled_timer = max(getattr(tower, "disabled_timer", 0), frames)
+                self.game.notify_tower_hit(tower)
 
     def _contact_damage(self):
         if self.contact_cooldown > 0:
@@ -794,7 +806,11 @@ class FinalBoss(Enemy):
             if getattr(tower, "has_shield", False):
                 tower.break_shield()
                 self.game.trigger_shield_burst(tower)
+                self.game.notify_tower_hit(tower)
                 continue
+            if tower.is_invincible():
+                continue               # 卧龙免疫世界重载
+            self.game.notify_tower_hit(tower)
             self.game.destroy_tower_by_boss(tower)
             removed += 1
         self.game.boss_shockwaves.append(

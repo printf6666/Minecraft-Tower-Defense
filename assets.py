@@ -1,7 +1,7 @@
 import pygame
 import sys
 import os
-from config import TowerType, Enchantment, ENCHANT_ICON_SIZE, TILE_SIZE
+from config import TowerType, Enchantment, ENCHANT_ICON_SIZE, TILE_SIZE, BAGUA_SIZE
 
 ASSET_CACHE = {}
 
@@ -51,6 +51,8 @@ ember_meteor_img = None
 
 BUFF_SIZE = 32
 buff_icons = {}
+bagua_img = None
+bagua_img_half = None
 shield_img = None
 
 white_lightning_frames = []
@@ -202,6 +204,17 @@ def init_assets():
     buff_icons["speed"] = load_image("debuff/speed.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["wither"] = load_image("debuff/wither.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["soul_burn"] = load_image("debuff/soul_burn.png", (BUFF_SIZE, BUFF_SIZE))
+
+    # 卧龙的八卦阵（太极图，已抠掉棋盘格背景）
+    global bagua_img, bagua_img_half
+    try:
+        bagua_img = load_image("tower/bagua.png", (BAGUA_SIZE, BAGUA_SIZE))
+        # 需求：召唤出来的八卦阵透明度 50%
+        bagua_img_half = bagua_img.copy()
+        bagua_img_half.fill((255, 255, 255, 128), special_flags=pygame.BLEND_RGBA_MULT)
+    except Exception:
+        bagua_img = None
+        bagua_img_half = None
     global shield_img
     shield_img = load_image("tower/shield.png", (128, 128))
 

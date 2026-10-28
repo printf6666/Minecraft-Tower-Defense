@@ -144,7 +144,7 @@ class Dragon(pygame.sprite.Sprite):
     def _deal_hp_pct_damage(self, enemy):
         """额外真实伤害：目标最大生命的 1% / 2% / 3%（冰 / 火 / 电）。
 
-        走 ignore_armor=True，所以护甲减免、破甲增伤、冰系破甲、元素附魔加成
+        走 ignore_armor=True，所以抗性、增伤乘区、冰系破甲、元素附魔加成
         全都不参与结算 —— 这一部分就是纯真实伤害。
         龙族传说会把这一百分比再翻一倍。
         """

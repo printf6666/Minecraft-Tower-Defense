@@ -12,7 +12,8 @@ import pygame
 import assets
 from config import (TOWER_DATA, TowerType, ENCHANTMENT_DATA, ENCHANTMENT_ORDER,
                     ENEMY_TYPES, EnemyType, SCREEN_WIDTH, SCREEN_HEIGHT,
-                    FINAL_BOSS_LAYERS, FINAL_BOSS_LAYER_HEALTH, FINAL_BOSS_NAME)
+                    FINAL_BOSS_LAYERS, FINAL_BOSS_LAYER_HEALTH, FINAL_BOSS_NAME,
+                    Weather, WEATHER_CONFIG)
 
 # ---------------------------------------------------------------- 配色
 BG = (16, 18, 24)
@@ -124,9 +125,9 @@ TOWER_TREES = {
                        "伤害 95 → 155，射程每级 +0.5 格。",
                        "金币越多越强，适合经济流后手补伤害。"]},
             {"key": "p3a", "stage": 2, "slot": 0.0, "img": "tower/1-3-1.png",
-             "name": "时空撕裂之矢", "tag": "分支一 - 破甲", "cost": -1,
+             "name": "时空撕裂之矢", "tag": "分支一 - 抗性降低", "cost": -1,
              "lines": ["金币 1% 伤害加成。",
-                       "破甲：命中后敌人受到的所有伤害永久 +20%。",
+                       "抗性降低：命中后敌人抗性永久 -20%。",
                        "攻速 0.5s，射程每级 +0.5 格。",
                        "能给全队增伤，配合核弹 / 陨石收益极高。"]},
             {"key": "p3b", "stage": 2, "slot": 1.0, "img": "tower/1-3-2.png",
@@ -195,7 +196,7 @@ TOWER_TREES = {
              "lines": ["射程全屏，随机挑 1 名敌人发射冰系四芒星（单体）。",
                        "伤害 = 100/200/300/400/500 + 2/4/6/8/10 * |温度|，间隔 1s。",
                        "命中施加永久冰系破甲：目标受到冰系伤害 +100%，",
-                       "与护甲减伤 / 破甲增伤同一个乘区。",
+                       "该加成计入增伤乘区，与抗性乘区分开计算。",
                        "持有「臻品呈现」时每 120 次攻击释放一次全屏大招。"]},
         ],
         "edges": [("i1", "i2"), ("i2", "i3a"), ("i2", "i3b"), ("i2", "i3c"), ("i2", "i3d")],
@@ -230,7 +231,7 @@ TOWER_TREES = {
             {"key": "t3b", "stage": 2, "slot": 1.0, "img": "tower/4-3-2.png",
              "name": "无尽催化剂", "tag": "分支二 - 混乱", "cost": -1,
              "lines": ["八方向散射。",
-                       "必定施加一个随机永久 debuff（中毒 / 凋零 / 破甲等）。",
+                       "必定施加一个随机永久 debuff（中毒 / 凋零 / 抗性降低等）。",
                        "随机伤害 0 ~ 2 倍，攻速 0.7s → 0.5s。"]},
         ],
         "edges": [("t1a", "t2a"), ("t2a", "t3a"),
@@ -290,8 +291,15 @@ TOWER_TREES = {
              "lines": ["5% 概率召唤电龙。",
                        "电龙伤害 = 50 ~ 250 倍|温度| + 3% 最大生命真实伤害，并麻痹 1s。",
                        "金币 1% 伤害加成。"]},
+            {"key": "r3c", "stage": 2, "slot": 2.0, "img": "tower/6-3-3.png",
+             "name": "卧龙", "tag": "分支三 - 法阵", "cost": -1,
+             "lines": ["攻击与另两支相同：金币 1% 加伤 + 整列闪电。",
+                       "自身无敌，免疫锁定 / 酸雨 / 爆炸；护盾仍会被打破。",
+                       "每次攻击 +1 能量；自身或周围 8 格塔被攻击（含破盾）+50。",
+                       "满 100 能量在道路格放八卦阵（有敌人的格子优先）。",
+                       "踩阵敌人每秒最多受 64/80/96/112/128 倍|温度| 电系伤害。"]},
         ],
-        "edges": [("r1", "r2"), ("r2", "r3a"), ("r2", "r3b")],
+        "edges": [("r1", "r2"), ("r2", "r3a"), ("r2", "r3b"), ("r2", "r3c")],
     },
     TowerType.WIND: {
         "nodes": [
@@ -467,23 +475,27 @@ ENEMY_INFO = {
                                      "会发射激光，但本作里只保留高血量设定。"]),
     EnemyType.WITHER: ("凋零", "穿墙", ["速度 2，血量 800，击杀 100 金币。",
                                     "无视路径，直接朝终点直线飞行。"]),
-    EnemyType.IRON_ARMORED: ("铁甲", "减伤 60%", ["速度 1.2，血量 250，击杀 35 金币。",
-                                             "未破甲时受到的所有伤害 *0.4。",
-                                             "磁暴天气会直接破甲，破甲后受伤 *1.2。"]),
+    EnemyType.IRON_ARMORED: ("铁甲", "抗性 60%", ["速度 1.2，血量 250，击杀 35 金币。",
+                                            "抗性 60%：最终伤害 = 基础伤害 × (1 - 60%)。",
+                                            "被「抗性降低」后抗性 40%，受伤 ×0.6。",
+                                            "磁暴天气会直接施加抗性降低。"]),
     EnemyType.SLIME: ("史莱姆", "分裂", ["速度 2，血量 180，击杀 25 金币。",
                                      "死亡时在原地分裂出 3 只小史莱姆。"]),
     EnemyType.SLIMELING: ("小史莱姆", "分裂产物", ["速度 3，血量 90，击杀 10 金币。",
                                             "体型只有一半，是史莱姆的残片。"]),
-    EnemyType.GOLD_ARMORED: ("金甲", "减伤 70%", ["速度 1.2，血量 250，击杀 35 金币。",
-                                             "未破甲时受到的所有伤害 *0.3。"]),
+    EnemyType.GOLD_ARMORED: ("金甲", "抗性 70%", ["速度 1.2，血量 250，击杀 35 金币。",
+                                            "抗性 70%：最终伤害 = 基础伤害 × (1 - 70%)。",
+                                            "被「抗性降低」后抗性 50%，受伤 ×0.5。"]),
     EnemyType.GHOST: ("恼鬼", "穿墙", ["速度 3，血量 100，击杀 25 金币。",
                                 "无视路径，直接朝终点直线飞行。",
                                 "无法被地形阻挡，只能用高射速硬清。"]),
-    EnemyType.DIAMOND_ARMORED: ("钻石甲", "减伤 80%", ["速度 1.2，血量 300，击杀 40 金币。",
-                                                 "未破甲时受到的所有伤害 *0.2。"]),
-    EnemyType.NETHERITE_ARMORED: ("下界合金甲", "减伤 90%", ["速度 1.2，血量 300，击杀 50 金币。",
-                                                       "未破甲时受到的所有伤害 *0.1。",
-                                                       "百分比伤害无视护甲，是对付它的正解。"]),
+    EnemyType.DIAMOND_ARMORED: ("钻石甲", "抗性 80%", ["速度 1.2，血量 300，击杀 40 金币。",
+                                                "抗性 80%：最终伤害 = 基础伤害 × (1 - 80%)。",
+                                                "被「抗性降低」后抗性 60%，受伤 ×0.4。"]),
+    EnemyType.NETHERITE_ARMORED: ("下界合金甲", "抗性 90%", ["速度 1.2，血量 300，击杀 50 金币。",
+                                                      "抗性 90%：最终伤害 = 基础伤害 × (1 - 90%)。",
+                                                      "被「抗性降低」后抗性 70%，受伤 ×0.3。",
+                                                      "真实伤害无视抗性，是对付它的正解。"]),
     EnemyType.MAGMA_CUBE: ("岩浆怪", "免疫点燃", ["速度 2.0，血量 180，击杀 25 金币。",
                                             "完全免疫燃烧与酷暑 / 火雨的点燃。",
                                             "死亡时分裂出 3 只小岩浆怪。"]),
@@ -515,13 +527,21 @@ ENEMY_ORDER = [
     EnemyType.NETHERITE_ARMORED, EnemyType.HEROBRINE, EnemyType.FINAL_BOSS,
 ]
 
+# 天气图鉴的展示顺序：先常规气温，再极端/特殊天气，永夜压轴
+WEATHER_ORDER = [
+    Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.THUNDERSTORM,
+    Weather.SNOWY, Weather.EXTREME_COLD, Weather.EXTREME_HEAT, Weather.SCORCHING_SUN,
+    Weather.FIRE_RAIN, Weather.ACID_RAIN, Weather.FOG, Weather.TAILWIND,
+    Weather.HEADWIND, Weather.MAGNETIC_STORM, Weather.AURORA, Weather.ENDLESS_NIGHT,
+]
+
 
 # ======================================================================
 #  图鉴主体
 # ======================================================================
 class Codex:
-    TAB_TOWER, TAB_ENEMY, TAB_ENCHANT = 0, 1, 2
-    TAB_NAMES = ("炮塔进化", "敌人档案", "附魔总览")
+    TAB_TOWER, TAB_ENEMY, TAB_ENCHANT, TAB_WEATHER = 0, 1, 2, 3
+    TAB_NAMES = ("炮塔进化", "敌人档案", "附魔总览", "天气图鉴")
 
     def __init__(self, game):
         self.game = game
@@ -594,6 +614,8 @@ class Codex:
             return self.columns[0]["nodes"][0]["key"]
         if self.tab == self.TAB_ENEMY:
             return ENEMY_ORDER[0]
+        if self.tab == self.TAB_WEATHER:
+            return WEATHER_ORDER[0]
         return ENCHANTMENT_ORDER[0]
 
     # ------------------------------------------------------------ 布局
@@ -633,6 +655,8 @@ class Codex:
         """
         if self.tab == self.TAB_ENEMY:
             return 4, 5, 470, 244, 20       # 5 列 x 4 行，装 19 种敌人
+        if self.tab == self.TAB_WEATHER:
+            return 4, 4, 560, 236, 24       # 4 列 x 4 行，正好装 16 种天气
         return 5, 6, 396, 196, 16           # 6 列 x 5 行，共 30 格装 29 个
 
     def node_rects(self):
@@ -651,7 +675,12 @@ class Codex:
                     out.append((r, "tower", (col, n), n["key"] == sel))
         else:
             rows, cols, cw, ch, gap = self._grid_metrics()
-            items = ENEMY_ORDER if self.tab == self.TAB_ENEMY else ENCHANTMENT_ORDER
+            if self.tab == self.TAB_ENEMY:
+                items = ENEMY_ORDER
+            elif self.tab == self.TAB_WEATHER:
+                items = WEATHER_ORDER
+            else:
+                items = ENCHANTMENT_ORDER
             grid_w = cols * cw + (cols - 1) * gap
             grid_h = rows * ch + (rows - 1) * gap
             x0 = (SCREEN_WIDTH - grid_w) // 2
@@ -680,7 +709,7 @@ class Codex:
                 self.close()
                 return True
             if event.key == pygame.K_TAB:
-                self.tab = (self.tab + 1) % 3
+                self.tab = (self.tab + 1) % len(self.TAB_NAMES)
                 self.scroll_x = self.scroll_y = 0.0
                 self.selected = (self.tab, self._default_key())
                 self._update_scroll_limits()
@@ -920,6 +949,8 @@ class Codex:
             pygame.draw.rect(screen, SELECT if is_sel else NODE_BORDER, rect, 4 if is_sel else 2)
             if self.tab == self.TAB_ENEMY:
                 self._draw_enemy_cell(screen, rect, item, is_sel)
+            elif self.tab == self.TAB_WEATHER:
+                self._draw_weather_cell(screen, rect, item, is_sel)
             else:
                 self._draw_enchant_cell(screen, rect, item, is_sel)
         screen.set_clip(None)
@@ -969,6 +1000,42 @@ class Codex:
             label = _font(19).render(data["name"], True, SELECT if is_sel else TEXT)
         screen.blit(label, (rect.centerx - label.get_width() // 2, box.bottom + 12))
 
+    def _draw_weather_cell(self, screen, rect, weather, is_sel):
+        """天气没有贴图，用「天气色块 + 名字 + 温度」表示。"""
+        cfg = WEATHER_CONFIG[weather]
+        box = pygame.Rect(0, 0, rect.width - 40, rect.height - 96)
+        box.midtop = (rect.centerx, rect.y + 16)
+        pygame.draw.rect(screen, (22, 26, 34), box)
+
+        color = cfg["color"]
+        # 色块：中心一个实心圆 + 外圈描边，颜色就是天气主色
+        r = min(box.width, box.height) // 2 - 18
+        cx, cy = box.centerx, box.centery
+        glow = tuple(max(0, int(c * 0.35)) for c in color)
+        pygame.draw.circle(screen, glow, (cx, cy), r + 10)
+        pygame.draw.circle(screen, color, (cx, cy), r)
+        pygame.draw.circle(screen, (245, 248, 255), (cx, cy), r, 2)
+
+        name = _font(34).render(cfg["name"], True, SELECT if is_sel else TEXT)
+        screen.blit(name, (rect.centerx - name.get_width() // 2, box.bottom + 12))
+        temp = _font(24).render(f"{cfg['temp']}°C", True, TEXT_DIM)
+        screen.blit(temp, (rect.centerx - temp.get_width() // 2, box.bottom + 54))
+
+    def _info_weather(self, screen, weather):
+        cfg = WEATHER_CONFIG[weather]
+        swatch = pygame.Surface((128, 128), pygame.SRCALPHA)
+        pygame.draw.circle(swatch, cfg["color"], (64, 64), 60)
+        pygame.draw.circle(swatch, (245, 248, 255), (64, 64), 60, 3)
+        self._info_head(screen, swatch, cfg["name"], f"温度 {cfg['temp']}°C", "")
+
+        body_x = INFO_RECT.x + 480
+        f = _font(27)
+        y = INFO_RECT.y + 40
+        for i, row in enumerate(_wrap(f, cfg["desc"], INFO_RECT.right - 40 - body_x)):
+            if i >= 6:
+                break
+            screen.blit(f.render(row, True, TEXT), (body_x, y + i * 40))
+
     # ---------------------------------------------------- 滚动条
     def _draw_scrollbar(self, screen):
         # 敌人 / 附魔页已是一屏排满，不需要滚动条
@@ -1002,6 +1069,8 @@ class Codex:
             self._info_tower(screen, key)
         elif tab == self.TAB_ENEMY:
             self._info_enemy(screen, key)
+        elif tab == self.TAB_WEATHER:
+            self._info_weather(screen, key)
         else:
             self._info_enchant(screen, key)
 

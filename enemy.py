@@ -57,12 +57,6 @@ class Enemy(pygame.sprite.Sprite):
         self.stun_resistance = 0.0
         self.last_freeze_time = -9999
         self.last_stun_time = -9999
-        rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN)
-        if game.weather in rain_weathers:
-            self.speed *= 0.5
-            self.base_speed = self.speed
-            self.weather_slowed = True
-
         if game.weather == Weather.TAILWIND:
             self.speed *= 1.5
             self.base_speed = self.speed
@@ -114,8 +108,9 @@ class Enemy(pygame.sprite.Sprite):
             self.ghost_target = (ex * TILE_SIZE + TILE_SIZE // 2, ey * TILE_SIZE + TILE_SIZE // 2)
 
     def apply_slow(self, slow_factor, duration):
-        rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
-        if self.game.weather in rain_weathers:
+        # 极寒天气本身已经把移速砍半，这里不再叠加；雨天/雷暴/酸雨已经不减速了，
+        # 所以冰系减速在这三种天气下恢复正常生效。
+        if self.game.weather == Weather.EXTREME_COLD:
             return
         self.speed = self.base_speed * slow_factor
         self.slow_time = duration
@@ -128,8 +123,6 @@ class Enemy(pygame.sprite.Sprite):
         if self.game.weather in (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN):
             if Enchantment.RAIN_FIRE not in self.game.enchantments:
                 return
-        if self.game.weather == Weather.ENDLESS_NIGHT:
-            damage *= 2
         self.burn_damage = max(self.burn_damage, damage)
         self.burn_time = max(self.burn_time, duration)
 
@@ -160,11 +153,22 @@ class Enemy(pygame.sprite.Sprite):
             self.wither_time = duration
             self.wither_timer = 0
 
+    def resistance(self):
+        """当前抗性（可以为负）。
+
+        盔甲类敌人的基础抗性见 ARMOR_RESISTANCE；「抗性降低」(broken)
+        只把抗性减 20 个百分点，非盔甲怪因此变成 -20%（受伤 ×1.2）。
+        """
+        res = ARMOR_RESISTANCE.get(self.enemy_type, 0.0)
+        if self.broken:
+            res -= BROKEN_RESIST_DOWN
+        return res
+
     def apply_ice_broken(self):
         """冰系破甲：永久生效，受到的冰系伤害 +100%。
 
-        和普通破甲（broken）不同，这个只对冰系伤害生效，且不解除护甲减免，
-        而是在 take_damage 的护甲乘区里再乘一次 ICE_BROKEN_MULT。
+        和「抗性降低」(broken) 不同：这条不碰抗性，而是往增伤乘区里加 +100%，
+        且只对冰系伤害生效。
         """
         self.ice_broken = True
 
@@ -189,7 +193,9 @@ class Enemy(pygame.sprite.Sprite):
                     continue
                 if getattr(t, 'has_shield', False):
                     t.break_shield()
-                else:
+                    self.game.notify_tower_hit(t)
+                elif not t.is_invincible():
+                    self.game.notify_tower_hit(t)
                     t.kill()
         for wall in list(self.game.ice_walls):
             if abs(wall.x - cx) <= half and abs(wall.y - cy) <= half:
@@ -340,8 +346,6 @@ class Enemy(pygame.sprite.Sprite):
             buff_list.append("slow")
         if self.burn_time > 0:
             buff_list.append("burn")
-            if self.game.weather == Weather.ENDLESS_NIGHT:
-                buff_list.append("soul_burn")
         if self.poison_stacks > 0:
             buff_list.append("poison")
         if self.wind_mark_tower is not None:
@@ -399,23 +403,17 @@ class Enemy(pygame.sprite.Sprite):
             return 0
 
         if ignore_armor:
+            # 真实伤害：抗性与增伤乘区都不参与
             final_dmg = damage
         else:
-            final_dmg = damage
-            if self.enemy_type == EnemyType.IRON_ARMORED and not self.broken:
-                final_dmg *= 0.4
-            if self.enemy_type == EnemyType.GOLD_ARMORED and not self.broken:
-                final_dmg *= 0.3
-            if self.enemy_type == EnemyType.DIAMOND_ARMORED and not self.broken:
-                final_dmg *= 0.2
-            if self.enemy_type == EnemyType.NETHERITE_ARMORED and not self.broken:
-                final_dmg *= 0.1
-            if self.broken:
-                final_dmg *= 1.2
-            # 冰系破甲：和上面几条在同一个乘区（先护甲减免、再破甲增伤、再冰系破甲）
+            # 统一口径：最终伤害 = 基础伤害区 × (1 + 增伤乘区) × (1 - 抗性)
+            resistance = self.resistance()
+            bonus = 0.0
             if self.ice_broken and (element or getattr(self.game, "damage_element", None)) == "ice":
-                final_dmg *= ICE_BROKEN_MULT
-        final_dmg = int(final_dmg)
+                bonus += ICE_BROKEN_BONUS
+            final_dmg = damage * (1.0 + bonus) * (1.0 - resistance)
+        # 用 round 而不是直接 int：1000 * (1-0.8) 在浮点下是 199.99997，截断会白丢 1 点
+        final_dmg = int(round(final_dmg))
         self.health -= final_dmg
 
         if self.game:
