@@ -996,7 +996,7 @@ class BaguaArray:
         return True
 
     def draw(self, screen):
-        base = getattr(assets, "bagua_img_half", None)
+        base = getattr(assets, "bagua_img_fx", None)
         if base is None:
             # 兜底：资源缺失时用程序画的法阵
             surf = _bagua_surface()
@@ -1009,7 +1009,7 @@ class BaguaArray:
             self._rot_angle = self.angle
 
         surf = self._rot
-        # 出现 15 帧淡入、消失前 20 帧淡出（基础透明度已经是 50%）
+        # 出现 15 帧淡入、消失前 20 帧淡出（基础不透明度已经是 80%）
         fade = 255
         if self.timer < 15:
             fade = int(255 * self.timer / 15)

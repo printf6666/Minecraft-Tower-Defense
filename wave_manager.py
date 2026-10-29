@@ -1,5 +1,7 @@
 import random
-from config import EnemyType, FINAL_BOSS_WAVE
+from config import (EnemyType, FINAL_BOSS_WAVE, WAVE_ENEMY_BASE, WAVE_ENEMY_LINEAR,
+                    WAVE_ENEMY_TURN_WAVE, WAVE_ENEMY_LATE_STEP, WAVE_ENEMY_CAP,
+                    WAVE_GHOST_CAP)
 
 
 class WaveManager:
@@ -32,7 +34,14 @@ class WaveManager:
         self.wave_timer = self.wave_preparation_time
 
     def calculate_enemies_to_spawn(self):
-        base_enemies = 5 + self.current_wave * 2
+        w = self.current_wave
+        if w <= WAVE_ENEMY_TURN_WAVE:
+            base_enemies = WAVE_ENEMY_BASE + w * WAVE_ENEMY_LINEAR
+        else:
+            # 收敛段：每波只 +0.8，并卡上限，避免后期两三百只同屏拖死帧率
+            base_enemies = (WAVE_ENEMY_BASE + WAVE_ENEMY_TURN_WAVE * WAVE_ENEMY_LINEAR
+                            + int((w - WAVE_ENEMY_TURN_WAVE) * WAVE_ENEMY_LATE_STEP))
+            base_enemies = min(base_enemies, WAVE_ENEMY_CAP)
         if self.is_elite_wave():
             base_enemies += 5
         elif self.is_boss_wave():
@@ -46,7 +55,7 @@ class WaveManager:
 
     def calculate_ghost_count(self):
         if self.current_wave >= 5 and self.current_wave % 5 == 0:
-            return self.current_wave // 2 + 4
+            return min(self.current_wave // 2 + 4, WAVE_GHOST_CAP)
         return 0
 
     def is_elite_wave(self):

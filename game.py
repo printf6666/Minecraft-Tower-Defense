@@ -1098,13 +1098,21 @@ class Game:
         self.bagua_arrays.append(BaguaArray(tile[0], tile[1], dmg, self))
 
     def notify_tower_hit(self, tower):
-        """某座塔被打了（含破盾）：让 3x3 范围内的卧龙各 +50 能量。"""
+        """某座塔被打了（含破盾、含被免疫挡下的攻击）：3x3 内的卧龙各 +50 能量。
+
+        卧龙自己免疫，但「挨了一下」这件事本身要算 —— 否则苦力怕/BOSS 打它
+        只会显示没掉血、能量却一动不动。加个 1 秒冷却，避免 BOSS 贴身光环
+        每 18 帧刷一次把能量刷爆。
+        """
         if tower is None:
             return
         for t in self.towers:
             if not t.is_crouch_dragon():
                 continue
             if abs(t.x - tower.x) <= 1 and abs(t.y - tower.y) <= 1:
+                if t.hit_energy_cd > 0:
+                    continue
+                t.hit_energy_cd = CD_ENERGY_HIT_CD
                 t.gain_energy(CD_ENERGY_PER_HIT)
 
     def add_masterpiece_shockwave(self):
@@ -1114,6 +1122,16 @@ class Game:
                      for x in (0, SCREEN_WIDTH) for y in (0, SCREEN_HEIGHT))
         self.masterpiece_shockwaves.append(
             MasterpieceShockwave(cx, cy, radius))
+
+    def masterpiece_active(self):
+        """臻品呈现的生效条件：持有该附魔，且场上同时有寒冰盾（盾塔分支 2）与神锅（冰塔分支 4）。"""
+        if Enchantment.MASTERPIECE not in self.enchantments:
+            return False
+        has_pot = any(t.type == TowerType.ICE and t.level >= 11 and t.ice_branch == HOLY_POT_BRANCH
+                      for t in self.towers)
+        has_ice_shield = any(t.type == TowerType.SHIELD and t.level >= 11 and t.shield_branch == 2
+                             for t in self.towers)
+        return has_pot and has_ice_shield
 
     def trigger_masterpiece_ultimate(self):
         """「臻品呈现」大招起手：先播动画，伤害等动画放完再结算。
@@ -1190,8 +1208,8 @@ class Game:
         # 灯火通明：火系伤害 +80%（加算，不随附魔重复叠加）
         if tower_type == TowerType.FLAME and self.lantern_active():
             bonus += LANTERN_FIRE_BONUS
-        # 臻品呈现：冰系伤害 +240%（加算）
-        if tower_type == TowerType.ICE:
+        # 臻品呈现：需要「寒冰盾 + 神锅」同时在场，才给全局冰系 +240%（加算）
+        if tower_type == TowerType.ICE and self.masterpiece_active():
             bonus += MASTERPIECE_ICE_BONUS * self.enchantments.count(Enchantment.MASTERPIECE)
         return 1.0 + bonus / 100.0
 
@@ -1379,7 +1397,8 @@ class Game:
                 self.notify_tower_hit(t)
                 continue
             if t.is_invincible():
-                continue          # 卧龙免疫酸雨降级
+                self.notify_tower_hit(t)   # 免疫归免疫，「被酸雨打了」照样算
+                continue
             self.notify_tower_hit(t)
             old_level = t.level
             t.level -= 1
@@ -1567,6 +1586,8 @@ class Game:
 
             frozen_by_boss = self.boss_time_frozen > 0
             for tower in self.towers:
+                if tower.hit_energy_cd > 0:
+                    tower.hit_energy_cd -= 1
                 if tower.disabled_timer > 0:
                     tower.disabled_timer -= 1
                 if tower.type not in (TowerType.PRODUCTION, TowerType.TIME):
@@ -1657,6 +1678,7 @@ class Game:
                                     self.trigger_shield_burst(tower)
                                     self.notify_tower_hit(tower)
                                 elif tower.is_invincible():
+                                    self.notify_tower_hit(tower)
                                     continue
                                 else:
                                     self.notify_tower_hit(tower)

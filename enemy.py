@@ -64,7 +64,7 @@ class Enemy(pygame.sprite.Sprite):
         else:
             self.tailwind_boosted = False
 
-        if game.weather == Weather.HEADWIND or game.weather == Weather.EXTREME_COLD:
+        if game.weather == Weather.HEADWIND:
             self.speed *= 0.5
             self.base_speed = self.speed
             self.weather_slowed = True
@@ -108,10 +108,7 @@ class Enemy(pygame.sprite.Sprite):
             self.ghost_target = (ex * TILE_SIZE + TILE_SIZE // 2, ey * TILE_SIZE + TILE_SIZE // 2)
 
     def apply_slow(self, slow_factor, duration):
-        # 极寒天气本身已经把移速砍半，这里不再叠加；雨天/雷暴/酸雨已经不减速了，
-        # 所以冰系减速在这三种天气下恢复正常生效。
-        if self.game.weather == Weather.EXTREME_COLD:
-            return
+        # 天气本身不再减速（雨天/雷暴/酸雨/极寒都取消），所以冰系减速一律正常生效
         self.speed = self.base_speed * slow_factor
         self.slow_time = duration
 
@@ -194,7 +191,9 @@ class Enemy(pygame.sprite.Sprite):
                 if getattr(t, 'has_shield', False):
                     t.break_shield()
                     self.game.notify_tower_hit(t)
-                elif not t.is_invincible():
+                elif t.is_invincible():
+                    self.game.notify_tower_hit(t)   # 炸不死，但能量照加
+                else:
                     self.game.notify_tower_hit(t)
                     t.kill()
         for wall in list(self.game.ice_walls):

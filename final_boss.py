@@ -291,6 +291,7 @@ class BossStrike:
             self.game.notify_tower_hit(tower)
             return
         if tower.is_invincible():
+            self.game.notify_tower_hit(tower)   # 免疫也要算挨打
             return                     # 卧龙免疫锁定
         # 指令·执行只“锁定”炮塔，真正永久删除留给抹除线与世界重载
         tower.disabled_timer = max(getattr(tower, "disabled_timer", 0), 12 * 60)
@@ -360,6 +361,7 @@ class DeleteBeam:
                 self.game.notify_tower_hit(tower)
                 continue
             if tower.is_invincible():
+                self.game.notify_tower_hit(tower)
                 continue               # 卧龙免疫抹除与锁定
             if destroyed < 3:
                 # 一条删除线最多抹除 3 座炮塔，其余只被锁定，避免一波清空防线
@@ -616,6 +618,7 @@ class FinalBoss(Enemy):
                 if tower.in_pulse():
                     continue
                 if tower.is_invincible():
+                    self.game.notify_tower_hit(tower)
                     continue           # 卧龙免疫禁魔
                 tower.disabled_timer = max(getattr(tower, "disabled_timer", 0), frames)
                 self.game.notify_tower_hit(tower)
@@ -809,6 +812,7 @@ class FinalBoss(Enemy):
                 self.game.notify_tower_hit(tower)
                 continue
             if tower.is_invincible():
+                self.game.notify_tower_hit(tower)
                 continue               # 卧龙免疫世界重载
             self.game.notify_tower_hit(tower)
             self.game.destroy_tower_by_boss(tower)

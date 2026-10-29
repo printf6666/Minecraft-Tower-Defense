@@ -155,14 +155,14 @@ ENCHANTMENT_DATA = {
     Enchantment.TELESCOPE: {"name": "望远镜", "desc": "所有炮塔射程增加1格", "cost": 200},
     Enchantment.FIRE_ARROW: {"name": "火矢", "desc": "箭矢伤害*2，附带燃烧4秒", "cost": 200},
     Enchantment.PULSE_SHIELD: {"name": "脉冲护盾", "desc": "护盾被击碎后进入脉冲状态8秒，期间免疫所有伤害", "cost": 800},
-    Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，雷神之锤每攻击120次，所有雷盾反击一次并引爆所有蓄风印记", "cost": 1600},
+    Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，雷神之锤每攻击140次，所有雷盾反击一次并引爆所有蓄风印记", "cost": 1600},
     Enchantment.EMBER_REBIRTH: {"name": "余烬重生", "desc": "同时存在满级龙息塔与8座满级核弹塔时，点击龙息塔按Q花费5万金币献祭：塔消失、全场核弹立即冷却齐射，巨型陨石从天而降、着地时对全场敌人造成1000000007伤害。献祭花费逐次翻倍", "cost": 3200},
     Enchantment.WAX: {"name": "蜜脾", "desc": "所有炮塔涂蜡，酸雨将无法破坏炮塔及护盾。酸雨开始后每0.5秒从终点扇形召唤5只蜜蜂，共召唤10次，蜜蜂随后寻敌，撞击敌人后死亡并造成其1%最大生命的毒系伤害", "cost": 400},
     Enchantment.INFINITY_GAUNTLET: {"name": "无限手套", "desc": "鼠标位置将始终附着无限手套，鼠标点击敌人可对其造成各种伤害，伤害 = 攻击力 * 波数 ** 2 * (1 + 对应元素强化 + 均衡强化)", "cost": 1600},
     Enchantment.UNSTABLE_CRYSTAL: {"name": "不稳定水晶", "desc": "TNT类炮塔子弹爆炸有10%概率在周围道路格生成不稳定水晶，敌人碰到后受到其1%最大生命伤害并引发爆炸；核弹/凋零核弹爆炸时全场每个道路格各有10%概率生成", "cost": 1600},
     Enchantment.POWER_V: {"name": "力量V", "desc": "箭矢伤害+125%", "cost": 300},
     Enchantment.LANTERN: {"name": "灯火通明", "desc": "场上存在3座满级星焰提灯时：燃烧伤害*1.5，火系伤害+80%，并永久驱散全场迷雾", "cost": 1000},
-    Enchantment.MASTERPIECE: {"name": "臻品呈现", "desc": "冰系伤害+240%。神锅每攻击120次释放大招：播放「臻品呈现」动画，对全场敌人造成61803+500*|温度|伤害，并使其获得永久冰系破甲、冰冻4秒", "cost": 1600},
+    Enchantment.MASTERPIECE: {"name": "臻品呈现", "desc": "同时存在寒冰盾与神锅时：全局冰系伤害+240%；神锅每攻击140次释放大招，对全场敌人造成61803+500*|温度|伤害，并使其永久获得冰系破甲、冰冻4秒", "cost": 1600},
 }
 
 GAUNTLET_ATTACKS = [
@@ -241,15 +241,29 @@ LANTERN_FIRE_BONUS = 80          # 灯火通明：火系伤害加成（加算，
 #  攻击与 6-3-1 / 6-3-2 相同（金币 1% 加伤 + 整列闪电）。
 #  自身无敌；靠「攻击」和「挨打」攒能量，满 100 在道路上放一座八卦阵。
 # ==========================================================================================
+# ==========================================================================================
+#  波次敌人数曲线
+#  原先是 5 + 波数*2 一路线性涨，95 波时基础 200 只 + 幽灵 51 只 = 251 只同屏，
+#  帧率直接崩。改成：25 波之前保持原样，之后每波只 +0.8，并给基础数 / 幽灵数各设上限。
+# ==========================================================================================
+WAVE_ENEMY_BASE = 5               # 起手数量
+WAVE_ENEMY_LINEAR = 2             # 25 波前每波 +2
+WAVE_ENEMY_TURN_WAVE = 25         # 从第几波开始收敛
+WAVE_ENEMY_LATE_STEP = 0.8        # 收敛后每波 +0.8
+WAVE_ENEMY_CAP = 88               # 基础数量上限
+WAVE_GHOST_CAP = 18               # 幽灵数量上限（原公式 波数//2+4，95 波能到 51 只）
+
 CROUCH_DRAGON_BRANCH = 3
 CD_ENERGY_PER_ATTACK = 1          # 自身每次攻击 +1
 CD_ENERGY_PER_HIT = 50            # 自身或周围 8 格内的塔被攻击（含破盾）+50
+CD_ENERGY_HIT_CD = 60             # 挨打加能量的冷却（帧）：防止 BOSS 贴身光环把能量刷爆
 CD_ENERGY_FULL = 100              # 满 100 放一座八卦阵
 CD_BAGUA_DAMAGE = {11: 64, 12: 80, 13: 96, 14: 112, 15: 128}   # 伤害 = 系数 * |温度|
 CD_BAGUA_TICK = 60                # 同一个敌人每秒最多吃 1 次
 CD_BAGUA_DURATION = int(12.5 * 60)   # 八卦阵存在 12.5 秒
 CD_BAGUA_SPIN = 0.45             # 太极自转速度（度/帧），约 27°/秒
 BAGUA_SIZE = TILE_SIZE * 2         # 八卦阵贴图边长 = 256
+BAGUA_ALPHA = 64                   # 八卦阵透明度 75%（= 不透明度 25%，255 * 0.25）
 CD_BAGUA_RADIUS = TILE_SIZE        # 判定半径 = 128（直径 256，与贴图一致）
 
 # 冰霜炸弹（冰系三阶分支 1）：AOE 伤害 = 基础攻击力 + 系数 * |温度|
@@ -268,7 +282,8 @@ ICE_BROKEN_BONUS = 1.0            # 冰系破甲：受到冰系伤害 +100%（�
 
 # 「臻品呈现」附魔
 MASTERPIECE_ICE_BONUS = 240      # 冰系伤害 +240%（加算，百分点）
-MASTERPIECE_ATTACKS = 120        # 神锅每攻击 N 次释放大招
+RESONANCE_ATTACKS = 140          # 雷神之锤每攻击 N 次触发一次共振风暴
+MASTERPIECE_ATTACKS = 140        # 神锅每攻击 N 次释放大招
 MASTERPIECE_DAMAGE = 61803       # 大招基础伤害
 MASTERPIECE_TEMP_MULT = 500      # 大招温度系数：伤害 = 61803 + 500 * |温度|
 MASTERPIECE_FREEZE_FRAMES = 4 * 60   # 大招冰冻 4 秒
@@ -368,7 +383,7 @@ WEATHER_CONFIG = {
     Weather.HEADWIND: {"name": "逆风", "temp": 25, "desc": "逆风：敌人移速-50%，炮塔射程-50%", "color": (152, 255, 152)},
     Weather.SCORCHING_SUN: {"name": "烈日", "temp": 50, "desc": "烈日：温度极高，敌人全体燃烧", "color": (255, 200, 0)},
     Weather.FOG: {"name": "迷雾", "temp": 15, "desc": "迷雾：视野遮挡", "color": (180, 180, 180)},
-    Weather.EXTREME_COLD: {"name": "极寒", "temp": -20, "desc": "极寒：温度极低，敌人移速-50%", "color": (100, 200, 255)},
+    Weather.EXTREME_COLD: {"name": "极寒", "temp": -20, "desc": "极寒：温度极低", "color": (100, 200, 255)},
     Weather.MAGNETIC_STORM: {"name": "磁暴", "temp": 20, "desc": "磁暴：闪电伤害翻倍，传送失效，金属敌人抗性降低", "color": (0, 255, 255)},
     Weather.FIRE_RAIN: {"name": "火雨", "temp": 100, "desc": "火雨：敌人持续燃烧，无法冻结", "color": (255, 69, 0)},
     Weather.AURORA: {"name": "极光", "temp": -10, "desc": "极光：温度较低，炮塔攻速随零下温度提升", "color": (0, 255, 255)},

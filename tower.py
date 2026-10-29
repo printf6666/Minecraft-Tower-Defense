@@ -117,6 +117,7 @@ class Tower(pygame.sprite.Sprite):
         self.ice_explosion_visual = 0
         self.wind_storm_visual = 0      # 雷神之锤命中特效隔次播放计数器
         self.crouch_energy = 0          # 卧龙：八卦阵能量（满 100 放一座）
+        self.hit_energy_cd = 0          # 卧龙：挨打加能量的冷却
 
         self.attack_speed_buff = 0
         self.production_buff = 0.0
@@ -553,7 +554,7 @@ class Tower(pygame.sprite.Sprite):
 
         if self.type == TowerType.WIND and self.level >= 11 and self.wind_branch == 2:
             self.game.resonance_counter += 1
-            if self.game.resonance_counter >= 120:
+            if self.game.resonance_counter >= RESONANCE_ATTACKS:
                 self.game.resonance_counter = 0
                 self.game.trigger_resonance_storm()
 
@@ -624,7 +625,7 @@ class Tower(pygame.sprite.Sprite):
         # 这里刻意对齐雷神之锤的 resonance_counter —— 按塔各算各的话，
         # 一座锅要自己打满 120 次（1 秒 1 发 = 2 分钟）才有反应，铺了 9 座也还是 2 分钟，
         # 体感就是「打了半天无事发生」。
-        if Enchantment.MASTERPIECE in self.game.enchantments:
+        if self.game.masterpiece_active():
             self.game.masterpiece_counter += 1
             if self.game.masterpiece_counter >= MASTERPIECE_ATTACKS:
                 self.game.masterpiece_counter = 0
@@ -1016,7 +1017,8 @@ class Bullet(pygame.sprite.Sprite):
                             e.on_lightning_hit()
                     h_effect = HorizontalLightningEffect(1024, row * TILE_SIZE + TILE_SIZE // 2, not is_golden)
                     self.game.horizontal_lightning_effects.append(h_effect)
-                elif random.random() < DRAGON_SUMMON_CHANCE:
+                elif self.trident_branch == 2 and random.random() < DRAGON_SUMMON_CHANCE:
+                    # 必须显式判断分支 2：原来只写 elif，卧龙（分支 3）会掉进这里召唤电龙
                     dragon = Dragon(self.game.path, 'electric', self.tower_level, self.game)
                     self.game.dragons.add(dragon)
         if self.tower_type == TowerType.WIND:

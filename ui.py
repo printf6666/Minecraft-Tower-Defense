@@ -100,7 +100,10 @@ def get_tower_info(game, tower):
                         "命中永久冰系破甲+100%",
                         "按R切换形态"]
                 if Enchantment.MASTERPIECE in game.enchantments:
-                    info.append(f"大招:{game.masterpiece_counter}/{MASTERPIECE_ATTACKS}")
+                    if game.masterpiece_active():
+                        info.append(f"大招:{game.masterpiece_counter}/{MASTERPIECE_ATTACKS}")
+                    else:
+                        info.append("需寒冰盾+神锅才生效")
             elif tower.ice_branch == 2:
                 ice_dmg = {11: 30, 12: 60, 13: 90, 14: 120, 15: 150}
                 info = [f"唤龙冰晶石 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
