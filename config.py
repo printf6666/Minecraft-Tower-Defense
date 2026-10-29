@@ -233,7 +233,7 @@ LANTERN_FIRE_BONUS = 80          # 灯火通明：火系伤害加成（加算，
 #  神锅 —— 冰系（ICE）第 4 分支，Lv11 起解锁
 #  射程全屏，攻击向全场随机 1 名敌人发射一枚冰系四芒星，单体结算。
 #  伤害 = 基础值 + 系数 * |温度|（温度越低越强，和冰系降温度的思路一致）。
-#  命中后施加永久「冰系破甲」：目标受到的冰系伤害 +100%，
+#  命中后施加永久「冰系破甲」：目标冰系抗性 -100 个百分点（走抗性乘区），
 #  这一条计入 take_damage 的增伤乘区，与抗性乘区分开算。
 # ==========================================================================================
 # ==========================================================================================
@@ -283,7 +283,7 @@ HOLY_POT_FIRE_RATE = 60          # 攻击间隔 1 秒（60 FPS）
 HOLY_POT_BOLT_SPEED = 26         # 四芒星飞行速度（像素/帧）
 HOLY_POT_BOLT_SIZE = 96          # 四芒星绘制边长（32 像素素材的 3 倍整数放大）
 HOLY_POT_BOLT_SPIN = 7.0         # 四芒星自转速度（度/帧）
-ICE_BROKEN_BONUS = 1.0            # 冰系破甲：受到冰系伤害 +100%（计入增伤乘区）
+ICE_BROKEN_RESIST_DOWN = 1.0     # 冰系破甲：冰系抗性 -100 个百分点（走抗性乘区）
 
 # 「臻品呈现」附魔
 MASTERPIECE_ICE_BONUS = 240      # 冰系伤害 +240%（加算，百分点）
@@ -336,6 +336,7 @@ class EnemyType(Enum):
     MAGMA_CUBE = 12
     MAGMA_CUBE_SMALL = 13
     HEROBRINE = 14
+    BLAZE = 15
     CREEPER = 16
     CHARGED_CREEPER = 17
     SPIDER = 18
@@ -348,13 +349,23 @@ class EnemyType(Enum):
 #  - 抗性可以为负：非盔甲怪被「抗性降低」后抗性 = -20%，相当于受伤 ×1.2
 #  - 抗性降低只是把抗性减 20 个百分点，不再把盔甲怪的抗性直接抹平成 -20%
 # ==========================================================================================
+# 烈焰人专属抗性：火抗 500%（实际在 take_damage 里直接短路成免疫）
+BLAZE_FIRE_RESIST = 5.0
+BLAZE_ICE_RESIST = -1.0            # 初始冰抗 -100%（冰伤 ×2）
+BLAZE_ICE_RESIST_BROKEN = -2.0     # 冰系破甲后 -200%（冰伤 ×3）
+
 ARMOR_RESISTANCE = {
     EnemyType.IRON_ARMORED: 0.60,
     EnemyType.GOLD_ARMORED: 0.70,
     EnemyType.DIAMOND_ARMORED: 0.80,
     EnemyType.NETHERITE_ARMORED: 0.90,
 }
-BROKEN_RESIST_DOWN = 0.20         # 「抗性降低」debuff：抗性 -20%
+# 远古守卫者（精英怪）：出场 ELITE_LOCK_DELAY 帧后，随机锁定一座炮塔
+# 护盾可以挡下（破盾但不锁定）；卧龙免疫，不会被选中
+ELITE_LOCK_DELAY = 3 * 60
+ELITE_LOCK_FRAMES = 15 * 60
+
+BROKEN_RESIST_DOWN = 0.20         # 「抗性降低」debuff：全抗 -20 个百分点
 
 
 class Weather(Enum):
@@ -411,6 +422,9 @@ ENEMY_TYPES = {
     "NETHERITE_ARMORED": {"image": "netherite_armored.png", "speed": 1.2, "health": 300, "reward": 50},
     "MAGMA_CUBE": {"image": "magma_cube.png", "speed": 2.0, "health": 180, "reward": 25},
     "MAGMA_CUBE_SMALL": {"image": "magma_cube.png", "speed": 3.0, "health": 90, "reward": 10},
+    # 烈焰人：飞行 + 免疫一切火系伤害（火抗 500%，连飘字都没有）
+    # 冰抗 -100%，被冰系破甲后 -200%
+    "BLAZE": {"image": "blaze.png", "speed": 2.2, "health": 200, "reward": 40},
     "CREEPER": {"image": "creeper.png", "speed": 2, "health": 100, "reward": 20},
     "CHARGED_CREEPER": {"image": "charged_creeper.png", "speed": 2, "health": 100, "reward": 20},
     "SPIDER": {"image": "spider.png", "speed": 4, "health": 100, "reward": 20},

@@ -97,7 +97,7 @@ def get_tower_info(game, tower):
                         f"公式:{base}+{per}*温度",
                         f"攻击间隔:{HOLY_POT_FIRE_RATE / 60}s 射程:全屏",
                         "随机1名敌人 单体伤害",
-                        "命中永久冰系破甲+100%",
+                        "命中永久冰系破甲:冰抗-100%",
                         "按R切换形态"]
                 if Enchantment.MASTERPIECE in game.enchantments:
                     if game.masterpiece_active():

@@ -195,7 +195,7 @@ TOWER_TREES = {
              "name": "神锅", "tag": "分支四 - 全屏", "cost": -1,
              "lines": ["射程全屏，随机挑 1 名敌人发射冰系四芒星（单体）。",
                        "伤害 = 100/200/300/400/500 + 2/4/6/8/10 * |温度|，间隔 1s。",
-                       "命中施加永久冰系破甲：目标受到冰系伤害 +100%，",
+                       "命中施加永久冰系破甲：目标冰系抗性 -100 个百分点，",
                        "该加成计入增伤乘区，与抗性乘区分开计算。",
                        "持有「臻品呈现」时每 140 次攻击释放一次全屏大招。"]},
         ],
@@ -275,7 +275,7 @@ TOWER_TREES = {
              "name": "三叉戟", "tag": "基础 - 电系", "cost": 400,
              "lines": ["伤害 20 → 100，闪电伤害 50 → 250。",
                        "射程 2 格起。",
-                       "升级会提高全场温度。"]},
+                       "电系不影响温度。"]},
             {"key": "r2", "stage": 1, "slot": 0.0, "img": "tower/6-2-1.png",
              "name": "黄金三叉戟", "tag": "二阶", "cost": -1,
              "lines": ["把当前金币的 1% 作为伤害加成。",
@@ -376,7 +376,7 @@ TOWER_TREES = {
              "name": "TNT", "tag": "基础 - 爆炸", "cost": 500,
              "lines": ["范围爆炸伤害 100 → 500。",
                        "射程 2.2 格，攻速 2s。",
-                       "升级会降低全场温度。"]},
+                       "爆炸系不影响温度。"]},
             {"key": "b2a", "stage": 1, "slot": 0.0, "img": "tower/9-2-1.png",
              "name": "雪TNT", "tag": "二阶 - 减速", "cost": -1,
              "lines": ["范围减速 50%，持续 12s。", "伤害 600 → 1000。"]},
@@ -470,9 +470,10 @@ ENEMY_INFO = {
     EnemyType.TANK: ("劫掠兽", "高血", ["速度 1.5，血量 300，击杀 30 金币。",
                                   "移动慢但很肉，适合用燃烧 / 中毒磨。",
                                   "冲击时会撞开路上的障碍。"]),
-    EnemyType.ELITE: ("远古守卫者", "高血", ["速度 2.5，血量 200，击杀 40 金币。",
-                                     "性价比很高的击杀目标。",
-                                     "会发射激光，但本作里只保留高血量设定。"]),
+    EnemyType.ELITE: ("远古守卫者", "锁定", ["速度 2.5，血量 200，击杀 40 金币。",
+                                       "出场 3 秒后随机锁定 1 座炮塔 15 秒，被锁的塔无法攻击。",
+                                       "护盾可以挡下：破盾但不会被锁定。",
+                                       "卧龙免疫锁定，但照样会被选中——挨这一下反而直接吃满能量。"]),
     EnemyType.WITHER: ("凋零", "穿墙", ["速度 2，血量 800，击杀 100 金币。",
                                     "无视路径，直接朝终点直线飞行。"]),
     EnemyType.IRON_ARMORED: ("铁甲", "抗性 60%", ["速度 1.2，血量 250，击杀 35 金币。",
@@ -510,6 +511,11 @@ ENEMY_INFO = {
     EnemyType.CHARGED_CREEPER: ("高压苦力怕", "自爆", ["爆炸范围扩大到 5x5。",
                                                 "倒计时只有普通苦力怕的一半。",
                                                 "护盾可以挡下这一次自爆。"]),
+    EnemyType.BLAZE: ("烈焰人", "飞行 · 免疫火系",
+                      ["速度 2.2，血量 200，击杀 40 金币。",
+                       "飞行单位：无视路径直飞终点，冰墙拦不住。",
+                       "火抗 500%：一切火系伤害完全免疫，连伤害飘字都不会出现。",
+                       "冰抗 -100%（冰系伤害 ×2），被冰系破甲后 -200%（×3）。"]),
     EnemyType.SPIDER: ("蜘蛛", "极速", ["速度 4，血量 100，击杀 20 金币。",
                                     "全场最快的普通单位。"]),
     EnemyType.FINAL_BOSS: (FINAL_BOSS_NAME, "最终 BOSS",
@@ -524,7 +530,8 @@ ENEMY_ORDER = [
     EnemyType.SLIME, EnemyType.SLIMELING, EnemyType.MAGMA_CUBE,
     EnemyType.MAGMA_CUBE_SMALL, EnemyType.GHOST, EnemyType.WITHER,
     EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED,
-    EnemyType.NETHERITE_ARMORED, EnemyType.HEROBRINE, EnemyType.FINAL_BOSS,
+    EnemyType.NETHERITE_ARMORED, EnemyType.BLAZE, EnemyType.HEROBRINE,
+    EnemyType.FINAL_BOSS,
 ]
 
 # 天气图鉴的展示顺序：先常规气温，再极端/特殊天气，永夜压轴
@@ -960,7 +967,8 @@ class Codex:
         name, tag, _ = ENEMY_INFO.get(etype, (etype.name, "", []))
         img_path = "enemy/" + ENEMY_TYPES[etype.name]["image"]
 
-        box = pygame.Rect(0, 0, rect.width - 40, rect.height - 78)
+        # 高度留够「名字 + 标签」两行，否则选中时标签会压到格子边框外面
+        box = pygame.Rect(0, 0, rect.width - 40, rect.height - 88)
         box.midtop = (rect.centerx, rect.y + 16)
         pygame.draw.rect(screen, (22, 26, 34), box)
         img = _aspect_image(img_path, box.width - 16, box.height - 16, align="height")
@@ -978,7 +986,7 @@ class Codex:
 
         f2 = _font(21)
         sub = f2.render(tag, True, ACCENT)
-        screen.blit(sub, (rect.centerx - sub.get_width() // 2, box.bottom + 48))
+        screen.blit(sub, (rect.centerx - sub.get_width() // 2, box.bottom + 44))
 
     def _draw_enchant_cell(self, screen, rect, ench, is_sel):
         """附魔页只显示图标 + 名称（名称在图标下方），详情点击后看底部信息框。"""

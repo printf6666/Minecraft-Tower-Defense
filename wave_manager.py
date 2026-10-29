@@ -97,6 +97,9 @@ class WaveManager:
             return EnemyType.CREEPER
         elif random.random() < 0.04:
             return EnemyType.SPIDER
+        elif self.current_wave > 12 and random.random() < 0.05:
+            # 烈焰人：飞行 + 免疫火系，逼玩家留一手冰塔
+            return EnemyType.BLAZE
         elif self.current_wave > 15 and rand < 0.10:
             return EnemyType.SLIME
         elif self.current_wave > 15 and rand < 0.18:

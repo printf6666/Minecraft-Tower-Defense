@@ -401,37 +401,24 @@ class Game:
                         if self.selected_tower.level < 15 and self.coins >= self.selected_tower.upgrade_cost:
                             self.coins -= self.selected_tower.upgrade_cost
                             tower = self.selected_tower
-                            old_effect = self.get_bomb_temp_effect(tower) if tower.type == TowerType.BOMB else 0
+                            temp_before = self.tower_temp_effect(tower)
                             tower.upgrade()
                             if assets.level_up_sound and tower.level in (6, 11):
                                 audio.play_sound(assets.level_up_sound)
-                            if tower.type in (TowerType.FLAME, TowerType.TRIDENT):
-                                self.temperature += 1
-                            elif tower.type == TowerType.ICE:
-                                self.temperature -= 1
-                            elif tower.type == TowerType.BOMB:
-                                new_effect = self.get_bomb_temp_effect(tower)
-                                self.temperature += (new_effect - old_effect)
+                            self.temperature += self.tower_temp_effect(tower) - temp_before
                     elif event.key == pygame.K_e and self.selected_tower:
                         for _ in range(5):
                             tower = self.selected_tower
                             if tower.level >= 15 or self.coins < tower.upgrade_cost:
                                 break
                             self.coins -= tower.upgrade_cost
-                            old_effect = self.get_bomb_temp_effect(tower) if tower.type == TowerType.BOMB else 0
+                            temp_before = self.tower_temp_effect(tower)
                             tower.upgrade()
                             if assets.level_up_sound and tower.level in (6, 11):
                                 audio.play_sound(assets.level_up_sound)
-                            if tower.type in (TowerType.FLAME, TowerType.TRIDENT):
-                                self.temperature += 1
-                            elif tower.type == TowerType.ICE:
-                                self.temperature -= 1
-                            elif tower.type == TowerType.BOMB:
-                                new_effect = self.get_bomb_temp_effect(tower)
-                                self.temperature += (new_effect - old_effect)
+                            self.temperature += self.tower_temp_effect(tower) - temp_before
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.BOMB:
                         tower = self.selected_tower
-                        old_effect = self.get_bomb_temp_effect(tower)
                         if tower.level >= 11:
                             tower.bomb_branch = 3 - tower.bomb_branch
                             tower.update_sprite()
@@ -440,8 +427,7 @@ class Game:
                             idx = sub_types.index(tower.bomb_subtype)
                             tower.bomb_subtype = sub_types[(idx + 1) % 5]
                             tower.update_sprite()
-                        new_effect = self.get_bomb_temp_effect(tower)
-                        self.temperature += (new_effect - old_effect)
+                        # 爆炸系不再影响温度，切换形态也就没有温度差要补
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.POISON:
                         max_branch = 3 if self.selected_tower.level >= 11 else 2
                         self.selected_tower.poison_branch = self.selected_tower.poison_branch % max_branch + 1
@@ -487,16 +473,7 @@ class Game:
                                 self.gold_per_wave -= (level - 5) * multiplier
                             if level >= 11:
                                 self.emerald_per_wave -= EMERALD_PER_WAVE_BY_LEVEL.get(level, 3)
-                        if self.selected_tower.type in (TowerType.FLAME, TowerType.TRIDENT):
-                            self.temperature -= self.selected_tower.level
-                        elif self.selected_tower.type == TowerType.ICE:
-                            self.temperature += self.selected_tower.level
-                        elif self.selected_tower.type == TowerType.BOMB:
-                            old_temp_effect = self.get_bomb_temp_effect(self.selected_tower)
-                            self.temperature -= old_temp_effect
-                        elif self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
-                            if self.selected_tower.shield_branch == 2:
-                                self.temperature += self.selected_tower.level
+                        self.temperature -= self.tower_temp_effect(self.selected_tower)
                         self.selected_tower.kill()
                         self.selected_tower = None
                     elif event.key == pygame.K_ESCAPE:
@@ -515,19 +492,19 @@ class Game:
                     elif event.key == pygame.K_F11:
                         pygame.display.toggle_fullscreen()
 
-    def get_bomb_temp_effect(self, tower):
-        if tower.level >= 11:
-            if tower.bomb_branch == 1:
-                return tower.level
-            elif tower.bomb_branch == 2:
-                return 0
-        else:
-            if tower.bomb_subtype == BombSubType.ICE:
-                return -tower.level
-            elif tower.bomb_subtype == BombSubType.FLAME:
-                return tower.level
-            else:
-                return 0
+    def tower_temp_effect(self, tower):
+        """单座塔对全场温度的影响。
+
+        只有火系升温、冰系降温（含寒冰盾）参与；爆炸系与电系一律 0。
+        """
+        if tower.type == TowerType.FLAME:
+            return tower.level
+        if tower.type == TowerType.ICE:
+            return -tower.level
+        if (tower.type == TowerType.SHIELD and tower.level >= 11
+                and tower.shield_branch == 2):
+            return -tower.level
+        return 0
 
     def destroy_ice_wall(self, wall):
         if wall in self.ice_walls:
@@ -889,14 +866,7 @@ class Game:
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
         for t in self.towers:
-            if t.type in (TowerType.FLAME, TowerType.TRIDENT):
-                self.temperature += t.level
-            elif t.type == TowerType.ICE:
-                self.temperature -= t.level
-            elif t.type == TowerType.BOMB:
-                self.temperature += self.get_bomb_temp_effect(t)
-            elif t.type == TowerType.SHIELD and t.level >= 11 and t.shield_branch == 2:
-                self.temperature -= t.level
+            self.temperature += self.tower_temp_effect(t)
         self.temperature += self.enchantment_temp_bonus()
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         self.play_boss_bgm()
@@ -1026,15 +996,7 @@ class Game:
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
         for t in self.towers:
-            if t.type in (TowerType.FLAME, TowerType.TRIDENT):
-                self.temperature += t.level
-            elif t.type == TowerType.ICE:
-                self.temperature -= t.level
-            elif t.type == TowerType.BOMB:
-                self.temperature += self.get_bomb_temp_effect(t)
-            elif t.type == TowerType.SHIELD and t.level >= 11:
-                if t.shield_branch == 2:
-                    self.temperature -= t.level
+            self.temperature += self.tower_temp_effect(t)
         self.temperature += self.enchantment_temp_bonus()
         self.wave_manager.start_new_wave()
         if self.wave_manager.current_wave in (50, FINAL_BOSS_WAVE):
@@ -1387,7 +1349,7 @@ class Game:
             if t.level < 1:
                 if min_level > 0:
                     continue
-                if t.type in (TowerType.FLAME, TowerType.TRIDENT, TowerType.BOMB):
+                if t.type == TowerType.FLAME:
                     self.temperature -= 1
                 elif t.type == TowerType.ICE:
                     self.temperature += 1
@@ -1451,7 +1413,6 @@ class Game:
                     t.range -= TILE_SIZE // 2
                     t.fire_rate = min(60, t.fire_rate + 6)
                     t.lightning_damage -= 50
-                    self.temperature -= 1
                 elif t.type == TowerType.WIND:
                     t.wind_knockback -= 12
                     if old_level >= 7:
@@ -1476,7 +1437,6 @@ class Game:
                         base_range = int(TILE_SIZE * 2.2)
                         t.range = base_range + int(TILE_SIZE * 0.2) * (t.level - 1)
                         t.fire_rate = 120
-                    self.temperature -= 1
                 if t.type == TowerType.PRODUCTION:
                     multiplier = 2 if t.is_on_gold_ore else 1
                     if old_level >= 6:
@@ -1909,15 +1869,7 @@ class Game:
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
         for t in self.towers:
-            if t.type in (TowerType.FLAME, TowerType.TRIDENT):
-                self.temperature += t.level
-            elif t.type == TowerType.ICE:
-                self.temperature -= t.level
-            elif t.type == TowerType.BOMB:
-                self.temperature += self.get_bomb_temp_effect(t)
-            elif t.type == TowerType.SHIELD and t.level >= 11:
-                if t.shield_branch == 2:
-                    self.temperature -= t.level
+            self.temperature += self.tower_temp_effect(t)
         self.temperature += self.enchantment_temp_bonus()
         self.save_game()
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
@@ -2057,12 +2009,7 @@ class Game:
             if tower_type == TowerType.PRODUCTION:
                 multiplier = 2 if (x, y) in self.gold_ore_positions else 1
                 self.gold_per_second += multiplier
-            if tower_type in (TowerType.FLAME, TowerType.TRIDENT):
-                self.temperature += 1
-            elif tower_type == TowerType.ICE:
-                self.temperature -= 1
-            elif tower_type == TowerType.BOMB:
-                self.temperature += self.get_bomb_temp_effect(t)
+            self.temperature += self.tower_temp_effect(t)
 
     def start_game(self):
         if self.load_game():

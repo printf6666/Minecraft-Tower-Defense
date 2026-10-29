@@ -46,6 +46,9 @@ class Enemy(pygame.sprite.Sprite):
         self.burn_damage = 0
         self.broken = False
         self.ice_broken = False
+        # 远古守卫者：出场倒计时，归零时锁一座塔
+        self.elite_lock_timer = (ELITE_LOCK_DELAY
+                                 if self.enemy_type == EnemyType.ELITE else -1)
         self.wind_mark_tower = None
         self.contaminated = False
         self.contaminated_timer = 0
@@ -76,11 +79,13 @@ class Enemy(pygame.sprite.Sprite):
                 self.weather_slowed = True
 
         if game.weather == Weather.SCORCHING_SUN:
-            if game.temperature > 0 and self.enemy_type not in (EnemyType.MAGMA_CUBE, EnemyType.MAGMA_CUBE_SMALL):
+            if game.temperature > 0 and self.enemy_type not in (
+                    EnemyType.MAGMA_CUBE, EnemyType.MAGMA_CUBE_SMALL, EnemyType.BLAZE):
                 self.burn_damage = max(self.burn_damage, game.temperature)
                 self.burn_time = max(self.burn_time, 999999)
         if game.weather == Weather.FIRE_RAIN:
-            if game.temperature > 0 and self.enemy_type not in (EnemyType.MAGMA_CUBE, EnemyType.MAGMA_CUBE_SMALL):
+            if game.temperature > 0 and self.enemy_type not in (
+                    EnemyType.MAGMA_CUBE, EnemyType.MAGMA_CUBE_SMALL, EnemyType.BLAZE):
                 self.burn_damage = max(self.burn_damage, game.temperature)
                 self.burn_time = max(self.burn_time, 999999)
 
@@ -103,7 +108,8 @@ class Enemy(pygame.sprite.Sprite):
         self.pos_y = start_y * TILE_SIZE + TILE_SIZE // 2
         self.rect.center = (self.pos_x, self.pos_y)
 
-        if self.enemy_type in (EnemyType.GHOST, EnemyType.WITHER):
+        # 飞行单位：无视路径直飞终点（顺便绕过冰墙判定）
+        if self.enemy_type in (EnemyType.GHOST, EnemyType.WITHER, EnemyType.BLAZE):
             ex, ey = self.path[-1]
             self.ghost_target = (ex * TILE_SIZE + TILE_SIZE // 2, ey * TILE_SIZE + TILE_SIZE // 2)
 
@@ -113,7 +119,8 @@ class Enemy(pygame.sprite.Sprite):
         self.slow_time = duration
 
     def apply_burn(self, damage, duration):
-        if self.enemy_type in (EnemyType.MAGMA_CUBE, EnemyType.MAGMA_CUBE_SMALL):
+        # 岩浆怪与烈焰人免疫燃烧
+        if self.enemy_type in (EnemyType.MAGMA_CUBE, EnemyType.MAGMA_CUBE_SMALL, EnemyType.BLAZE):
             return
         if self.game.temperature <= 0:
             return
@@ -150,19 +157,34 @@ class Enemy(pygame.sprite.Sprite):
             self.wither_time = duration
             self.wither_timer = 0
 
-    def resistance(self):
-        """当前抗性（可以为负）。
+    def resistance(self, element=None):
+        """最终抗性 = 全抗（受破甲影响） + 元素专属修正。
 
-        盔甲类敌人的基础抗性见 ARMOR_RESISTANCE；「抗性降低」(broken)
-        只把抗性减 20 个百分点，非盔甲怪因此变成 -20%（受伤 ×1.2）。
+        两层结构，和原神一致：
+          · 全抗：盔甲基础值，「抗性降低」(broken) 只减 20 个百分点 —— 90 全抗变 70，不会变 -10。
+          · 元素专属：冰系破甲只动冰抗（-100 点），其它元素不受影响；
+            烈焰人火抗 +500、冰抗 -100 / 破甲后 -200，同样是元素层。
+        所以「90 全抗 + 破甲 + 冰系破甲」= 全抗 70、冰抗 -30，两者互不覆盖。
         """
-        res = ARMOR_RESISTANCE.get(self.enemy_type, 0.0)
+        all_res = ARMOR_RESISTANCE.get(self.enemy_type, 0.0)
         if self.broken:
-            res -= BROKEN_RESIST_DOWN
-        return res
+            all_res -= BROKEN_RESIST_DOWN
+
+        # 烈焰人的元素抗性属于元素层，叠在全抗之上
+        if self.enemy_type == EnemyType.BLAZE:
+            if element == "fire":
+                return all_res + BLAZE_FIRE_RESIST
+            if element == "ice":
+                ice = BLAZE_ICE_RESIST_BROKEN if self.ice_broken else BLAZE_ICE_RESIST
+                return all_res + ice
+            return all_res
+
+        if self.ice_broken and element == "ice":
+            return all_res - ICE_BROKEN_RESIST_DOWN   # 常量是正的，减下去
+        return all_res
 
     def apply_ice_broken(self):
-        """冰系破甲：永久生效，受到的冰系伤害 +100%。
+        """冰系破甲：永久生效，冰系抗性 -100 个百分点。
 
         和「抗性降低」(broken) 不同：这条不碰抗性，而是往增伤乘区里加 +100%，
         且只对冰系伤害生效。
@@ -177,6 +199,30 @@ class Enemy(pygame.sprite.Sprite):
                 self.image = assets.load_image("enemy/charged_creeper.png")
             except Exception:
                 pass
+
+    def cast_elite_lock(self):
+        """远古守卫者：随机锁定一座炮塔 15 秒。
+
+        护盾可以挡：先破盾，不锁定。
+        卧龙免疫锁定，但**照样会被选中** —— 这正是它的强项：
+        挨这一下不仅没事，还会因为「自身被攻击」直接吃满 100 能量。
+        """
+        towers = list(self.game.towers)
+        if not towers:
+            return
+        target = random.choice(towers)
+        if getattr(target, "has_shield", False):
+            # 护盾不免疫，先破盾；这一下仍然算「被攻击」
+            target.break_shield()
+            self.game.trigger_shield_burst(target)
+            self.game.notify_tower_hit(target)
+            return
+        if target.is_invincible():
+            # 卧龙：锁不上，但能量照加
+            self.game.notify_tower_hit(target)
+            return
+        target.disabled_timer = max(getattr(target, "disabled_timer", 0), ELITE_LOCK_FRAMES)
+        self.game.notify_tower_hit(target)
 
     def creeper_explode(self):
         is_charged = self.charged or self.enemy_type == EnemyType.CHARGED_CREEPER
@@ -282,6 +328,11 @@ class Enemy(pygame.sprite.Sprite):
 
         self._tick_resistances()
 
+        if self.elite_lock_timer > 0:
+            self.elite_lock_timer -= 1
+            if self.elite_lock_timer == 0:
+                self.cast_elite_lock()
+
         if self.creeper_explode_timer > 0:
             self.creeper_explode_timer -= 1
             if self.creeper_explode_timer == 0:
@@ -295,7 +346,7 @@ class Enemy(pygame.sprite.Sprite):
             self.kill()
             return False
 
-        if self.enemy_type in (EnemyType.GHOST, EnemyType.WITHER):
+        if self.enemy_type in (EnemyType.GHOST, EnemyType.WITHER, EnemyType.BLAZE):
             tx, ty = self.ghost_target
             dx = tx - self.pos_x
             dy = ty - self.pos_y
@@ -401,16 +452,20 @@ class Enemy(pygame.sprite.Sprite):
         if self.health <= 0:
             return 0
 
+        elem = element or getattr(self.game, "damage_element", None)
+
+        # 烈焰人：免疫一切火系伤害 —— 直接短路，不扣血、不飘字、不进伤害统计。
+        # 不能靠「抗性 500% 算出负数」来免疫，那样反而会把敌人奶起来。
+        if self.enemy_type == EnemyType.BLAZE and elem == "fire":
+            return 0
+
         if ignore_armor:
             # 真实伤害：抗性与增伤乘区都不参与
             final_dmg = damage
         else:
-            # 统一口径：最终伤害 = 基础伤害区 × (1 + 增伤乘区) × (1 - 抗性)
-            resistance = self.resistance()
-            bonus = 0.0
-            if self.ice_broken and (element or getattr(self.game, "damage_element", None)) == "ice":
-                bonus += ICE_BROKEN_BONUS
-            final_dmg = damage * (1.0 + bonus) * (1.0 - resistance)
+            # 统一口径：最终伤害 = 基础伤害区 × (1 - 最终抗性)
+            # 全抗、破甲、冰系破甲、烈焰人元素抗性全部并入 resistance()，纯加减
+            final_dmg = damage * (1.0 - self.resistance(elem))
         # 用 round 而不是直接 int：1000 * (1-0.8) 在浮点下是 199.99997，截断会白丢 1 点
         final_dmg = int(round(final_dmg))
         self.health -= final_dmg
@@ -419,7 +474,6 @@ class Enemy(pygame.sprite.Sprite):
             self.game.spawn_damage_text(final_dmg, self.rect.center, color=color, scale=scale,
                                         speed_x=text_speed_x)
             if final_dmg > 0 and getattr(self.game, "damage_stats", None) is not None:
-                elem = element or getattr(self.game, "damage_element", None)
                 self.game.damage_stats.add(elem, final_dmg)
 
         if self.health <= 0:
