@@ -179,12 +179,12 @@ def get_tower_info(game, tower):
     elif tower.type == TowerType.TRIDENT:
         if tower.level >= 11:
             if tower.trident_branch == CROUCH_DRAGON_BRANCH:
-                bagua_k = CD_BAGUA_DAMAGE.get(tower.level, 128)
+                bagua_dmg = game.bagua_damage(tower)
                 info = [f"卧龙 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",
                         f"金币1%作为伤害加成", "攻击施放闪电 整列敌人",
                         "自身无敌 免疫一切伤害",
                         f"能量:{tower.crouch_energy}/100",
-                        f"八卦阵:{bagua_k}*|温度|",
+                        f"八卦阵:{bagua_dmg}",
                         "按 R 切换形态"]
             elif tower.trident_branch == 2:
                 info = [f"唤龙电晶石 Lv{tower.level}", f"伤害:{tower.damage}", f"闪电:{tower.lightning_damage}",

@@ -255,10 +255,15 @@ WAVE_GHOST_CAP = 18               # 幽灵数量上限（原公式 波数//2+4�
 
 CROUCH_DRAGON_BRANCH = 3
 CD_ENERGY_PER_ATTACK = 1          # 自身每次攻击 +1
-CD_ENERGY_PER_HIT = 50            # 自身或周围 8 格内的塔被攻击（含破盾）+50
+CD_ENERGY_PER_HIT = 50            # 周围 8 格的塔被攻击（含破盾）+50
+CD_ENERGY_PER_SELF_HIT = 100      # 卧龙自己被攻击 +100
 CD_ENERGY_HIT_CD = 60             # 挨打加能量的冷却（帧）：防止 BOSS 贴身光环把能量刷爆
 CD_ENERGY_FULL = 100              # 满 100 放一座八卦阵
-CD_BAGUA_DAMAGE = {11: 64, 12: 80, 13: 96, 14: 112, 15: 128}   # 伤害 = 系数 * |温度|
+# 八卦阵伤害 = (CD_BAGUA_BASE + CD_BAGUA_TEMP * |温度|) * (等级 - 10)
+#              * (1 + 电系加成 + 均衡加成) * (1 - 敌人抗性)
+# 最后一乘由 take_damage 统一结算，所以这里只算到抗性之前。
+CD_BAGUA_BASE = 2500              # 固定基础
+CD_BAGUA_TEMP = 64                # 每 1 度温度的加成
 CD_BAGUA_TICK = 60                # 同一个敌人每秒最多吃 1 次
 CD_BAGUA_DURATION = int(12.5 * 60)   # 八卦阵存在 12.5 秒
 CD_BAGUA_SPIN = 0.45             # 太极自转速度（度/帧），约 27°/秒

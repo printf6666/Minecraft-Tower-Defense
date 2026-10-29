@@ -1092,10 +1092,14 @@ class Game:
                 return
             tile = random.choice(free)
 
+        self.bagua_arrays.append(BaguaArray(tile[0], tile[1], self.bagua_damage(tower), self))
+
+    def bagua_damage(self, tower):
+        """八卦阵伤害 = (2500 + 64*|温度|) * (等级-10) * 电系倍率（抗性由 take_damage 再乘）。"""
         lv = getattr(tower, "level", 15)
-        dmg = int(CD_BAGUA_DAMAGE.get(lv, 128) * abs(self.temperature))
-        dmg = max(1, int(dmg * self.get_element_damage_multiplier(TowerType.TRIDENT)))
-        self.bagua_arrays.append(BaguaArray(tile[0], tile[1], dmg, self))
+        base = CD_BAGUA_BASE + CD_BAGUA_TEMP * abs(self.temperature)
+        dmg = base * max(0, lv - 10) * self.get_element_damage_multiplier("electric")
+        return max(1, int(dmg))
 
     def notify_tower_hit(self, tower):
         """某座塔被打了（含破盾、含被免疫挡下的攻击）：3x3 内的卧龙各 +50 能量。
@@ -1113,7 +1117,9 @@ class Game:
                 if t.hit_energy_cd > 0:
                     continue
                 t.hit_energy_cd = CD_ENERGY_HIT_CD
-                t.gain_energy(CD_ENERGY_PER_HIT)
+                # 自己被攻击 +100，只是「邻居挨打」则 +50
+                gain = CD_ENERGY_PER_SELF_HIT if t is tower else CD_ENERGY_PER_HIT
+                t.gain_energy(gain)
 
     def add_masterpiece_shockwave(self):
         """大招落点冲击波：从地图中心炸开，半径取到能盖住屏幕四角。"""
