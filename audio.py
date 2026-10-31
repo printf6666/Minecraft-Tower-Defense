@@ -128,3 +128,25 @@ def play_sound(sound):
         sound.play()
     except Exception:
         pass
+
+
+_sound_cooldowns = {}   # id(sound) -> 上次播放时刻（pygame.time.get_ticks 毫秒）
+
+
+def play_sound_cool(sound, cooldown=80):
+    """带冷却的音效播放：同一音效在 cooldown 毫秒内只播一次。
+
+    用于高频事件（破层、落雷、破盾、选塔…）。混音通道有限，
+    高频裸播会把通道挤爆、把关键音效（boss 技能预警）顶掉。
+    sound 为 None（素材缺失）时静默跳过。
+    """
+    if not _enabled or _using_dummy or sound is None:
+        return
+    try:
+        now = pygame.time.get_ticks()
+        if now - _sound_cooldowns.get(id(sound), -10 ** 9) < cooldown:
+            return
+        _sound_cooldowns[id(sound)] = now
+        sound.play()
+    except Exception:
+        pass

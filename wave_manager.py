@@ -1,7 +1,9 @@
 import random
-from config import (EnemyType, FINAL_BOSS_WAVE, WAVE_ENEMY_BASE, WAVE_ENEMY_LINEAR,
+from config import (EnemyType, FINAL_BOSS_WAVE, OMEGA_WAVE, HEROBRINE_WAVE, BOSS_ONLY_WAVES,
+                    WAVE_ENEMY_BASE, WAVE_ENEMY_LINEAR,
                     WAVE_ENEMY_TURN_WAVE, WAVE_ENEMY_LATE_STEP, WAVE_ENEMY_CAP,
-                    WAVE_GHOST_CAP)
+                    WAVE_GHOST_CAP, WAVE_GHOST_CAP_LATE,
+                    EPOCH_ENEMY_POOLS)
 
 
 class WaveManager:
@@ -20,7 +22,9 @@ class WaveManager:
     def start_new_wave(self):
         self.current_wave += 1
         self.enemies_spawned = 0
-        if self.current_wave in (50, FINAL_BOSS_WAVE):
+        # 140 波起「终局检验」：出怪间隔略微收紧，给 150 波热身
+        self.spawn_delay = 35 if self.current_wave >= 140 else 40
+        if self.current_wave in BOSS_ONLY_WAVES:
             self.enemies_to_spawn = 1
             self.gold_armored_count = 0
             self.ghost_count = 0
@@ -55,8 +59,17 @@ class WaveManager:
 
     def calculate_ghost_count(self):
         if self.current_wave >= 5 and self.current_wave % 5 == 0:
-            return min(self.current_wave // 2 + 4, WAVE_GHOST_CAP)
+            # 「亡灵军团」纪元（130-139 波）幽灵上限临时放宽到 24
+            cap = WAVE_GHOST_CAP_LATE if 130 <= self.current_wave <= 139 else WAVE_GHOST_CAP
+            return min(self.current_wave // 2 + 4, cap)
         return 0
+
+    def _epoch_pool(self):
+        """当前波段对应的纪元怪池（110-119 / 130-139），没有则 None。"""
+        for (lo, hi), pool in EPOCH_ENEMY_POOLS.items():
+            if lo <= self.current_wave <= hi:
+                return pool
+        return None
 
     def is_elite_wave(self):
         return self.current_wave % self.elite_wave_interval == 0 and self.current_wave > 0
@@ -78,16 +91,27 @@ class WaveManager:
         return None
 
     def select_enemy_type(self):
-        if self.current_wave == 50:
+        if self.current_wave == HEROBRINE_WAVE:
             return EnemyType.HEROBRINE
-        if self.current_wave == FINAL_BOSS_WAVE:
+        if self.current_wave == OMEGA_WAVE:
             return EnemyType.FINAL_BOSS
+        if self.current_wave == FINAL_BOSS_WAVE:
+            return EnemyType.WORLD_SEED
         if self.gold_armored_spawned < self.gold_armored_count:
             self.gold_armored_spawned += 1
             return EnemyType.GOLD_ARMORED
         if self.ghost_spawned < self.ghost_count:
             self.ghost_spawned += 1
             return EnemyType.GHOST
+        # 「群系纪元」：110-119 / 130-139 走权重怪池，其余波段走默认概率瀑布
+        epoch_pool = self._epoch_pool()
+        if epoch_pool:
+            roll = random.uniform(0, sum(w for _, w in epoch_pool))
+            acc = 0
+            for enemy_type, weight in epoch_pool:
+                acc += weight
+                if roll <= acc:
+                    return enemy_type
         rand = random.random()
         if self.is_boss_wave() and self.enemies_spawned == self.enemies_to_spawn:
             return EnemyType.WITHER

@@ -405,7 +405,7 @@ class MushroomExplosion:
         self.bomb_branch = bomb_branch
         self.frame = 0
         self.frame_timer = 0
-        self.frame_duration = 3
+        self.frame_duration = 4
         self.max_frames = 10
         self.done = False
 
@@ -424,7 +424,7 @@ class MushroomExplosion:
                                            element=getattr(game, "damage_element", None))
                 game.coins += reward
                 enemy.apply_stun(120)
-        else:
+        elif bomb_branch == 2:
             percent_damage = [0.02, 0.04, 0.06, 0.08, 0.1][tower_level - 11]
             fixed_damage = [2000, 4000, 6000, 8000, 10000][tower_level - 11]
             if game.wither_rose_active():
@@ -442,6 +442,27 @@ class MushroomExplosion:
                 game.coins += reward
                 enemy.apply_stun(120)
                 enemy.wither_timer = 600
+        elif bomb_branch == 3:
+            # 冰冻核弹：爆炸系直伤（吃 |温度|）+ 最大生命百分比真伤 + 全场冰冻 4s + 临时降温
+            base_damage = int((ICE_NUKE_BASE_DAMAGE + ICE_NUKE_TEMP_SCALE * abs(game.temperature))
+                              * (tower_level - 10)
+                              * game.get_enchant_damage_multiplier(TowerType.BOMB))
+            percent = ICE_NUKE_PERCENT * (tower_level - 10)
+            for enemy in game.enemies:
+                if enemy.health <= 0:
+                    continue
+                # 直伤部分吃爆炸系抗性（由 take_damage 统一结算 1-抗性），飘字红色
+                reward = enemy.take_damage(base_damage, color=RED, scale=1.2,
+                                           element="explosion")
+                # 百分比部分 = 真实伤害，不吃抗性 / 增伤乘区
+                reward += enemy.take_damage(int(enemy.max_health * percent),
+                                            color=RED, scale=1.0,
+                                            ignore_armor=True, element="explosion")
+                game.coins += reward
+                # 冰冻 4s：硬冰冻（清抗性足额），BOSS 免疫控制自动跳过
+                game.apply_hard_freeze(enemy, ICE_NUKE_FREEZE_FRAMES)
+            # 强制当前温度额外 -40°C，持续 8 秒，不改变天气
+            game.apply_climate_temp(-ICE_NUKE_TEMP_DROP, ICE_NUKE_TEMP_FRAMES)
 
     def update(self):
         if self.done:
@@ -454,9 +475,14 @@ class MushroomExplosion:
                 self.done = True
 
     def draw(self, screen):
-        if self.done or self.frame >= len(assets.mushroom_cloud_frames):
+        frames = assets.mushroom_cloud_frames
+        if self.bomb_branch == 2:
+            frames = assets.mushroom_cloud_wither_frames
+        elif self.bomb_branch == 3:
+            frames = assets.mushroom_cloud_ice_frames
+        if self.done or self.frame >= len(frames):
             return
-        img = assets.mushroom_cloud_frames[self.frame]
+        img = frames[self.frame]
         rect = img.get_rect(center=(self.x, self.y))
         screen.blit(img, rect)
 
@@ -519,6 +545,9 @@ class NuclearShockwave:
         alpha = max(0, 120 - int(120 * self.timer / self.duration))
         if self.bomb_branch == 2:
             color = (0, 0, 0, alpha)
+        elif self.bomb_branch == 3:
+            # 冰冻核弹：天蓝色冲击波
+            color = (110, 200, 255, alpha)
         else:
             color = (255, 0, 0, alpha)
         s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)

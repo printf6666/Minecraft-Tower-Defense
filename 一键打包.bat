@@ -84,6 +84,7 @@ for %%D in (libexpat.dll libbz2.dll liblzma.dll libmpdec-4.dll ffi.dll) do (
     --add-data "debuff;debuff" ^
     --add-data "enchantment;enchantment" ^
     --add-data "enemy;enemy" ^
+    --add-data "fx;fx" ^
     --add-data "sound;sound" ^
     --add-data "tower;tower" ^
     --add-data "video;video" ^

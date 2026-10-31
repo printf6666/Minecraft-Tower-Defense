@@ -13,6 +13,8 @@ import assets
 from config import (TOWER_DATA, TowerType, ENCHANTMENT_DATA, ENCHANTMENT_ORDER,
                     ENEMY_TYPES, EnemyType, SCREEN_WIDTH, SCREEN_HEIGHT,
                     FINAL_BOSS_LAYERS, FINAL_BOSS_LAYER_HEALTH, FINAL_BOSS_NAME,
+                    ALPHA_BOSS_NAME, ALPHA_LAYERS, ALPHA_LAYER_HEALTH, ALPHA_TOTAL_HEALTH,
+                    ALPHA_END_CRYSTAL_HEALTH,
                     Weather, WEATHER_CONFIG)
 
 # ---------------------------------------------------------------- 配色
@@ -402,13 +404,19 @@ TOWER_TREES = {
              "lines": ["全屏 (Lv-10)*2% 最大生命 + (Lv-10)*2000 固定伤害。",
                        "击晕 2s，凋零 10s。",
                        "攻击间隔 35s","与凋零之首组成「凋零玫瑰」。"]},
+            {"key": "b3c", "stage": 2, "slot": 2.0, "img": "tower/9-3-3.png",
+             "name": "冰冻核弹", "tag": "三阶 - 全屏", "cost": -1,
+             "lines": ["全屏爆炸系 (3000+16*|温度|)*(Lv-10)。",
+                       "附加 0.6%*(Lv-10) 最大生命真伤。",
+                       "全场冰冻 4s；额外降温 40°C 持续 8s。",
+                       "攻击间隔 40s，不改天气。"]},
         ],
-        # 5 个二阶分支 -> 2 个三阶终态是完整的二部图，逐条连线必然交叉，
-        # 所以用"汇流母线"表示：所有二阶先并入中间的水平母线，再由母线分出到两个终态。
+        # 5 个二阶分支 -> 3 个三阶终态是完整的二部图，逐条连线必然交叉，
+        # 所以用"汇流母线"表示：所有二阶先并入中间的水平母线，再由母线分出到三个终态。
         "edges": [("b1", "b2a"), ("b1", "b2b"), ("b1", "b2c"),
                   ("b1", "b2d"), ("b1", "b2e")],
         "bus": {"from": ["b2a", "b2b", "b2c", "b2d", "b2e"],
-                "to": ["b3a", "b3b"]},
+                "to": ["b3a", "b3c", "b3b"]},
     },
     TowerType.SHIELD: {
         "nodes": [
@@ -522,6 +530,17 @@ ENEMY_INFO = {
                            [f"第 100 波登场，共 {FINAL_BOSS_LAYERS} 层血。",
                             f"每层 {FINAL_BOSS_LAYER_HEALTH:,} 点，血量条只显示当前层。",
                             "会召唤小怪、释放多种指令技能并周期性「指令覆写」。"]),
+    EnemyType.WORLD_SEED: (ALPHA_BOSS_NAME, "真·最终 BOSS",
+                           [f"第 150 波登场，共 {ALPHA_LAYERS} 层血（5 阶段 × 64 层）。",
+                            f"每层 {ALPHA_LAYER_HEALTH:,} 点，总血量 {ALPHA_TOTAL_HEALTH:,}。",
+                            "五个维度阶段：主世界 / 下界 / 末地 / 深暗 / 虚空。",
+                            "下界阶段释放「圣火」：命中 -40%、每 16 秒降 1 级并四向蔓延。",
+                            "末地阶段召唤末影水晶回层，深暗阶段有幽匿护甲与灵波，",
+                            "虚空阶段解禁奥米伽全技能并读条「/stop 停服」。"]),
+    EnemyType.END_CRYSTAL: ("末影水晶", "阿尔法召唤物",
+                            [f"血量固定 {ALPHA_END_CRYSTAL_HEALTH:,}，不会移动。",
+                             "只要有一颗存活，每 10 秒为阿尔法回复一层血。",
+                             "优先击碎：奖励 0 金币，纯粹的战略目标。"]),
 }
 
 ENEMY_ORDER = [
@@ -531,7 +550,7 @@ ENEMY_ORDER = [
     EnemyType.MAGMA_CUBE_SMALL, EnemyType.GHOST, EnemyType.WITHER,
     EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED,
     EnemyType.NETHERITE_ARMORED, EnemyType.BLAZE, EnemyType.HEROBRINE,
-    EnemyType.FINAL_BOSS,
+    EnemyType.END_CRYSTAL, EnemyType.FINAL_BOSS, EnemyType.WORLD_SEED,
 ]
 
 # 天气图鉴的展示顺序：先常规气温，再极端/特殊天气，永夜压轴
@@ -661,10 +680,10 @@ class Codex:
         返回 (rows, cols, cell_w, cell_h, gap)。
         """
         if self.tab == self.TAB_ENEMY:
-            return 4, 5, 470, 244, 20       # 5 列 x 4 行，装 19 种敌人
+            return 5, 5, 470, 190, 16       # 5 列 x 5 行，装 22 种敌人
         if self.tab == self.TAB_WEATHER:
             return 4, 4, 560, 236, 24       # 4 列 x 4 行，正好装 16 种天气
-        return 5, 6, 396, 196, 16           # 6 列 x 5 行，共 30 格装 29 个
+        return 5, 6, 396, 196, 16           # 6 列 x 5 行，共 30 格装 29 个（火矢删除后原位空缺）
 
     def node_rects(self):
         """返回 [(rect, kind, payload, selected)]，屏幕坐标。"""

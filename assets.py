@@ -35,6 +35,8 @@ tower_icons = []
 
 tnt_explosion_frames = []
 mushroom_cloud_frames = []
+mushroom_cloud_wither_frames = []   # 凋零核弹配色
+mushroom_cloud_ice_frames = []      # 冰冻核弹配色
 endless_greed_frames = []
 ice_explosion_frames = []
 # 共振风暴序列：raw 是原尺寸（282x282），雷神之锤命中爆裂直接用它、不缩放；
@@ -54,6 +56,9 @@ BUFF_SIZE = 32
 buff_icons = {}
 bagua_img = None
 bagua_img_fx = None
+charm_img = None        # 魅惑标记：粉色半透明底 + 空心爱心（预渲染，直接 blit）
+lock_img = None         # 锁定标记：紫色半透明底 + 紫色 X（预渲染，直接 blit）
+sacred_fire_img = None  # 圣火标记：橙色半透明底 + 火焰标志（阿尔法下界技能，预渲染）
 shield_img = None
 
 white_lightning_frames = []
@@ -78,7 +83,14 @@ gold_ore_img = None
 blackstone_img = None
 soul_sand_img = None
 gilded_blackstone_img = None
+netherrack_img = None       # 阿尔法 P2 下界：石头
+glowstone_img = None        # 阿尔法 P2 下界：道路
+nether_gold_ore_img = None  # 阿尔法 P2 下界：金矿石
+end_stone_img = None        # 阿尔法 P3 末地：石头
+end_gold_ore_img = None     # 阿尔法 P3 末地：金矿石
+obsidian_img = None         # 阿尔法 P3 末地：道路
 command_block_img = None
+world_seed_img = None   # 阿尔法核心贴图（程序化 BOSS 外观 + 图鉴用）
 ice_wall_img = None
 bee_img = None
 unstable_crystal_img = None
@@ -91,6 +103,28 @@ electric_dragon_img = None
 explode_sound = None
 level_up_sound = None
 teleport_sound = None
+trader_accept_sound = None
+# 音效扩容（命名约定见 docs/音效接线清单 或工作日志）：
+# 缺文件时保持 None，audio.play_sound / play_sound_cool 会静默跳过，
+# 补素材后无需再改任何代码。
+click_sound = None              # 通用按钮 / 选塔
+place_sound = None              # 放置炮塔
+sell_sound = None               # 出售炮塔
+buy_sound = None                # 商店购买
+ultimate_sound = None           # 大招施放
+game_over_sound = None          # 漏怪失败
+victory_sound = None            # 通关
+layer_break_sound = None        # BOSS 破层「崩解」
+phase_change_sound = None       # 阿尔法转阶段「世界重生成」
+fill_sound = None               # /fill 命令方块落地
+execute_sound = None            # /execute 落雷
+charm_sound = None              # /effect 魅惑
+portal_sound = None             # 传送门召唤
+reload_sound = None             # /reload 世界重载 & /stop 停服读条
+sacred_fire_sound = None        # 圣火附着
+thunder_sound = None            # 雷暴落雷
+fireball_sound = None           # 恶魂火球
+tower_destroyed_sound = None    # 炮塔被 BOSS 抹除
 
 
 def init_assets():
@@ -126,14 +160,15 @@ def init_assets():
     tnt_explosion_frames.clear()
     for i in range(1, 6):
         try:
-            tnt_explosion_frames.append(load_image(f"tower/tnt{i}.png", (384, 384)))
+            tnt_explosion_frames.append(load_image(f"fx/tnt{i}.png", (384, 384)))
         except:
             tnt_explosion_frames.append(pygame.Surface((384, 384)))
 
     ice_explosion_frames.clear()
-    for i in range(17):
+    # 冰霜爆破：只用 ice_explosion00~14 共 15 帧（比原始序列少播最后 2 帧）
+    for i in range(15):
         try:
-            ice_explosion_frames.append(load_image(f"tower/ice_explosion{i:02d}.png"))
+            ice_explosion_frames.append(load_image(f"fx/ice_explosion{i:02d}.png"))
         except:
             pass
 
@@ -142,7 +177,7 @@ def init_assets():
     resonance_storm_raw_frames.clear()
     for i in range(1, 17):
         try:
-            img = load_image(f"tower/resonance_storm{i:02d}.png")
+            img = load_image(f"fx/resonance_storm{i:02d}.png")
         except Exception:
             # 13~16 已从素材里删掉，加载到 12 帧就自然结束
             break
@@ -152,20 +187,37 @@ def init_assets():
 
 
     global mushroom_cloud_frames, endless_greed_frames
+    global mushroom_cloud_wither_frames, mushroom_cloud_ice_frames
+
+    def _load_cloud_sheet(path):
+        """切 5x2 图集 -> 10 帧，最近邻放大到 800x1000。
+
+        像素画必须用 scale（最近邻），smoothscale 会把 8x8 像素块插值糊掉。
+        """
+        frames = []
+        try:
+            sheet = load_image(path)
+        except Exception:
+            return frames
+        fw = sheet.get_width() // 5
+        fh = sheet.get_height() // 2
+        for row in range(2):
+            for col in range(5):
+                frame = sheet.subsurface((col * fw, row * fh, fw, fh))
+                frames.append(pygame.transform.scale(frame, (800, 1000)))
+        return frames
+
     mushroom_cloud_frames.clear()
-    sheet = load_image("tower/mushroom_cloud.png")
-    fw = sheet.get_width() // 5
-    fh = sheet.get_height() // 2
-    for row in range(2):
-        for col in range(5):
-            frame = sheet.subsurface((col * fw, row * fh, fw, fh))
-            frame = pygame.transform.smoothscale(frame, (800, 1000))
-            mushroom_cloud_frames.append(frame)
+    mushroom_cloud_frames.extend(_load_cloud_sheet("fx/mushroom_cloud.png"))
+    mushroom_cloud_wither_frames = _load_cloud_sheet("fx/mushroom_cloud_wither.png") \
+        or list(mushroom_cloud_frames)
+    mushroom_cloud_ice_frames = _load_cloud_sheet("fx/mushroom_cloud_ice.png") \
+        or list(mushroom_cloud_frames)
 
 
     endless_greed_frames.clear()
     for n in range(1, 21):
-        endless_greed_frames.append(load_image(f"tower/star{n:02d}.png"))
+        endless_greed_frames.append(load_image(f"fx/star{n:02d}.png"))
 
     gold_img = load_image("tower/2-1-1.png", (64, 64))
     emerald_img = load_image("tower/emerald.png", (80, 80))
@@ -204,12 +256,27 @@ def init_assets():
     buff_icons["wind"] = load_image("debuff/wind.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["speed"] = load_image("debuff/speed.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["wither"] = load_image("debuff/wither.png", (BUFF_SIZE, BUFF_SIZE))
-    buff_icons["soul_burn"] = load_image("debuff/soul_burn.png", (BUFF_SIZE, BUFF_SIZE))
+    # soul_burn 机制已删除，图标也已移除（曾导致启动即 FileNotFoundError）
 
     # 卧龙的八卦阵（太极图，已抠掉棋盘格背景）
+    # 炮塔状态标记（128x128，尺寸和 TILE_SIZE 一致，所以不缩放，避免把描边磨糊）
+    global charm_img, lock_img, sacred_fire_img
+    try:
+        charm_img = load_image("fx/charm.png")
+    except Exception:
+        charm_img = None
+    try:
+        lock_img = load_image("fx/lock.png")
+    except Exception:
+        lock_img = None
+    try:
+        sacred_fire_img = load_image("fx/sacred_fire.png")
+    except Exception:
+        sacred_fire_img = None
+
     global bagua_img, bagua_img_fx
     try:
-        bagua_img = load_image("tower/bagua.png", (BAGUA_SIZE, BAGUA_SIZE))
+        bagua_img = load_image("fx/bagua.png", (BAGUA_SIZE, BAGUA_SIZE))
         # 实际画到场景里的版本：预乘不透明度（需求：80%）
         bagua_img_fx = bagua_img.copy()
         bagua_img_fx.fill((255, 255, 255, BAGUA_ALPHA), special_flags=pygame.BLEND_RGBA_MULT)
@@ -217,10 +284,10 @@ def init_assets():
         bagua_img = None
         bagua_img_fx = None
     global shield_img
-    shield_img = load_image("tower/shield.png", (128, 128))
+    shield_img = load_image("fx/shield.png", (128, 128))
 
     try:
-        sheet = load_image("tower/white_lightning.png")
+        sheet = load_image("fx/white_lightning.png")
     except:
         sheet = None
     if sheet:
@@ -237,7 +304,7 @@ def init_assets():
             white_lightning_h_frames.append(h_frame)
 
     try:
-        sheet = load_image("tower/golden_lightning.png")
+        sheet = load_image("fx/golden_lightning.png")
     except:
         sheet = None
     if sheet:
@@ -279,6 +346,42 @@ def init_assets():
     except:
         trader_accept_sound = None
 
+    # 音效扩容批量挂载：缺文件自动跳过（保持 None），素材就位即自动生效
+    global click_sound, place_sound, sell_sound, buy_sound, ultimate_sound
+    global game_over_sound, victory_sound
+    global layer_break_sound, phase_change_sound, fill_sound, execute_sound
+    global charm_sound, portal_sound, reload_sound, sacred_fire_sound
+    global thunder_sound, fireball_sound, tower_destroyed_sound
+
+    def _load_snd(filename):
+        # 依次尝试 .ogg / .mp3 / .wav：素材是什么格式就丢什么文件名
+        base = filename.rsplit(".", 1)[0]
+        for ext in (".ogg", ".mp3", ".wav"):
+            try:
+                return pygame.mixer.Sound(resource_path("sound/" + base + ext))
+            except Exception:
+                continue
+        return None
+
+    click_sound = _load_snd("click.ogg")
+    place_sound = _load_snd("place.ogg")
+    sell_sound = _load_snd("sell.ogg")
+    buy_sound = _load_snd("buy.ogg")
+    ultimate_sound = _load_snd("ultimate.ogg")
+    game_over_sound = _load_snd("game_over.ogg")
+    victory_sound = _load_snd("victory.ogg")
+    layer_break_sound = _load_snd("layer_break.ogg")
+    phase_change_sound = _load_snd("phase_change.ogg")
+    fill_sound = _load_snd("fill.ogg")
+    execute_sound = _load_snd("execute.ogg")
+    charm_sound = _load_snd("charm.ogg")
+    portal_sound = _load_snd("portal.ogg")
+    reload_sound = _load_snd("reload.ogg")
+    sacred_fire_sound = _load_snd("sacred_fire.ogg")
+    thunder_sound = _load_snd("thunder.ogg")
+    fireball_sound = _load_snd("fireball.ogg")
+    tower_destroyed_sound = _load_snd("tower_destroyed.ogg")
+
     ts = (128, 128)
     stone_img = load_image("tower/stone.png", ts)
     dirt_img = load_image("tower/dirt.png", ts)
@@ -308,12 +411,60 @@ def init_assets():
         gilded_blackstone_img.fill((45, 45, 45))
         pygame.draw.rect(gilded_blackstone_img, (255, 215, 0), (40, 40, 48, 48))
 
+    # 阿尔法群系改写地形贴图（P2 下界 / P3 末地）
+    global netherrack_img, glowstone_img, nether_gold_ore_img
+    global end_stone_img, end_gold_ore_img, obsidian_img
+    try:
+        netherrack_img = load_image("tower/netherrack.png", ts)
+    except:
+        netherrack_img = pygame.Surface(ts)
+        netherrack_img.fill((111, 54, 52))
+    try:
+        glowstone_img = load_image("tower/glowstone.png", ts)
+    except:
+        glowstone_img = pygame.Surface(ts)
+        glowstone_img.fill((144, 116, 66))
+        pygame.draw.rect(glowstone_img, (246, 208, 121), (24, 24, 80, 80))
+    try:
+        nether_gold_ore_img = load_image("tower/nether_gold_ore.png", ts)
+    except:
+        nether_gold_ore_img = pygame.Surface(ts)
+        nether_gold_ore_img.fill((111, 54, 52))
+        pygame.draw.rect(nether_gold_ore_img, (255, 215, 0), (40, 40, 48, 48))
+    try:
+        end_stone_img = load_image("tower/end_stone.png", ts)
+    except:
+        end_stone_img = pygame.Surface(ts)
+        end_stone_img.fill((221, 223, 165))
+    try:
+        end_gold_ore_img = load_image("tower/end_gold_ore.png", ts)
+    except:
+        end_gold_ore_img = pygame.Surface(ts)
+        end_gold_ore_img.fill((221, 223, 165))
+        pygame.draw.rect(end_gold_ore_img, (255, 215, 0), (40, 40, 48, 48))
+    try:
+        obsidian_img = load_image("tower/obsidian.png", ts)
+    except:
+        # tower/obsidian.png 暂缺时用程序生成的深紫黑底兜底，
+        # 放入正式素材后自动替换
+        obsidian_img = pygame.Surface(ts)
+        obsidian_img.fill((15, 8, 26))
+        for i in range(-128, 128, 32):
+            pygame.draw.line(obsidian_img, (46, 22, 74), (i, 0), (i + 128, 128), 5)
+        pygame.draw.rect(obsidian_img, (86, 44, 130), (20, 20, 88, 88), 3)
+
     global command_block_img
     try:
         command_block_img = load_image("enemy/command_block.png", ts)
     except:
         command_block_img = pygame.Surface(ts)
         command_block_img.fill((0, 0, 139))
+
+    global world_seed_img
+    try:
+        world_seed_img = load_image("enemy/world_seed.png")
+    except:
+        world_seed_img = None
 
     global ice_wall_img
     try:
@@ -340,7 +491,7 @@ def init_assets():
     global ice_star_img
     try:
         # 素材本身就是 96x96（32 像素原稿的 3 倍整数放大），不再二次缩放，保住像素边
-        ice_star_img = load_image("tower/ice_star.png")
+        ice_star_img = load_image("fx/ice_star.png")
     except:
         ice_star_img = pygame.Surface((HOLY_POT_BOLT_SIZE, HOLY_POT_BOLT_SIZE), pygame.SRCALPHA)
         pygame.draw.polygon(ice_star_img, (150, 220, 255), [

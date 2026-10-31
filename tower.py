@@ -30,7 +30,7 @@ MAX_BRANCH = {
     TowerType.TRIDENT:    {1: 1, 2: 1, 3: 3},
     TowerType.WIND:       {1: 1, 2: 1, 3: 2},
     TowerType.POISON:     {1: 2, 2: 2, 3: 3},
-    TowerType.BOMB:       {1: 1, 2: 5, 3: 2},
+    TowerType.BOMB:       {1: 1, 2: 5, 3: 3},
     TowerType.TIME:       {1: 1, 2: 1, 3: 1},
 }
 
@@ -122,6 +122,11 @@ class Tower(pygame.sprite.Sprite):
         self.attack_speed_buff = 0
         self.production_buff = 0.0
         self.disabled_timer = 0
+        self.charm_timer = 0            # 被 BOSS 魅惑的剩余帧数：攻击变成等量治疗
+        # 阿尔法「群系侵蚀-圣火」：没有时限，转阶段 / 换波 / BOSS 死亡时统一熄灭。
+        # sacred_fire_tick 到 0 时等级 -1 并向上下左右四格蔓延。
+        self.sacred_fire = False
+        self.sacred_fire_tick = SACRED_FIRE_TICK_FRAMES
 
         self.setup_tower()
         self.update_sprite()
@@ -211,6 +216,12 @@ class Tower(pygame.sprite.Sprite):
             self.attack_speed_buff = 0
             self.production_buff = 0.0
 
+    def _nuclear_fire_rate(self):
+        """核弹形态的攻击间隔：冰冻核弹 40s，核弹 / 凋零核弹 35s。"""
+        if self.bomb_branch == 3:
+            return ICE_NUKE_FIRE_RATE
+        return 35 * 60
+
     def upgrade(self):
         if self.level >= 15:
             return
@@ -272,7 +283,7 @@ class Tower(pygame.sprite.Sprite):
             if self.level >= 11:
                 self.is_nuclear = True
                 self.range = 0
-                self.fire_rate = 35 * 60
+                self.fire_rate = self._nuclear_fire_rate()
 
         if self.type in (TowerType.FLAME, TowerType.ICE):
             self.recalculate_stats()
@@ -406,13 +417,24 @@ class Tower(pygame.sprite.Sprite):
     def attack(self, current_time):
         if not self.can_attack(current_time):
             return []
+        # 阿尔法的「圣火」：着火的炮塔有 40% 概率这一发直接落空（MISS），
+        # 冷却照常消耗 —— 是对输出的持续压制，而不是简单的攻速减免。
+        if (getattr(self, "sacred_fire", False)
+                and self.type not in (TowerType.PRODUCTION, TowerType.TIME)
+                and random.random() < SACRED_FIRE_MISS_CHANCE):
+            self.last_shot = current_time
+            self.game.spawn_damage_text("MISS", self.rect.center, color=(255, 170, 60), scale=1.1)
+            return []
         # 整个攻击流程（含直接结算的地狱射线、闪电、爆炸）都归属该塔的属性
         prev_element = self.game.damage_element
+        prev_source = getattr(self.game, "damage_source_tower", None)
         self.game.damage_element = stats.tower_element(self.type)
+        self.game.damage_source_tower = self        # 供「魅惑变治疗」判定来源
         try:
             bullets = self._attack_inner(current_time)
         finally:
             self.game.damage_element = prev_element
+            self.game.damage_source_tower = prev_source
         # 卧龙：每打出一次攻击 +1 能量
         if bullets and self.is_crouch_dragon():
             self.gain_energy(CD_ENERGY_PER_ATTACK)
@@ -471,10 +493,12 @@ class Tower(pygame.sprite.Sprite):
                        and (e.rect.centerx - self.rect.centerx) ** 2 + (e.rect.centery - self.rect.centery) ** 2 <= er * er]
             if targets:
                 best = random.choice(targets)
-                if best.enemy_type in (EnemyType.HEROBRINE, EnemyType.FINAL_BOSS):
-                    dmg = int(best.max_health * 0.05)
+                # 地狱升华之弩对分层 BOSS 走当前层血量百分比（力量V：5% -> 6%）
+                if best.enemy_type in (EnemyType.HEROBRINE, EnemyType.FINAL_BOSS, EnemyType.WORLD_SEED):
+                    pct = 0.06 if Enchantment.POWER_V in self.game.enchantments else 0.05
+                    dmg = int(best.max_health * pct)
                 else:
-                    dmg = 99999999
+                    dmg = 999999999
                 reward = best.take_damage(dmg, color=RED, scale=1.4)
                 self.game.coins += reward
                 ray = HellRay(self.rect.centerx, self.rect.centery,
@@ -755,7 +779,8 @@ class Bullet(pygame.sprite.Sprite):
         self.teleport_branch = teleport_branch
 
         self.lightning_damage = 0
-        self.source_tower = None
+        # 子弹在 attack() 里生成，此时 damage_source_tower 就是开火的塔
+        self.source_tower = getattr(game, "damage_source_tower", None)
         self.poison_stacks = 0
         self.physical_branch = 1
 
@@ -807,10 +832,7 @@ class Bullet(pygame.sprite.Sprite):
             dmg = random.randint(0, self.damage * 2)
 
         mult = self.game.get_enchant_damage_multiplier(self.tower_type)
-        if self.tower_type == TowerType.PHYSICAL and Enchantment.FIRE_ARROW in self.game.enchantments:
-            mult *= 2
-        if self.tower_type == TowerType.PHYSICAL and Enchantment.POWER_V in self.game.enchantments:
-            mult *= 2.25
+        # 力量V 的「物理伤害+150%」走 get_enchant_damage_multiplier 的物理乘区（含传送塔）
         return int(dmg * mult)
 
     def calculate_lightning_damage(self):
@@ -893,6 +915,8 @@ class Bullet(pygame.sprite.Sprite):
 
     def on_hit(self, enemy):
         prev_element = self.game.damage_element
+        prev_source = getattr(self.game, "damage_source_tower", None)
+        self.game.damage_source_tower = self.source_tower
         if self.damage_element is not None:
             self.game.damage_element = self.damage_element
         final_dmg = self.calculate_final_damage()
@@ -907,6 +931,14 @@ class Bullet(pygame.sprite.Sprite):
                 final_dmg += int(enemy.health * 0.25)
 
         color = self.get_damage_color()
+        if self.source_tower is not None and self.source_tower.charm_timer > 0:
+            # 被魅惑：这一发不造成伤害，改为等量治疗，也不再附加任何 debuff
+            # （否则被魅惑的冰塔还会帮忙冻人，反而变成给玩家的奖励）
+            enemy.receive_heal(final_dmg)
+            self.kill()
+            self.game.damage_element = prev_element
+            self.game.damage_source_tower = prev_source
+            return
         reward = enemy.take_damage(final_dmg, color=color)
         self.game.coins += reward
         self.apply_effects(enemy)
@@ -918,6 +950,7 @@ class Bullet(pygame.sprite.Sprite):
                 self.game.endless_greed_explode(enemy.rect.centerx, enemy.rect.centery)
         self.kill()
         self.game.damage_element = prev_element
+        self.game.damage_source_tower = prev_source
 
     def apply_effects(self, enemy):
         if self.tower_type == TowerType.ICE:
@@ -949,8 +982,9 @@ class Bullet(pygame.sprite.Sprite):
                     enemy.teleport_to_start()
                     if assets.teleport_sound:
                         assets.teleport_sound.play()
-                if enemy.enemy_type not in (EnemyType.HEROBRINE, EnemyType.FINAL_BOSS) and random.random() < self.oneshot_chance:
-                    reward = enemy.take_damage(99999999, color=RED, scale=1.2)
+                # 秒杀对分层 BOSS 无效（力量V 提值后 999999999 一发就是阿尔法 2/3 层，必须免疫）
+                if enemy.enemy_type not in (EnemyType.HEROBRINE, EnemyType.FINAL_BOSS, EnemyType.WORLD_SEED) and random.random() < self.oneshot_chance:
+                    reward = enemy.take_damage(999999999, color=RED, scale=1.2)
                     self.game.coins += reward
             else:
                 if self.tower_level >= 6 and self.tower_level < 11:
@@ -986,8 +1020,6 @@ class Bullet(pygame.sprite.Sprite):
                     enemy.rect.centerx, enemy.rect.centery,
                     self.game.temperature, self.tower_level, self.stun_time)
         if self.tower_type == TowerType.PHYSICAL:
-            if Enchantment.FIRE_ARROW in self.game.enchantments:
-                enemy.apply_burn(self.game.temperature, 4 * 60)
             if self.tower_level >= 11 and not enemy.broken and self.physical_branch == 1:
                 enemy.broken = True
         if self.tower_type == TowerType.TRIDENT:
@@ -1070,6 +1102,7 @@ class BombBullet(pygame.sprite.Sprite):
         self.bomb_subtype = bomb_subtype
         self.game = game
         self.damage_element = getattr(game, "damage_element", None)
+        self.source_tower = getattr(game, "damage_source_tower", None)
         self.enemies = game.enemies
         img = tower_sprite_path(TowerType.BOMB, tower_level,
                                 bomb_subtype=bomb_subtype)
@@ -1107,8 +1140,13 @@ class BombBullet(pygame.sprite.Sprite):
         prev_element = self.game.damage_element
         if self.damage_element is not None:
             self.game.damage_element = self.damage_element
-        explosion = TNTExplosion(self.rect.centerx, self.rect.centery,
-                                 int(self.damage * mult), self.tower_level, self.bomb_subtype, self.game)
+        prev_source = getattr(self.game, "damage_source_tower", None)
+        self.game.damage_source_tower = self.source_tower
+        try:
+            explosion = TNTExplosion(self.rect.centerx, self.rect.centery,
+                                     int(self.damage * mult), self.tower_level, self.bomb_subtype, self.game)
+        finally:
+            self.game.damage_source_tower = prev_source
         self.game.damage_element = prev_element
         self.game.tnt_explosions.append(explosion)
         self.game.try_spawn_crystal_near(self.rect.centerx, self.rect.centery)
@@ -1127,6 +1165,7 @@ class NuclearMissile(pygame.sprite.Sprite):
         self.game = game
         self.bomb_branch = bomb_branch
         self.damage_element = getattr(game, "damage_element", None)
+        self.source_tower = getattr(game, "damage_source_tower", None)
         # 核弹是三阶形态，贴图固定走 9-3-{branch}
         self.raw_img = assets.load_image(
             tower_sprite_path(TowerType.BOMB, 11, bomb_branch=bomb_branch),
@@ -1142,8 +1181,13 @@ class NuclearMissile(pygame.sprite.Sprite):
             prev_element = self.game.damage_element
             if self.damage_element is not None:
                 self.game.damage_element = self.damage_element
-            explosion = MushroomExplosion(MAP_CENTER_X, MAP_CENTER_Y,
-                                          self.damage, self.tower_level, self.game, self.bomb_branch)
+            prev_source = getattr(self.game, "damage_source_tower", None)
+            self.game.damage_source_tower = self.source_tower
+            try:
+                explosion = MushroomExplosion(MAP_CENTER_X, MAP_CENTER_Y,
+                                              self.damage, self.tower_level, self.game, self.bomb_branch)
+            finally:
+                self.game.damage_source_tower = prev_source
             self.game.damage_element = prev_element
             self.game.mushroom_explosions.append(explosion)
             shockwave = NuclearShockwave(MAP_CENTER_X, MAP_CENTER_Y, self.game, self.bomb_branch)
@@ -1170,6 +1214,7 @@ class WitherBullet(pygame.sprite.Sprite):
         self.tower_level = tower_level
         self.game = game
         self.damage_element = getattr(game, "damage_element", None)
+        self.source_tower = getattr(game, "damage_source_tower", None)
         self.enemies = game.enemies
 
         # 凋零弹固定是毒系分支 2 的形态
@@ -1213,7 +1258,10 @@ class WitherBullet(pygame.sprite.Sprite):
         # 凋零弹的本体伤害吃毒系伤害加成
         final_dmg = int(self.damage * self.game.get_element_damage_multiplier("poison"))
 
+        prev_source = getattr(self.game, "damage_source_tower", None)
+        self.game.damage_source_tower = self.source_tower
         reward = enemy.take_damage(final_dmg, color=(100, 0, 100))
+        self.game.damage_source_tower = prev_source
         self.game.coins += reward
 
         if self.tower_level >= 6:
@@ -1241,6 +1289,7 @@ class IceStarBolt(pygame.sprite.Sprite):
         self.y = float(y)
         self.target = target
         self.damage = damage
+        self.source_tower = getattr(game, "damage_source_tower", None)
         self.speed = HOLY_POT_BOLT_SPEED
         self.spin = 0.0
         self.life = 0
@@ -1289,7 +1338,9 @@ class IceStarBolt(pygame.sprite.Sprite):
 
     def _hit(self, enemy):
         prev_element = self.game.damage_element
+        prev_source = getattr(self.game, "damage_source_tower", None)
         self.game.damage_element = "ice"
+        self.game.damage_source_tower = self.source_tower
         try:
             reward = enemy.take_damage(self.damage, color=ICE_BLUE, scale=1.2,
                                        element="ice")
@@ -1298,4 +1349,5 @@ class IceStarBolt(pygame.sprite.Sprite):
             self.game.add_ice_star_burst(enemy.rect.centerx, enemy.rect.centery)
         finally:
             self.game.damage_element = prev_element
+            self.game.damage_source_tower = prev_source
         self.kill()

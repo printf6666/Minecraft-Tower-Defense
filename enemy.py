@@ -25,13 +25,13 @@ class Enemy(pygame.sprite.Sprite):
             self.total_layers = 18
             self.current_layer = 18
         elif enemy_key in ("CREEPER", "CHARGED_CREEPER"):
-            self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
+            self.max_health = config["health"] * enemy_health_multiplier(game.wave_manager.current_wave)
             self.health = self.max_health
             self.total_layers = 1
             self.current_layer = 1
             self.charged = enemy_key == "CHARGED_CREEPER"
         else:
-            self.max_health = config["health"] * (1.2 ** game.wave_manager.current_wave)
+            self.max_health = config["health"] * enemy_health_multiplier(game.wave_manager.current_wave)
             self.health = self.max_health
             self.total_layers = 1
             self.current_layer = 1
@@ -72,11 +72,7 @@ class Enemy(pygame.sprite.Sprite):
             self.base_speed = self.speed
             self.weather_slowed = True
 
-        if game.weather == Weather.ENDLESS_NIGHT:
-            if self.enemy_type not in (EnemyType.GHOST, EnemyType.WITHER):
-                self.speed *= 0.5
-                self.base_speed = self.speed
-                self.weather_slowed = True
+        # 永夜只保留「黑暗 + 需要提灯照明」，不再降低敌人移速
 
         if game.weather == Weather.SCORCHING_SUN:
             if game.temperature > 0 and self.enemy_type not in (
@@ -295,7 +291,7 @@ class Enemy(pygame.sprite.Sprite):
             if self.burn_time % 30 == 0:
                 # 燃烧跳伤 = 温度 × 烈焰粉 × 高温燃烧 × 灯火通明 × (1 + 火系伤害加成)
                 dmg = self.game.burn_tick_damage(self.burn_damage)
-                reward = self.take_damage(dmg, color=ORANGE, scale=1.0, element="fire")
+                reward = self.take_damage(dmg, color=ORANGE, scale=1.0, element="fire", dot=True)
                 self.game.coins += reward
 
         if self.poison_stacks > 0:
@@ -304,7 +300,7 @@ class Enemy(pygame.sprite.Sprite):
                 self.poison_timer = 0
                 # 中毒跳伤 = (基础毒伤 + 中毒层数) × (1 + 毒系伤害加成)
                 poison_damage = int((self.game.poison_base_damage + self.poison_stacks) * self.game.get_element_damage_multiplier("poison"))
-                reward = self.take_damage(poison_damage, color=GREEN, scale=1.0, element="poison")
+                reward = self.take_damage(poison_damage, color=GREEN, scale=1.0, element="poison", dot=True)
                 self.game.coins += reward
 
         if self.wither_time > 0:
@@ -318,7 +314,7 @@ class Enemy(pygame.sprite.Sprite):
                 dmg = int(self.max_health * wither_pct)
                 # 凋零伤害统一归入毒系
                 reward = self.take_damage(dmg, color=(100, 0, 100), scale=1.0,
-                                          ignore_armor=True, element="poison")
+                                          ignore_armor=True, element="poison", dot=True)
                 self.game.coins += reward
         return False
 
@@ -447,9 +443,29 @@ class Enemy(pygame.sprite.Sprite):
                     break
         self.rect.center = (self.pos_x, self.pos_y)
 
+    def receive_heal(self, amount, color=(255, 120, 190), scale=1.2):
+        """被魅惑炮塔的「攻击」转化为治疗：回血 + 粉色 +N 飘字，不进伤害统计。"""
+        if self.health <= 0 or amount <= 0:
+            return
+        amount = int(round(amount))
+        if amount <= 0:
+            return
+        before = self.health
+        self.health = min(self.max_health, self.health + amount)
+        gained = int(round(self.health - before))
+        if gained > 0 and self.game:
+            self.game.spawn_damage_text(f"+{gained}", self.rect.center, color=color, scale=scale)
+
     def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, element=None,
-                    text_speed_x=0.0):
+                    text_speed_x=0.0, dot=False):
         if self.health <= 0:
+            return 0
+
+        # 魅惑：来源炮塔处于魅惑状态时，这一下不扣血，改为等量治疗。
+        # 放在火免疫之前 —— 被魅惑的火塔打烈焰人也应该是「治疗」，而不是被免疫吃掉。
+        src = getattr(self.game, "damage_source_tower", None) if self.game else None
+        if src is not None and getattr(src, "charm_timer", 0) > 0:
+            self.receive_heal(damage)
             return 0
 
         elem = element or getattr(self.game, "damage_element", None)

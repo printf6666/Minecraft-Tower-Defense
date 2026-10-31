@@ -121,6 +121,7 @@ class Enchantment(Enum):
     WITHER_ROSE = 17
     LAVA = 18
     TELESCOPE = 19
+    # 火矢已删除：枚举值 20 保留只为旧存档反序列化不炸，读档时会被过滤掉
     FIRE_ARROW = 20
     PULSE_SHIELD = 21
     RESONANCE_STORM = 22
@@ -153,14 +154,13 @@ ENCHANTMENT_DATA = {
     Enchantment.WITHER_ROSE: {"name": "凋零玫瑰", "desc": "同时拥有凋零之首与凋零核弹时，凋零debuff额外附加0.1%最大生命，凋零核弹伤害额外附加0.8%最大生命", "cost": 1600},
     Enchantment.LAVA: {"name": "岩浆桶", "desc": "每5秒提高1温度，每波开始时重置", "cost": 200},
     Enchantment.TELESCOPE: {"name": "望远镜", "desc": "所有炮塔射程增加1格", "cost": 200},
-    Enchantment.FIRE_ARROW: {"name": "火矢", "desc": "箭矢伤害*2，附带燃烧4秒", "cost": 200},
     Enchantment.PULSE_SHIELD: {"name": "脉冲护盾", "desc": "护盾被击碎后进入脉冲状态8秒，期间免疫所有伤害", "cost": 800},
     Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，雷神之锤每攻击140次，所有雷盾反击一次并引爆所有蓄风印记", "cost": 1600},
     Enchantment.EMBER_REBIRTH: {"name": "余烬重生", "desc": "同时存在满级龙息塔与8座满级核弹塔时，点击龙息塔按Q花费5万金币献祭：塔消失、全场核弹立即冷却齐射，巨型陨石从天而降、着地时对全场敌人造成1000000007伤害。献祭花费逐次翻倍", "cost": 3200},
     Enchantment.WAX: {"name": "蜜脾", "desc": "所有炮塔涂蜡，酸雨将无法破坏炮塔及护盾。酸雨开始后每0.5秒从终点扇形召唤5只蜜蜂，共召唤10次，蜜蜂随后寻敌，撞击敌人后死亡并造成其1%最大生命的毒系伤害", "cost": 400},
     Enchantment.INFINITY_GAUNTLET: {"name": "无限手套", "desc": "鼠标位置将始终附着无限手套，鼠标点击敌人可对其造成各种伤害，伤害 = 攻击力 * 波数 ** 2 * (1 + 对应元素强化 + 均衡强化)", "cost": 1600},
     Enchantment.UNSTABLE_CRYSTAL: {"name": "不稳定水晶", "desc": "TNT类炮塔子弹爆炸有10%概率在周围道路格生成不稳定水晶，敌人碰到后受到其1%最大生命伤害并引发爆炸；核弹/凋零核弹爆炸时全场每个道路格各有10%概率生成", "cost": 1600},
-    Enchantment.POWER_V: {"name": "力量V", "desc": "箭矢伤害+125%", "cost": 300},
+    Enchantment.POWER_V: {"name": "力量V", "desc": "物理伤害+150%；地狱升华之弩对BOSS的百分比伤害提升至6%", "cost": 400},
     Enchantment.LANTERN: {"name": "灯火通明", "desc": "场上存在3座满级星焰提灯时：燃烧伤害*1.5，火系伤害+80%，并永久驱散全场迷雾", "cost": 1000},
     Enchantment.MASTERPIECE: {"name": "臻品呈现", "desc": "同时存在寒冰盾与神锅时：全局冰系伤害+240%；神锅每攻击140次释放大招，对全场敌人造成61803+500*|温度|伤害，并使其永久获得冰系破甲、冰冻4秒", "cost": 1600},
 }
@@ -179,7 +179,8 @@ ENCHANTMENT_ORDER = [
     Enchantment.WIND, Enchantment.POISON, Enchantment.BOMB, Enchantment.DENSE, Enchantment.WIND_BURST,
     Enchantment.POISON_CONTRACT, Enchantment.BURN, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
     Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.WITHER_ROSE,
-    Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.FIRE_ARROW, Enchantment.PULSE_SHIELD,
+    # 火矢已删除：ENCHANTMENT_ORDER 里原第 21 位（TELESCOPE 之后）暂时空缺，后续放新附魔
+    Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.PULSE_SHIELD,
     Enchantment.RESONANCE_STORM,
     Enchantment.EMBER_REBIRTH,
     Enchantment.WAX,
@@ -211,6 +212,19 @@ class BombSubType(Enum):
     FLAME = 3
     POISON = 4
     WITHER_TNT = 5
+
+# ==========================================================================================
+#  冰冻核弹（爆炸塔三阶分支 3，贴图 9-3-3）
+#  全屏【爆炸系】伤害：(3000 + 16*|温度|) * (等级-10) * 增伤，抗性由 take_damage 结算；
+#  额外 0.6%*(等级-10) 最大生命真实伤害；全场冰冻 4s；额外降温 40°C 持续 8s（不改天气）
+# ==========================================================================================
+ICE_NUKE_FIRE_RATE = 40 * 60        # 攻击间隔 40 秒（核弹/凋零核弹为 35 秒）
+ICE_NUKE_BASE_DAMAGE = 3000         # 基础项，× (等级 - 10) × 增伤
+ICE_NUKE_TEMP_SCALE = 16            # 每点 |温度| 追加的伤害（高温低温都增伤）
+ICE_NUKE_PERCENT = 0.006            # × (等级 - 10) 最大生命，真实伤害
+ICE_NUKE_FREEZE_FRAMES = 4 * 60     # 全场冰冻 4 秒
+ICE_NUKE_TEMP_DROP = 40             # 临时气候修正：额外降温 40 度
+ICE_NUKE_TEMP_FRAMES = 8 * 60       # 降温持续 8 秒
 
 EMERALD_PER_WAVE_BY_LEVEL = {11: 1, 12: 2, 13: 3, 14: 4, 15: 5}
 
@@ -252,6 +266,26 @@ WAVE_ENEMY_TURN_WAVE = 25         # 从第几波开始收敛
 WAVE_ENEMY_LATE_STEP = 0.8        # 收敛后每波 +0.8
 WAVE_ENEMY_CAP = 88               # 基础数量上限
 WAVE_GHOST_CAP = 18               # 幽灵数量上限（原公式 波数//2+4，95 波能到 51 只）
+WAVE_GHOST_CAP_LATE = 24          # 「亡灵军团」纪元（130-139 波）幽灵上限临时放宽
+
+# ==========================================================================================
+#  敌人血量膨胀曲线
+#  100 波前：1.2^波数（原公式，保持不变）。
+#  101 波起：每波只膨胀 1.02 倍，锚定在 1.2^100 上 —— 49 波累计只涨 2.69 倍，
+#  否则按 1.2 走到 150 波会是 1.2^150 ≈ 7.5e11 倍，小怪比 BOSS 还肉。
+#  101-149 波的压力靠「群系纪元」（见 EPOCH_* 表）而不是血量提供。
+# ==========================================================================================
+HP_INFLATION_BASE_RATE = 1.2
+HP_INFLATION_TURN_WAVE = 100      # 从 101 波开始降速
+HP_INFLATION_LATE_RATE = 1.02
+
+
+def enemy_health_multiplier(wave):
+    """普通敌人血量倍率：≤100 波 1.2^w；>100 波 1.2^100 × 1.02^(w-100)。"""
+    if wave <= HP_INFLATION_TURN_WAVE:
+        return HP_INFLATION_BASE_RATE ** wave
+    return ((HP_INFLATION_BASE_RATE ** HP_INFLATION_TURN_WAVE)
+            * (HP_INFLATION_LATE_RATE ** (wave - HP_INFLATION_TURN_WAVE)))
 
 CROUCH_DRAGON_BRANCH = 3
 CD_ENERGY_PER_ATTACK = 1          # 自身每次攻击 +1
@@ -341,6 +375,8 @@ class EnemyType(Enum):
     CHARGED_CREEPER = 17
     SPIDER = 18
     FINAL_BOSS = 19
+    WORLD_SEED = 20      # 第 150 波真·最终 BOSS：原初·阿尔法（世界种子）
+    END_CRYSTAL = 21     # 阿尔法第 3 阶段召唤的末影水晶（可攻击，站着回层）
 
 
 # ==========================================================================================
@@ -366,6 +402,25 @@ ELITE_LOCK_DELAY = 3 * 60
 ELITE_LOCK_FRAMES = 15 * 60
 
 BROKEN_RESIST_DOWN = 0.20         # 「抗性降低」debuff：全抗 -20 个百分点
+
+# 最终 BOSS 的「指令-魅惑 /effect @e[type=Tower] charm」
+# 随机魅惑 2 座炮塔，攻击全部变成等量治疗；护盾可挡，卧龙免疫
+BOSS_CHARM_TOWERS = 2
+BOSS_CHARM_FRAMES = 12 * 60
+
+# ==========================================================================================
+#  阿尔法的「群系侵蚀-圣火 /effect @e[type=Tower] sacred_fire」（第 2 阶段下界技能）
+#  - 随机一座炮塔附着圣火：每次攻击有 40% 概率落空（MISS，仍消耗冷却）；
+#  - 每隔 SACRED_FIRE_TICK_FRAMES：炮塔等级 -1（最低降到 1 级，不删除），
+#    并向上下左右四格的炮塔蔓延；
+#  - 护盾可以挡下「附着 / 蔓延」（破盾不被点燃）；已经着火的塔再套盾无济于事；
+#  - 卧龙免疫；脉冲护盾期间免疫；
+#  - 圣火没有时限：奥米伽式的「转阶段净化」——阿尔法进入下一阶段（世界重生成）时全部熄灭，
+#    波次推进（select_weather）与 BOSS 死亡时同样清空。
+# ==========================================================================================
+SACRED_FIRE_MISS_CHANCE = 0.4
+SACRED_FIRE_TICK_FRAMES = 16 * 60
+SACRED_FIRE_TARGETS = 2            # 每次施放附着的炮塔数量
 
 
 class Weather(Enum):
@@ -406,6 +461,34 @@ WEATHER_CONFIG = {
     Weather.ENDLESS_NIGHT: {"name": "永夜", "temp": 12, "desc": "永夜：黑暗降临，最终Boss战", "color": (148, 0, 211)},
 }
 
+
+# ==========================================================================================
+#  101-149 波「群系纪元」：按波段改写随机怪池权重（零新敌人，只调构成）。
+#  没覆盖到的波段走 select_enemy_type 的默认概率瀑布。
+#  120-129 波「天灾」不改怪池，只改天气池（EPOCH_WEATHER_POOLS）。
+# ==========================================================================================
+EPOCH_ENEMY_POOLS = {
+    # 110-119 合金洪流：盔甲系为主，考验破甲 / 磁暴
+    (110, 119): [
+        (EnemyType.IRON_ARMORED, 22), (EnemyType.GOLD_ARMORED, 18),
+        (EnemyType.DIAMOND_ARMORED, 18), (EnemyType.NETHERITE_ARMORED, 14),
+        (EnemyType.TANK, 10), (EnemyType.NORMAL, 8), (EnemyType.FAST, 10),
+    ],
+    # 130-139 亡灵军团：凋零混编，幽灵上限临时放宽
+    (130, 139): [
+        (EnemyType.WITHER, 8), (EnemyType.GOLD_ARMORED, 14), (EnemyType.IRON_ARMORED, 14),
+        (EnemyType.NETHERITE_ARMORED, 12), (EnemyType.NORMAL, 16), (EnemyType.FAST, 14),
+        (EnemyType.SLIME, 10), (EnemyType.MAGMA_CUBE, 8), (EnemyType.TANK, 4),
+    ],
+}
+
+# 「天灾」纪元（120-129 波）的天气池：只在恶劣天气里抽
+EPOCH_WEATHER_WAVE_BAND = (120, 129)
+EPOCH_WEATHER_POOLS = [
+    Weather.ACID_RAIN, Weather.FIRE_RAIN, Weather.MAGNETIC_STORM,
+    Weather.FOG, Weather.HEADWIND, Weather.EXTREME_HEAT, Weather.EXTREME_COLD,
+]
+
 ENEMY_TYPES = {
     "NORMAL": {"image": "normal.png", "speed": 2, "health": 100, "reward": 10},
     "FAST": {"image": "fast.png", "speed": 3, "health": 100, "reward": 15},
@@ -429,6 +512,9 @@ ENEMY_TYPES = {
     "CHARGED_CREEPER": {"image": "charged_creeper.png", "speed": 2, "health": 100, "reward": 20},
     "SPIDER": {"image": "spider.png", "speed": 4, "health": 100, "reward": 20},
     "FINAL_BOSS": {"image": "command_block.png", "speed": 2, "health": 200000000, "reward": 0},
+    # 阿尔法本体 / 末影水晶的血量都在各自类里按层重设，这里只占位（贴图 + 图鉴用）
+    "WORLD_SEED": {"image": "world_seed.png", "speed": 2, "health": 1_500_000_000, "reward": 0},
+    "END_CRYSTAL": {"image": "end_crystal.png", "speed": 0, "health": 3_000_000_000, "reward": 0},
 }
 
 
@@ -442,7 +528,10 @@ ENEMY_TYPES = {
 FINAL_BOSS_NAME = "终焉·奥米伽"
 FINAL_BOSS_EN_NAME = "OMEGA"
 FINAL_BOSS_TITLE = "原初命令方块"
-FINAL_BOSS_WAVE = 100
+HEROBRINE_WAVE = 50              # 第 50 波：Herobrine
+OMEGA_WAVE = 100                 # 第 100 波：终焉·奥米伽（中途大 Boss）
+FINAL_BOSS_WAVE = 150            # 第 150 波：原初·阿尔法（真·最终 BOSS），也是总波数
+BOSS_ONLY_WAVES = (HEROBRINE_WAVE, OMEGA_WAVE, FINAL_BOSS_WAVE)   # 只出 BOSS、不出小怪的波
 FINAL_BOSS_LAYERS = 100
 FINAL_BOSS_LAYER_HEALTH = 200_000_000
 FINAL_BOSS_TOTAL_HEALTH = FINAL_BOSS_LAYERS * FINAL_BOSS_LAYER_HEALTH
@@ -505,3 +594,108 @@ FINAL_BOSS_ARENA_LEFT = 280
 FINAL_BOSS_ARENA_RIGHT = GRID_WIDTH * TILE_SIZE - 280
 FINAL_BOSS_ARENA_TOP = 300
 FINAL_BOSS_ARENA_BOTTOM = (1 + GRID_HEIGHT) * TILE_SIZE - 260
+
+
+# ==========================================================================================
+#  第 150 波真·最终 BOSS —— 原初·阿尔法 (ALPHA)，世界种子
+# ==========================================================================================
+#  你在第 100 波删掉了那条命令，但世界不是命令写出来的 —— 是从基岩最底下
+#  那颗种子里长出来的。阿尔法觉得这个世界「生成得不好」，打算重新生成一遍。
+#
+#  结构：320 层 = 5 阶段 × 64 层（64 = MC 的一组），每阶段对应一个维度，
+#  从主世界一路「重新生成」到虚空。复用奥米伽的层血 / 技能 / 播报管线。
+#
+#  总血量 = 320 × 1,500,000,000 = 480,000,000,000（4800 亿）= 24 × 奥米伽。
+#  单层 max_health = 15 亿：龙的 1-3% 真伤（1500-4500 万/次）、地狱射线 5% 层血
+#  （力量V：6%）
+#  （7500 万）、凋零玫瑰 0.1%（150 万/跳）全部按层自动缩放，无需改动。
+# ==========================================================================================
+ALPHA_BOSS_NAME = "原初·阿尔法"
+ALPHA_BOSS_EN_NAME = "ALPHA"
+ALPHA_BOSS_TITLE = "世界种子"
+ALPHA_LAYERS = 320
+ALPHA_LAYER_HEALTH = 1_500_000_000
+ALPHA_TOTAL_HEALTH = ALPHA_LAYERS * ALPHA_LAYER_HEALTH
+ALPHA_LAYERS_PER_PHASE = 64
+ALPHA_CORE_SIZE = 448
+
+ALPHA_PHASE_NAMES = [
+    "主世界 OVERWORLD",
+    "下界 NETHER",
+    "末地 END",
+    "深暗之域 DEEP DARK",
+    "虚空 THE VOID",
+]
+
+# 阶段主色：草绿 → 赤红 → 末地黄 → 幽匿青 → 虚空紫
+ALPHA_PHASE_COLORS = [
+    (96, 210, 110),
+    (235, 90, 45),
+    (232, 220, 150),
+    (0, 190, 175),
+    (170, 70, 235),
+]
+
+# 移动 / 施法间隔（帧）。最后 16 层狂暴再整体 ×0.7（见 ALPHA_BERSERK_LAYERS）
+ALPHA_MOVE_INTERVAL = {1: 150, 2: 120, 3: 95, 4: 85, 5: 65}
+ALPHA_CAST_COOLDOWN = {1: 235, 2: 195, 3: 165, 4: 140, 5: 110}
+
+# 召唤物固定血量（约为奥米伽的 8 倍，不套波数膨胀；进阶段再 ×(1+0.2*(phase-1))）
+ALPHA_MINION_HEALTH = {
+    EnemyType.NORMAL: 500_000_000,
+    EnemyType.FAST: 400_000_000,
+    EnemyType.CREEPER: 350_000_000,
+    EnemyType.MAGMA_CUBE: 450_000_000,
+    EnemyType.BLAZE: 500_000_000,
+    EnemyType.NETHERITE_ARMORED: 1_100_000_000,
+    EnemyType.GHOST: 500_000_000,
+    EnemyType.WITHER: 1_300_000_000,
+}
+
+# 各阶段召唤物池
+ALPHA_SUMMON_POOL = {
+    1: [EnemyType.NORMAL, EnemyType.FAST, EnemyType.CREEPER],
+    2: [EnemyType.MAGMA_CUBE, EnemyType.BLAZE, EnemyType.NETHERITE_ARMORED, EnemyType.CREEPER],
+    3: [EnemyType.GHOST, EnemyType.NETHERITE_ARMORED, EnemyType.WITHER],
+    4: [EnemyType.WITHER, EnemyType.NETHERITE_ARMORED, EnemyType.GHOST],
+    5: [EnemyType.GHOST, EnemyType.WITHER, EnemyType.NETHERITE_ARMORED, EnemyType.BLAZE],
+}
+
+# P2 下界：群系侵蚀 —— 温度每 45 帧向 +80 回落一格（冰塔照常往回拉，形成拉锯）
+ALPHA_NETHER_TEMP = 80
+ALPHA_NETHER_PULL_INTERVAL = 45
+
+# P4 深暗之域：幽匿护甲 —— 受到的「直接伤害」×0.4；
+# DoT（dot=True）与 ignore_armor 的百分比真伤不减免
+ALPHA_SCULK_ARMOR_MULT = 0.4
+# P4 灵波：3 秒预警后震荡全场，无视护盾锁定全部炮塔 6 秒（脉冲免疫、卧龙免疫）
+ALPHA_SONIC_WARN_FRAMES = 3 * 60
+ALPHA_SONIC_LOCK_FRAMES = 6 * 60
+
+# P5 虚空：/stop 停服读条（奥米伽世界重载的强化版），狂暴层数线
+ALPHA_STOP_CAST_FRAMES = 15 * 60
+ALPHA_BERSERK_LAYERS = 16
+
+# P3 末地：末影水晶（可攻击的特殊敌人）。每颗每 ALPHA_END_CRYSTAL_HEAL_FRAMES
+# 为阿尔法回复一层血（先补满当前层，再重生成一层，上限 320）。
+ALPHA_END_CRYSTAL_HEALTH = 3_000_000_000
+ALPHA_END_CRYSTAL_HEAL_FRAMES = 10 * 60
+ALPHA_END_CRYSTAL_PER_CAST = 2
+ALPHA_END_CRYSTAL_CAP = 3
+
+# P3 彩蛋：幻影·Herobrine 沿路走来（把 50 波的鬼故事重讲一遍）
+ALPHA_PHANTOM_LAYERS = 3
+ALPHA_PHANTOM_SPEED = 1.2
+
+# 群系改写：阿尔法转阶段时地形随群系更替（见 game._build_background 的 terrain 参数）
+#   overworld 主世界（地形不变）/ nether 下界 / end 末地 / night 永夜（黑曜石系黑夜配色）
+ALPHA_PHASE_TERRAIN = {1: "overworld", 2: "nether", 3: "end", 4: "night", 5: "night"}
+# 转阶段播报里追加的地形说明（None = 不追加）
+ALPHA_PHASE_TERRAIN_DESC = {
+    2: "石头化为下界岩 · 道路铺上萤石 · 金矿变成下界金矿石",
+    3: "石头化为末地石 · 道路铺上黑曜石 · 金矿变成末地金矿石",
+    4: "永夜降临",
+    5: "永夜深处",
+}
+
+# 余烬重生的陨石对阿尔法依旧只打穿 1 层（吃火系加成后单发 50-70 亿 > 15 亿，无需调整）

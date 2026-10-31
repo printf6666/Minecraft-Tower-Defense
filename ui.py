@@ -275,6 +275,13 @@ def get_tower_info(game, tower):
                         f"伤害:{(tower.level - 10)*2}%生命+{(tower.level - 10)*2000}固定",
                         f"击晕:2s", f"凋零:10s",
                         f"射程:全屏", f"攻击间隔:35s", "按 R 切换形态"]
+            elif tower.bomb_branch == 3:
+                dmg = (ICE_NUKE_BASE_DAMAGE + ICE_NUKE_TEMP_SCALE * abs(game.temperature)) * (tower.level - 10)
+                pct = ICE_NUKE_PERCENT * (tower.level - 10) * 100
+                info = [f"冰冻核弹 Lv{tower.level}",
+                        f"伤害:{dmg}(|温度|)+{pct:.1f}%生命",
+                        f"冰冻:4s", f"全场降温:{ICE_NUKE_TEMP_DROP}°C/{ICE_NUKE_TEMP_FRAMES // 60}s",
+                        f"射程:全屏", f"攻击间隔:40s", "按 R 切换形态"]
             else:
                 # 与实际结算保持一致：伤害吃 |温度|，高温低温都增伤
                 dmg = max(1, (40000 + 400 * abs(game.temperature)) * (tower.level - 10))
@@ -312,6 +319,10 @@ def get_tower_info(game, tower):
         info.extend([f"射程:{round(tower.get_effective_range() / TILE_SIZE, 1)}", f"升级:{upgrade_str}"])
     sell_price = base_cost_map[tower.type] * tower.level
     info.append(f"出售:{sell_price}")
+    if getattr(tower, "charm_timer", 0) > 0:
+        info.append(f"魅惑中 {tower.charm_timer / 60:.0f}s：攻击变治疗")
+    if getattr(tower, "sacred_fire", False):
+        info.append("圣火附着：40% 攻击落空，每16秒降1级并蔓延")
 
     return info
 
@@ -374,9 +385,21 @@ class UIManager:
                 scaled.set_alpha(alpha)
                 self.game.screen.blit(scaled, scaled.get_rect(
                     center=(tower.x * TILE_SIZE + TILE_SIZE // 2, tower.y * TILE_SIZE + TILE_SIZE // 2)))
-            if tower.disabled_timer > 0:
-                self.game.screen.blit(self.get_disabled_overlay(),
+            if tower.disabled_timer > 0 and assets.lock_img is not None:
+                self.game.screen.blit(assets.lock_img,
                                       (tower.x * TILE_SIZE, tower.y * TILE_SIZE))
+            if tower.charm_timer > 0 and assets.charm_img is not None:
+                # 魅惑：粉色半透明底 + 空心爱心（预渲染贴图，缓慢上下浮动）
+                bob = int(3 * math.sin(self.game.game_time * 0.10))
+                self.game.screen.blit(assets.charm_img, assets.charm_img.get_rect(center=(
+                    tower.x * TILE_SIZE + TILE_SIZE // 2,
+                    tower.y * TILE_SIZE + TILE_SIZE // 2 + bob)))
+            if getattr(tower, "sacred_fire", False) and assets.sacred_fire_img is not None:
+                # 圣火：橙色半透明底 + 火焰标志（阿尔法下界阶段），与锁定/魅惑同层
+                bob = int(3 * math.sin(self.game.game_time * 0.13))
+                self.game.screen.blit(assets.sacred_fire_img, assets.sacred_fire_img.get_rect(center=(
+                    tower.x * TILE_SIZE + TILE_SIZE // 2,
+                    tower.y * TILE_SIZE + TILE_SIZE // 2 + bob)))
         for enemy in self.game.enemies:
             enemy.draw_health_bar(self.game.screen)
 
@@ -820,16 +843,6 @@ class UIManager:
 
     # ------------------------------------------------------------------ 最终BOSS HUD
 
-    def get_disabled_overlay(self):
-        surf = getattr(self, "_disabled_surf", None)
-        if surf is None:
-            surf = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
-            surf.fill((110, 30, 180, 95))
-            pygame.draw.line(surf, (235, 130, 255), (16, 16), (TILE_SIZE - 16, TILE_SIZE - 16), 5)
-            pygame.draw.line(surf, (235, 130, 255), (TILE_SIZE - 16, 16), (16, TILE_SIZE - 16), 5)
-            self._disabled_surf = surf
-        return surf
-
     def draw_boss_effects(self):
         for portal in self.game.boss_portals:
             portal.draw(self.game.screen)
@@ -837,6 +850,8 @@ class UIManager:
             beam.draw(self.game.screen)
         for strike in self.game.boss_strikes:
             strike.draw(self.game.screen)
+        for fireball in self.game.boss_fireballs:
+            fireball.draw(self.game.screen)
         for wave in self.game.boss_shockwaves:
             wave.draw(self.game.screen)
         for rune in self.game.boss_runes:
@@ -871,35 +886,43 @@ class UIManager:
         if boss is None:
             return
 
+        # 血条参数跟随 BOSS 本体（奥米伽 4 阶段 100 层 / 阿尔法 5 阶段 320 层）
+        total_layers = getattr(boss, "total_layers", FINAL_BOSS_LAYERS)
+        phase_names = getattr(boss, "phase_names", FINAL_BOSS_PHASE_NAMES)
+        phase_colors = getattr(boss, "phase_colors", FINAL_BOSS_PHASE_COLORS)
+        phase_count = len(phase_names)
+        boss_name = getattr(boss, "display_name", FINAL_BOSS_NAME)
+        boss_en = getattr(boss, "display_en", FINAL_BOSS_EN_NAME)
+
         screen = game.screen
         bar_x, bar_y, bar_w, bar_h = 330, 86, 1900, 44
         ratio = max(0.0, min(1.0, boss.health / boss.max_health))
-        phase_color = FINAL_BOSS_PHASE_COLORS[boss.phase - 1]
+        phase_color = phase_colors[boss.phase - 1]
 
         pygame.draw.rect(screen, (10, 4, 18), (bar_x - 4, bar_y - 4, bar_w + 8, bar_h + 8))
         pygame.draw.rect(screen, (36, 8, 36), (bar_x, bar_y, bar_w, bar_h))
         pygame.draw.rect(screen, phase_color, (bar_x, bar_y, int(bar_w * ratio), bar_h))
 
-        for i in range(1, FINAL_BOSS_LAYERS):
-            x = bar_x + bar_w * i // FINAL_BOSS_LAYERS
+        for i in range(1, total_layers):
+            x = bar_x + bar_w * i // total_layers
             pygame.draw.line(screen, (14, 4, 20), (x, bar_y), (x, bar_y + bar_h), 1)
-        for k in range(1, 4):
-            x = bar_x + bar_w * k // 4
+        for k in range(1, phase_count):
+            x = bar_x + bar_w * k // phase_count
             pygame.draw.line(screen, (255, 255, 255), (x, bar_y), (x, bar_y + bar_h), 3)
         pygame.draw.rect(screen, (235, 205, 255), (bar_x, bar_y, bar_w, bar_h), 2)
 
-        name_label = f"{FINAL_BOSS_NAME} {FINAL_BOSS_EN_NAME}"
+        name_label = f"{boss_name} {boss_en}"
         name_shadow = assets.font_small.render(name_label, True, (20, 0, 20))
         screen.blit(name_shadow, (bar_x + 18, bar_y + 5))
         name = assets.font_small.render(name_label, True, (255, 240, 255))
         screen.blit(name, (bar_x + 16, bar_y + 3))
 
         phase_text = assets.font_tower_level.render(
-            f"阶段 {boss.phase} : {FINAL_BOSS_PHASE_NAMES[boss.phase - 1]}", True, WHITE)
+            f"阶段 {boss.phase} : {phase_names[boss.phase - 1]}", True, WHITE)
         screen.blit(phase_text, (SCREEN_WIDTH // 2 - phase_text.get_width() // 2, bar_y + 7))
 
         layer_text = assets.font_tower_level.render(
-            f"{max(0, boss.current_layer)} / {FINAL_BOSS_LAYERS} 层", True, (255, 230, 160))
+            f"{max(0, boss.current_layer)} / {total_layers} 层", True, (255, 230, 160))
         screen.blit(layer_text, (bar_x + bar_w - layer_text.get_width() - 14, bar_y + 7))
 
         # 技能播报
@@ -912,14 +935,15 @@ class UIManager:
             text.set_alpha(alpha)
             screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 140))
 
-        # 世界重载读条
+        # 世界重载 / 停服读条
         if boss.reloading:
+            reload_label = getattr(boss, "reload_label", "世界重载")
             remain = max(0, boss.reload_timer) / 60.0
             charge = 1.0 - boss.reload_timer / max(1, boss.reload_total)
             pygame.draw.rect(screen, (30, 0, 0), (760, 188, 1040, 24))
             pygame.draw.rect(screen, (255, 70, 50), (760, 188, int(1040 * charge), 24))
             pygame.draw.rect(screen, (255, 220, 200), (760, 188, 1040, 24), 2)
-            warn = assets.font_tower_level.render(f"世界重载 {remain:.1f}s —— 击破任意一层可打断", True, WHITE)
+            warn = assets.font_tower_level.render(f"{reload_label} {remain:.1f}s —— 击破任意一层可打断", True, WHITE)
             screen.blit(warn, (SCREEN_WIDTH // 2 - warn.get_width() // 2, 216))
 
         # 规则覆写提示：占用右上角空白位置

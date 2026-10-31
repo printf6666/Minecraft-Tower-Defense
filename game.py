@@ -18,7 +18,7 @@ from ui import UIManager, get_tower_info
 from codex import Codex
 from dragons import Dragon
 import stats
-from final_boss import (FinalBoss, BossShockwave, BossRune, BossPortal,
+from final_boss import (FinalBoss, WorldSeedBoss, BossShockwave, BossRune, BossPortal,
                         BossStrike, DeleteBeam)
 
 # 伤害属性 -> 对应强化附魔所属的炮塔类型
@@ -38,6 +38,13 @@ WEATHER_POOL = [
     Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD, Weather.MAGNETIC_STORM,
     Weather.FIRE_RAIN, Weather.AURORA,
 ]
+
+
+def _is_boss_bgm(name):
+    """「Celestial Fury - The End」是 50/100/150 波 BOSS 战专属曲，随机歌单不抽。"""
+    if not name:          # 还没播过任何 BGM 时 current_bgm 可能为空，别让判曲崩掉
+        return False
+    return "Celestial Fury" in name or "The End" in name
 
 
 def resource_path(relative_path):
@@ -91,6 +98,8 @@ class Game:
         self.dragons = pygame.sprite.Group()
         self.damage_stats = stats.DamageStats()
         self.damage_element = None
+        # 当前正在结算伤害的炮塔（供「魅惑 → 治疗」判定用，平时为 None）
+        self.damage_source_tower = None
         self.stats_open = False
         self.confirm_reset = 0      # 「重新开始」二次确认倒计时（帧）
         self.coins = 2500
@@ -106,6 +115,8 @@ class Game:
         self.emerald_per_wave = 0
         self.last_global_production_time = pygame.time.get_ticks()
         self.temperature = 30
+        self.climate_temp_delta = 0
+        self.climate_temp_timer = 0
         self.lava_timer = 0
         self.weather = Weather.SUNNY
         self.weather_particles = []
@@ -150,6 +161,7 @@ class Game:
         self.fog_visible = False
 
         self.night_dark_timer = 0
+        self.current_bgm = ""      # 当前 BGM 文件名（首次开局时可能还没播过任何曲子）
         self.herobrine_phase = 0
         self.herobrine_spawned = False
         self.herobrine = None
@@ -160,6 +172,11 @@ class Game:
         self.command_block_timer = 0
         self.command_blocks = []
         self.ice_walls = []
+
+        # 临时气候修正（冰冻核弹）：delta 叠加在 recompute_temperature 的结果上，
+        # 到期自动清零并重算 —— 直接改 temperature 会被换天气/群系重建覆盖掉。
+        self.climate_temp_delta = 0
+        self.climate_temp_timer = 0
 
         self.enchantments = []
         self.poison_base_damage = 5
@@ -176,14 +193,30 @@ class Game:
         self.ui_manager = UIManager(self)
         self.codex = Codex(self)
 
-    def _build_background(self, night_mode=False, gold_ore_positions=None):
+    def _build_background(self, night_mode=False, gold_ore_positions=None, terrain=None):
+        """重建地图背景。
+
+        terrain：阿尔法群系改写用（"nether" / "end" / "night"），
+        优先于 night_mode；None 时退回 night_mode 二元逻辑（永夜=黑夜配色）。
+        金矿石加成点位由 gold_ore_positions 保留，换群系只换皮不换位。
+        """
         gw = GRID_WIDTH * TILE_SIZE
         gh = (GRID_HEIGHT + 1) * TILE_SIZE
         self.background_surface = pygame.Surface((gw, gh))
         self.background_surface.fill(BLACK)
         path_set = set(self.path)
 
-        if night_mode:
+        if terrain == "nether":
+            # 阿尔法 P2 下界：石头→下界岩，道路→萤石，金矿→下界金矿石
+            stone_img = assets.netherrack_img
+            dirt_img = assets.glowstone_img
+            gold_ore_img = assets.nether_gold_ore_img
+        elif terrain == "end":
+            # 阿尔法 P3 末地：石头→末地石，道路→黑曜石，金矿→末地金矿石
+            stone_img = assets.end_stone_img
+            dirt_img = assets.obsidian_img
+            gold_ore_img = assets.end_gold_ore_img
+        elif terrain == "night" or night_mode:
             stone_img = assets.blackstone_img
             dirt_img = assets.soul_sand_img
             gold_ore_img = assets.gilded_blackstone_img
@@ -254,6 +287,7 @@ class Game:
                 icon_clicked = ttype
                 break
         if icon_clicked is not None:
+            audio.play_sound_cool(assets.click_sound, 120)
             self.selected_tower = None
             self.selected_tower_type = icon_clicked
             self.show_range = False
@@ -278,6 +312,7 @@ class Game:
         else:
             clicked_tower = self.get_tower_at(grid_x, grid_y)
             if clicked_tower:
+                audio.play_sound_cool(assets.click_sound, 120)
                 self.selected_tower = clicked_tower
                 self.selected_tower_type = None
                 self.show_range = True
@@ -420,7 +455,9 @@ class Game:
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.BOMB:
                         tower = self.selected_tower
                         if tower.level >= 11:
-                            tower.bomb_branch = 3 - tower.bomb_branch
+                            # 三阶三个形态：核弹 → 凋零核弹 → 冰冻核弹
+                            tower.bomb_branch = tower.bomb_branch % 3 + 1
+                            tower.fire_rate = tower._nuclear_fire_rate()
                             tower.update_sprite()
                         elif 6 <= tower.level < 11:
                             sub_types = [BombSubType.SNOW, BombSubType.ICE, BombSubType.FLAME, BombSubType.POISON, BombSubType.WITHER_TNT]
@@ -511,6 +548,24 @@ class Game:
             self.ice_walls.remove(wall)
             self.temperature += 5
 
+    def apply_hard_freeze(self, enemy, frames):
+        """足额冰冻：先清空冰冻抗性再直接写字段（同「寒冰盾」写法）。
+
+        第 100/150 波 BOSS 免疫一切控制——直接写 freeze_time 会绕过
+        FinalBoss.apply_freeze 的免疫重写，所以必须先做免疫检查。
+        """
+        if getattr(enemy, "CONTROL_IMMUNE", False):
+            return
+        enemy.freeze_resistance = 0
+        enemy.freeze_time = max(enemy.freeze_time, frames)
+
+    def apply_hard_stun(self, enemy, frames):
+        """足额眩晕：先清空眩晕抗性再直接写字段。BOSS 免疫一切控制。"""
+        if getattr(enemy, "CONTROL_IMMUNE", False):
+            return
+        enemy.stun_resistance = 0
+        enemy.stun_time = max(enemy.stun_time, frames)
+
     def trigger_shield_burst(self, broken_tower):
         for tower in self.towers:
             if tower.type == TowerType.SHIELD and tower.level >= 11:
@@ -523,14 +578,12 @@ class Game:
                     damage = int((tower.level - 10) * 3000 * self.get_element_damage_multiplier("ice"))
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=(100, 150, 255), element="ice")
-                        enemy.freeze_resistance = 0
-                        enemy.freeze_time = max(enemy.freeze_time, 3 * 60)
+                        self.apply_hard_freeze(enemy, 3 * 60)
                 elif tower.shield_branch == 3:
                     damage = int((tower.level - 10) * 2500 * self.get_element_damage_multiplier("electric"))
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=ORANGE, element="electric")
-                        enemy.stun_resistance = 0
-                        enemy.stun_time = max(enemy.stun_time, 60)
+                        self.apply_hard_stun(enemy, 60)
                         enemy.burn_time = float('inf')
                         enemy.burn_damage = max(enemy.burn_damage, self.temperature)
 
@@ -546,8 +599,7 @@ class Game:
                 damage = int((tower.level - 10) * 2500 * self.get_element_damage_multiplier("electric"))
                 for enemy in self.enemies:
                     enemy.take_damage(damage, color=ORANGE, element="electric")
-                    enemy.stun_resistance = 0
-                    enemy.stun_time = max(enemy.stun_time, 60)
+                    self.apply_hard_stun(enemy, 60)
                     enemy.burn_time = float('inf')
                     enemy.burn_damage = max(enemy.burn_damage, self.temperature)
         for enemy in self.enemies:
@@ -714,6 +766,8 @@ class Game:
             self.damage_stats = stats.DamageStats()
         self.damage_stats.reset()
         self.damage_element = None
+        # 当前正在结算伤害的炮塔（供「魅惑 → 治疗」判定用，平时为 None）
+        self.damage_source_tower = None
         self.stats_open = False
         self.confirm_reset = 0      # 「重新开始」二次确认倒计时（帧）
         self.coins = 2500
@@ -729,6 +783,8 @@ class Game:
         self.emerald_per_wave = 0
         self.last_global_production_time = pygame.time.get_ticks()
         self.temperature = 30
+        self.climate_temp_delta = 0
+        self.climate_temp_timer = 0
         self.lava_timer = 0
         self.weather = Weather.SUNNY
         self.weather_particles = []
@@ -770,6 +826,7 @@ class Game:
         self.pending_first_wave_weather = False
         self.gold_ore_positions = set()
         self.night_dark_timer = 0
+        self.current_bgm = ""   # 当前 BGM 文件名（用于「The End 只在 BOSS 波播放」的切歌判定）
         self.herobrine_phase = 0
         self.herobrine_spawned = False
         self.herobrine = None
@@ -787,7 +844,7 @@ class Game:
     # ------------------------------------------------------------------ 最终BOSS状态
 
     def _init_boss_state(self):
-        """第 100 波最终 BOSS 相关的全部运行时状态。"""
+        """分层血条 BOSS（奥米伽 / 阿尔法）相关的全部运行时状态。"""
         self.final_boss = None
         self.boss_spawned = False
         self.boss_banner_text = ""
@@ -801,6 +858,7 @@ class Game:
         self.boss_runes = []
         self.boss_shockwaves = []
         self.boss_portals = []
+        self.boss_fireballs = []
 
     def set_boss_banner(self, text, frames=150):
         self.boss_banner_text = text
@@ -835,6 +893,9 @@ class Game:
         for effect in self.boss_portals[:]:
             if not effect.update():
                 self.boss_portals.remove(effect)
+        for effect in self.boss_fireballs[:]:
+            if not effect.update():
+                self.boss_fireballs.remove(effect)
 
     def destroy_tower_by_boss(self, tower):
         """BOSS 指令抹除炮塔（不计入出售、不返还金币）。"""
@@ -845,37 +906,88 @@ class Game:
         if self.selected_tower is tower:
             self.selected_tower = None
         tower.kill()
+        audio.play_sound(assets.tower_destroyed_sound)
 
     def play_boss_bgm(self):
         for bgm in assets.bgm_files:
-            if "Celestial Fury" in bgm or "The End" in bgm:
+            if _is_boss_bgm(bgm):
+                self.current_bgm = bgm
                 audio.play_music(assets.resource_path(bgm), -1)
                 return
 
-    def force_boss_weather(self):
-        """第 50 / 100 波强制「永夜」。
-
-        正常推进时 select_weather() 已经会强制一次；但读档（load_game 直接
-        start_new_wave，不经过 select_weather）或调试跳波会绕过它，导致
-        100 波顶着逆风/晴天打 BOSS。所有入口统一走这里兜底。
-        """
-        self.fog_visible = False
-        self.weather = Weather.ENDLESS_NIGHT
-        # 读档时背景可能还是白天配色，这里无条件重建一次永夜场景
-        self._build_background(night_mode=True, gold_ore_positions=self.gold_ore_positions)
+    def recompute_temperature(self):
+        """按当前天气 + 场上炮塔 + 附魔 + 临时气候修正重算温度（换天气 / 阿尔法群系更替后调用）。"""
         base_temp = WEATHER_CONFIG[self.weather]["temp"]
         self.temperature = base_temp
         for t in self.towers:
             self.temperature += self.tower_temp_effect(t)
         self.temperature += self.enchantment_temp_bonus()
+        self.temperature += self.climate_temp_delta
+
+    def apply_climate_temp(self, delta, frames):
+        """临时气候修正（冰冻核弹）：在基础温度上额外加减，到期自动回落。
+
+        直接写 self.temperature 会被下一次 recompute_temperature 覆盖，
+        所以单独存一个 delta 字段并参与重算。
+        """
+        self.climate_temp_delta = delta
+        self.climate_temp_timer = frames
+        self.recompute_temperature()
+
+    def force_boss_weather(self):
+        """BOSS 波天气兜底（读档 / 调试跳波不会经过 select_weather）。
+
+        第 50 / 100 波强制「永夜」；第 150 波阿尔法不再强制永夜 —— 正常推进时
+        由 _roll_weather 抽非永夜天气，这里只兜底：若顶着永夜（旧存档）则重抽，
+        并按 boss 当前阶段重建群系地形（P4/P5 强制永夜，见 apply_alpha_terrain）。
+        """
+        self.fog_visible = False
+        if self.wave_manager.current_wave == FINAL_BOSS_WAVE:
+            phase = getattr(self.final_boss, "phase", 1) if self.final_boss else 1
+            if phase < 4 and self.weather == Weather.ENDLESS_NIGHT:
+                # 旧存档兜底：150 波 P1-P3 不允许顶着永夜开打
+                self.weather = random.choice(WEATHER_POOL)
+            if phase >= 4:
+                self.weather = Weather.ENDLESS_NIGHT
+            self._build_background(gold_ore_positions=self.gold_ore_positions,
+                                   terrain=ALPHA_PHASE_TERRAIN.get(phase, "overworld"))
+            self.recompute_temperature()
+            self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
+            self.play_boss_bgm()
+            return
+        self.weather = Weather.ENDLESS_NIGHT
+        # 读档时背景可能还是白天配色，这里无条件重建一次永夜场景
+        self._build_background(night_mode=True, gold_ore_positions=self.gold_ore_positions)
+        self.recompute_temperature()
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         self.play_boss_bgm()
+
+    def apply_alpha_terrain(self, phase):
+        """第 150 波阿尔法「世界重生成」：地形随阶段群系更替。
+
+        P1 主世界地形不变；P2 下界（下界岩 / 萤石道路 / 下界金矿石）；
+        P3 末地（末地石 / 黑曜石道路 / 末地金矿石）；
+        P4 / P5 强制永夜（黑夜配色 + 永夜天气）。
+        金矿加成点位跨群系保留（换皮不换位）。
+        """
+        terrain = ALPHA_PHASE_TERRAIN.get(phase, "overworld")
+        if phase >= 4 and self.weather != Weather.ENDLESS_NIGHT:
+            # 四 / 五阶段强制永夜
+            self.weather = Weather.ENDLESS_NIGHT
+            self.fog_visible = False
+            self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
+            self.play_boss_bgm()
+        self._build_background(gold_ore_positions=self.gold_ore_positions, terrain=terrain)
+        self.recompute_temperature()
 
     def start_boss_fight(self):
         self.boss_spawned = True
         self.force_boss_weather()
         self.fog_visible = False
-        self.set_boss_banner(f"{FINAL_BOSS_NAME} 降临 —— {FINAL_BOSS_TITLE}", 240)
+        boss = self.final_boss
+        name = getattr(boss, "display_name", FINAL_BOSS_NAME)
+        title = getattr(boss, "display_title", FINAL_BOSS_TITLE)
+        self.set_boss_banner(f"{name} 降临 —— {title}", 240)
         self.boss_flash = 120
         if assets.explode_sound:
             audio.play_sound(assets.explode_sound)
@@ -949,7 +1061,16 @@ class Game:
         self.gold_per_second = data.get("gold_per_second", 0)
         self.gold_per_wave = data.get("gold_per_wave", 0)
         self.emerald_per_wave = data.get("emerald_per_wave", 0)
-        self.enchantments = [Enchantment(v) for v in data.get("enchantments", [])]
+        # 逐个反序列化并过滤已删除的附魔（如火矢）：旧存档里存着它的枚举值，
+        # 直接 Enchantment(v) 虽不报错，但留着会在商店/图鉴等按 data 查表的地方出问题
+        self.enchantments = []
+        for v in data.get("enchantments", []):
+            try:
+                ench = Enchantment(v)
+            except ValueError:
+                continue
+            if ench in ENCHANTMENT_DATA:
+                self.enchantments.append(ench)
         # 基础毒伤直接读存档；兼容曾经写过的 poison_contract_stacks 字段
         base_poison = data.get("poison_base_damage")
         if base_poison is None:
@@ -993,27 +1114,26 @@ class Game:
                 t.recalculate_stats()
             t.update_sprite()
             self.towers.add(t)
-        base_temp = WEATHER_CONFIG[self.weather]["temp"]
-        self.temperature = base_temp
-        for t in self.towers:
-            self.temperature += self.tower_temp_effect(t)
-        self.temperature += self.enchantment_temp_bonus()
+        self.recompute_temperature()
         self.wave_manager.start_new_wave()
-        if self.wave_manager.current_wave in (50, FINAL_BOSS_WAVE):
-            # 读档直接进入 BOSS 波时不会走 select_weather，这里强制补上永夜
+        if self.wave_manager.current_wave in BOSS_ONLY_WAVES:
+            # 读档直接进入 BOSS 波时不会走 select_weather，这里走 BOSS 波天气兜底
             self.force_boss_weather()
+            self.save_game()
+        elif self.weather == Weather.ENDLESS_NIGHT:
+            # 旧存档兜底：永夜改为 BOSS 专属氛围后，普通波不再刷永夜。
+            # 但老版本的存档可能在 51-99 波的中途永夜里存过档，读档时统一重抽。
+            self.weather = random.choice(WEATHER_POOL)
+            self.recompute_temperature()
             self.save_game()
         self.state = GameState.PLAYING
         self.pending_first_wave_weather = False
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         self.weather_banner_timer = 180
         if self.weather == Weather.ENDLESS_NIGHT:
+            # 只剩 BOSS 波会走到这里（上面 force_boss_weather 已放过 The End，
+            # 这里只负责把永夜配色重建出来，不动音乐）
             self._build_background(night_mode=True, gold_ore_positions=saved_ore)
-            audio.stop_music()
-            for bgm in assets.bgm_files:
-                if "Celestial Fury" in bgm or "The End" in bgm:
-                    audio.play_music(assets.resource_path(bgm), -1)
-                    break
 
     def add_dragon_breath(self, x, y, temperature, tower_level, stun_time):
         pool = DragonBreathPool(x, y, temperature, tower_level, stun_time, self)
@@ -1022,6 +1142,8 @@ class Game:
     def add_lightning(self, x, y, is_golden):
         effect = LightningEffect(x, y, is_golden)
         self.lightning_effects.append(effect)
+        # 雷暴频繁落雷，带 400ms 冷却防止通道挤爆
+        audio.play_sound_cool(assets.thunder_sound, 400)
 
     def add_resonance_burst(self, x, y):
         """雷神之锤子弹命中爆裂：用 resonance_storm 原尺寸帧，不缩放。"""
@@ -1127,10 +1249,12 @@ class Game:
         """大招落地：全屏冲击波 + 全屏伤害 + 永久冰系破甲 + 冰冻 4 秒。
 
         伤害属于冰系，所以吃冰系伤害加成（含本附魔自己的 +240%）。
-        冰冻沿用「寒冰盾」那套写法：先清空冰冻抗性再直接写 freeze_time，
-        否则连吃几次冰冻后抗性叠满，4 秒会被削成 1 秒多。
+        冰冻沿用「寒冰盾」那套写法（apply_hard_freeze）：先清空冰冻抗性
+        再足额写入，否则连吃几次冰冻后抗性叠满，4 秒会被削成 1 秒多；
+        BOSS 免疫一切控制，会自动跳过。
         """
         self.add_masterpiece_shockwave()
+        audio.play_sound(assets.ultimate_sound)
 
         damage = int((MASTERPIECE_DAMAGE + MASTERPIECE_TEMP_MULT * abs(self.temperature))
                      * self.get_element_damage_multiplier("ice"))
@@ -1146,8 +1270,7 @@ class Game:
                                            text_speed_x=random.uniform(-2.2, 2.2))
                 self.coins += reward
                 enemy.apply_ice_broken()
-                enemy.freeze_resistance = 0
-                enemy.freeze_time = max(enemy.freeze_time, MASTERPIECE_FREEZE_FRAMES)
+                self.apply_hard_freeze(enemy, MASTERPIECE_FREEZE_FRAMES)
         finally:
             self.damage_element = prev_element
 
@@ -1173,6 +1296,10 @@ class Game:
                     bonus += 15 * self.enchantments.count(ench)
                 else:
                     bonus += 20 * self.enchantments.count(ench)
+        # 力量V：物理伤害 +150%（与「物理强化」同乘区、同口径：箭塔/传送塔的物理伤害）
+        if tower_type in (TowerType.PHYSICAL, TowerType.TELEPORT) \
+                and Enchantment.POWER_V in self.enchantments:
+            bonus += 150
         # 灯火通明：火系伤害 +80%（加算，不随附魔重复叠加）
         if tower_type == TowerType.FLAME and self.lantern_active():
             bonus += LANTERN_FIRE_BONUS
@@ -1368,91 +1495,144 @@ class Game:
                 self.notify_tower_hit(t)   # 免疫归免疫，「被酸雨打了」照样算
                 continue
             self.notify_tower_hit(t)
-            old_level = t.level
-            t.level -= 1
-            t.upgrade_cost = int(t.upgrade_cost / 1.5)
-            if t.type == TowerType.PRODUCTION:
-                multiplier = 2 if t.is_on_gold_ore else 1
-                self.gold_per_second -= multiplier
-            if old_level > 1:
-                if t.type == TowerType.PHYSICAL:
-                    t.damage -= 15
-                    t.range -= TILE_SIZE // 2
-                    t.fire_rate = min(60, t.fire_rate + 6)
-                elif t.type == TowerType.ICE:
-                    t.damage -= 5
-                    t.range -= TILE_SIZE // 4
-                    t.fire_rate = min(60, t.fire_rate + 6)
-                    if old_level >= 6:
-                        t.freeze_time = round(t.freeze_time - 0.1, 1)
-                    self.temperature += 1
-                    # 神锅（分支 4）的数值来自独立数值表，逐项加减会算歪；
-                    # 降到 Lv10 以下时也要顺手退回普通冰塔形态，所以整体重算一次。
-                    t.recalculate_stats()
-                elif t.type == TowerType.TELEPORT:
-                    if t.teleport_branch == 2:
-                        t.damage -= 100
-                        t.range -= TILE_SIZE // 2
-                        t.fire_rate = min(60, t.fire_rate + 6)
-                    else:
-                        t.damage -= 5
-                        t.teleport_chance = max(0, t.teleport_chance - 0.01)
-                        t.range -= TILE_SIZE // 4
-                        t.fire_rate = min(60, t.fire_rate + 6)
-                        if old_level >= 6:
-                            t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
-                elif t.type == TowerType.FLAME:
-                    t.damage -= 15
-                    t.range -= TILE_SIZE // 4
-                    t.fire_rate = min(60, t.fire_rate + 6)
-                    if old_level >= 6:
-                        t.stun_time = round(t.stun_time - 0.1, 1)
-                    self.temperature -= 1
-                elif t.type == TowerType.TRIDENT:
-                    t.damage -= 25
-                    t.range -= TILE_SIZE // 2
-                    t.fire_rate = min(60, t.fire_rate + 6)
-                    t.lightning_damage -= 50
-                elif t.type == TowerType.WIND:
-                    t.wind_knockback -= 12
-                    if old_level >= 7:
-                        t.damage -= 20
-                        t.range -= TILE_SIZE // 2
-                    elif old_level == 6:
-                        t.damage -= 20
-                        t.range -= TILE_SIZE // 2
-                        t.fire_rate = min(60, t.fire_rate + 6)
-                    else:
-                        t.damage -= 5
-                        t.range -= TILE_SIZE // 4
-                        t.fire_rate = min(60, t.fire_rate + 6)
-                elif t.type == TowerType.POISON:
-                    t.damage -= 15
-                    t.range -= TILE_SIZE // 2
-                    t.fire_rate = min(60, t.fire_rate + 6)
-                elif t.type == TowerType.BOMB:
-                    t.damage -= 100
-                    if old_level >= 11 and t.level < 11:
-                        t.is_nuclear = False
-                        base_range = int(TILE_SIZE * 2.2)
-                        t.range = base_range + int(TILE_SIZE * 0.2) * (t.level - 1)
-                        t.fire_rate = 120
-                if t.type == TowerType.PRODUCTION:
-                    multiplier = 2 if t.is_on_gold_ore else 1
-                    if old_level >= 6:
-                        self.gold_per_wave -= multiplier
-                    if old_level >= 11:
-                        self.emerald_per_wave -= EMERALD_PER_WAVE_BY_LEVEL.get(old_level, 3) - EMERALD_PER_WAVE_BY_LEVEL.get(t.level, 0)
-                t.update_sprite()
-                if t.type == TowerType.FLAME:
-                    # 火系各分支数值差异较大（提灯走独立表），统一按等级重算
-                    t.recalculate_stats()
+            self.downgrade_tower_by_one(t)
             affected += 1
         for t in destroyed:
             if self.selected_tower is t:
                 self.selected_tower = None
             t.kill()
         return affected
+
+    def downgrade_tower_by_one(self, t):
+        """炮塔等级 -1 的通用结算（酸雨 / 圣火共用）。调用方保证 t.level >= 1。
+
+        与升级互逆：退回数值、折算 upgrade_cost、产量计税，末尾统一 update_sprite，
+        火系数值来自独立表、整体重算一次。
+        """
+        old_level = t.level
+        t.level -= 1
+        t.upgrade_cost = int(t.upgrade_cost / 1.5)
+        if t.type == TowerType.PRODUCTION:
+            multiplier = 2 if t.is_on_gold_ore else 1
+            self.gold_per_second -= multiplier
+        if old_level > 1:
+            if t.type == TowerType.PHYSICAL:
+                t.damage -= 15
+                t.range -= TILE_SIZE // 2
+                t.fire_rate = min(60, t.fire_rate + 6)
+            elif t.type == TowerType.ICE:
+                t.damage -= 5
+                t.range -= TILE_SIZE // 4
+                t.fire_rate = min(60, t.fire_rate + 6)
+                if old_level >= 6:
+                    t.freeze_time = round(t.freeze_time - 0.1, 1)
+                self.temperature += 1
+                # 神锅（分支 4）的数值来自独立数值表，逐项加减会算歪；
+                # 降到 Lv10 以下时也要顺手退回普通冰塔形态，所以整体重算一次。
+                t.recalculate_stats()
+            elif t.type == TowerType.TELEPORT:
+                if t.teleport_branch == 2:
+                    t.damage -= 100
+                    t.range -= TILE_SIZE // 2
+                    t.fire_rate = min(60, t.fire_rate + 6)
+                else:
+                    t.damage -= 5
+                    t.teleport_chance = max(0, t.teleport_chance - 0.01)
+                    t.range -= TILE_SIZE // 4
+                    t.fire_rate = min(60, t.fire_rate + 6)
+                    if old_level >= 6:
+                        t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
+            elif t.type == TowerType.FLAME:
+                t.damage -= 15
+                t.range -= TILE_SIZE // 4
+                t.fire_rate = min(60, t.fire_rate + 6)
+                if old_level >= 6:
+                    t.stun_time = round(t.stun_time - 0.1, 1)
+                self.temperature -= 1
+            elif t.type == TowerType.TRIDENT:
+                t.damage -= 25
+                t.range -= TILE_SIZE // 2
+                t.fire_rate = min(60, t.fire_rate + 6)
+                t.lightning_damage -= 50
+            elif t.type == TowerType.WIND:
+                t.wind_knockback -= 12
+                if old_level >= 7:
+                    t.damage -= 20
+                    t.range -= TILE_SIZE // 2
+                elif old_level == 6:
+                    t.damage -= 20
+                    t.range -= TILE_SIZE // 2
+                    t.fire_rate = min(60, t.fire_rate + 6)
+                else:
+                    t.damage -= 5
+                    t.range -= TILE_SIZE // 4
+                    t.fire_rate = min(60, t.fire_rate + 6)
+            elif t.type == TowerType.POISON:
+                t.damage -= 15
+                t.range -= TILE_SIZE // 2
+                t.fire_rate = min(60, t.fire_rate + 6)
+            elif t.type == TowerType.BOMB:
+                t.damage -= 100
+                if old_level >= 11 and t.level < 11:
+                    t.is_nuclear = False
+                    base_range = int(TILE_SIZE * 2.2)
+                    t.range = base_range + int(TILE_SIZE * 0.2) * (t.level - 1)
+                    t.fire_rate = 120
+            if t.type == TowerType.PRODUCTION:
+                multiplier = 2 if t.is_on_gold_ore else 1
+                if old_level >= 6:
+                    self.gold_per_wave -= multiplier
+                if old_level >= 11:
+                    self.emerald_per_wave -= EMERALD_PER_WAVE_BY_LEVEL.get(old_level, 3) - EMERALD_PER_WAVE_BY_LEVEL.get(t.level, 0)
+            t.update_sprite()
+            if t.type == TowerType.FLAME:
+                # 火系各分支数值差异较大（提灯走独立表），统一按等级重算
+                t.recalculate_stats()
+
+    def apply_sacred_fire(self, tower):
+        """阿尔法「圣火」附着：护盾挡下（破盾）、脉冲/卧龙免疫、已着火的塔跳过。
+
+        着火后没有时限，由 update 循环里的圣火 tick 统一结算降级与蔓延。
+        """
+        if tower is None or tower not in self.towers:
+            return
+        if tower.in_pulse():
+            return
+        if getattr(tower, "sacred_fire", False):
+            # 已经着火：再套盾也无济于事（盾不灭火）
+            return
+        if tower.is_invincible():
+            self.notify_tower_hit(tower)
+            return
+        if getattr(tower, "has_shield", False):
+            tower.break_shield()
+            self.trigger_shield_burst(tower)
+            self.notify_tower_hit(tower)
+            return
+        tower.sacred_fire = True
+        tower.sacred_fire_tick = SACRED_FIRE_TICK_FRAMES
+        self.notify_tower_hit(tower)
+        self.set_boss_banner("圣火附着！命中 -40%，每 16 秒降 1 级并向四邻蔓延", 180)
+
+    def _update_sacred_fire(self):
+        """圣火 tick：每 16 秒降 1 级（最低 1 级），并向上下左右四格蔓延。
+
+        蔓延同样走 apply_sacred_fire：护盾挡下、脉冲/卧龙免疫。
+        """
+        for tower in list(self.towers):
+            if not getattr(tower, "sacred_fire", False):
+                continue
+            tower.sacred_fire_tick -= 1
+            if tower.sacred_fire_tick > 0:
+                continue
+            tower.sacred_fire_tick = SACRED_FIRE_TICK_FRAMES
+            if tower.level > 1:
+                self.notify_tower_hit(tower)
+                self.downgrade_tower_by_one(tower)
+            for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                neighbor = self.get_tower_at(tower.x + dx, tower.y + dy)
+                if neighbor is not None and neighbor is not tower:
+                    self.apply_sacred_fire(neighbor)
 
     def _shop_pool(self):
         return [e for e in ENCHANTMENT_ORDER
@@ -1534,12 +1714,21 @@ class Game:
                     self.lava_timer = 0
                     self.temperature += 1
 
+            # 冰冻核弹的临时降温：到期自动回落（减掉 delta 而不是整体重算，
+            # 避免把岩浆等「永久温度增量」一起抹掉）
+            if self.climate_temp_timer > 0:
+                self.climate_temp_timer -= 1
+                if self.climate_temp_timer <= 0:
+                    self.temperature -= self.climate_temp_delta
+                    self.climate_temp_delta = 0
+
             for enemy in self.enemies:
                 reached_end = enemy.update()
                 if reached_end:
                     enemy.kill()
                     self.state = GameState.GAME_OVER
                     self.stats_open = True
+                    audio.play_sound(assets.game_over_sound)
 
             if Enchantment.BLAZE_POWDER in self.enchantments:
                 for enemy in self.enemies:
@@ -1556,6 +1745,8 @@ class Game:
                     tower.hit_energy_cd -= 1
                 if tower.disabled_timer > 0:
                     tower.disabled_timer -= 1
+                if tower.charm_timer > 0:
+                    tower.charm_timer -= 1
                 if tower.type not in (TowerType.PRODUCTION, TowerType.TIME):
                     if frozen_by_boss or tower.disabled_timer > 0:
                         tower.update_shield_tower()
@@ -1564,6 +1755,9 @@ class Game:
                     for bullet in bullets:
                         self.bullets.add(bullet)
                 tower.update_shield_tower()
+
+            # 阿尔法的圣火：降级 + 四向蔓延（独立于攻击循环，着火即结算）
+            self._update_sacred_fire()
 
             self.bullets.update()
             self.damage_texts.update()
@@ -1589,7 +1783,12 @@ class Game:
 
             if self.weather == Weather.ENDLESS_NIGHT:
                 self.night_dark_timer += 1
-                if self.final_boss is not None:
+                boss_darkness = (self.final_boss is not None
+                                 and getattr(self.final_boss, "darkness", False))
+                if boss_darkness:
+                    # 阿尔法 P4 深暗之域：强制黑暗（提灯照明照常挖洞），永夜回血停用
+                    self.fog_visible = True
+                elif self.final_boss is not None:
                     # 最终BOSS战期间不压黑屏，否则弹幕与预警看不清
                     self.fog_visible = False
                 elif self.night_dark_timer >= 1800:
@@ -1601,7 +1800,8 @@ class Game:
                             continue
                         heal_amount = int(enemy.max_health * 0.05)
                         enemy.health = min(enemy.health + heal_amount, enemy.max_health)
-                if self.fog_visible and self.night_dark_timer >= 300:
+                if (self.fog_visible and self.night_dark_timer >= 300
+                        and not boss_darkness):
                     self.fog_visible = False
 
                 self.herobrine_summon_timer += 1
@@ -1628,48 +1828,47 @@ class Game:
                         self.weather_banner_text = "HIM释放会爆炸的命令方块了!"
                         self.weather_banner_timer = 180
 
-                for cb in list(self.command_blocks):
-                    cb['timer'] += 1
-                    if cb['timer'] >= cb['max_timer']:
-                        self.command_blocks.remove(cb)
-                        blast = cb.get('radius', 1)
-                        for tower in list(self.towers):
-                            dx = abs(tower.x - cb['x'])
-                            dy = abs(tower.y - cb['y'])
-                            if dx <= blast and dy <= blast:
-                                if tower.in_pulse():
-                                    continue
-                                if getattr(tower, 'has_shield', False):
-                                    tower.break_shield()
-                                    self.trigger_shield_burst(tower)
-                                    self.notify_tower_hit(tower)
-                                elif tower.is_invincible():
-                                    self.notify_tower_hit(tower)
-                                    continue
-                                else:
-                                    self.notify_tower_hit(tower)
-                                    self.destroy_tower_by_boss(tower)
-                        for wall in list(self.ice_walls):
-                            dx = abs(wall.x - cb['x'])
-                            dy = abs(wall.y - cb['y'])
-                            if dx <= blast and dy <= blast:
-                                self.destroy_ice_wall(wall)
-                        explosion = TNTExplosion(cb['x'] * TILE_SIZE + TILE_SIZE // 2,
-                                                 cb['y'] * TILE_SIZE + TILE_SIZE // 2,
-                                                 0, 0, None, self)
-                        self.tnt_explosions.append(explosion)
+            # 命令方块倒计时与天气无关：BOSS 的 /weather 天候技能会把天气
+            # 改成非永夜，倒计时若留在永夜分支里，命令方块会永远停在原地
+            # 不爆炸（历史 bug）。第 50 波 HIM 与 BOSS /fill 的方块都走这里。
+            for cb in list(self.command_blocks):
+                cb['timer'] += 1
+                if cb['timer'] >= cb['max_timer']:
+                    self.command_blocks.remove(cb)
+                    blast = cb.get('radius', 1)
+                    for tower in list(self.towers):
+                        dx = abs(tower.x - cb['x'])
+                        dy = abs(tower.y - cb['y'])
+                        if dx <= blast and dy <= blast:
+                            if tower.in_pulse():
+                                continue
+                            if getattr(tower, 'has_shield', False):
+                                tower.break_shield()
+                                self.trigger_shield_burst(tower)
+                                self.notify_tower_hit(tower)
+                            elif tower.is_invincible():
+                                self.notify_tower_hit(tower)
+                                continue
+                            else:
+                                self.notify_tower_hit(tower)
+                                self.destroy_tower_by_boss(tower)
+                    for wall in list(self.ice_walls):
+                        dx = abs(wall.x - cb['x'])
+                        dy = abs(wall.y - cb['y'])
+                        if dx <= blast and dy <= blast:
+                            self.destroy_ice_wall(wall)
+                    explosion = TNTExplosion(cb['x'] * TILE_SIZE + TILE_SIZE // 2,
+                                             cb['y'] * TILE_SIZE + TILE_SIZE // 2,
+                                             0, 0, None, self)
+                    self.tnt_explosions.append(explosion)
 
-            if self.wave_manager.current_wave in (50, FINAL_BOSS_WAVE):
+            if self.wave_manager.current_wave in BOSS_ONLY_WAVES:
                 if not audio.music_busy():
-                    boss_bgm = None
-                    for bgm in assets.bgm_files:
-                        if "Celestial Fury" in bgm or "The End" in bgm:
-                            boss_bgm = bgm
-                            break
-                    if boss_bgm:
-                        audio.play_music(assets.resource_path(boss_bgm), -1)
+                    self.play_boss_bgm()
             else:
-                if not audio.music_busy():
+                # 非 BOSS 波：空闲就补随机 BGM；刚打完 50/100/150 时 The End 还在响，
+                # 也要立刻切走 —— 「The End」只在 BOSS 波期间播放
+                if not audio.music_busy() or _is_boss_bgm(self.current_bgm):
                     self.play_random_bgm()
 
             for pool in self.dragon_breath_pools[:]:
@@ -1817,13 +2016,14 @@ class Game:
                     self.enemies_killed += 1
                     enemy.kill()
 
-            if self.wave_manager.current_wave in (50, FINAL_BOSS_WAVE) and self.wave_manager.wave_timer > 0:
+            if self.wave_manager.current_wave in BOSS_ONLY_WAVES and self.wave_manager.wave_timer > 0:
                 self.wave_manager.update()
             elif self.wave_manager.is_wave_complete(self.enemies):
                 self.apply_production_bonus()
                 if self.wave_manager.is_game_complete(self.enemies):
                     self.state = GameState.VICTORY
                     self.stats_open = True
+                    audio.play_sound(assets.victory_sound)
                 elif self.wave_manager.current_wave % 4 == 0:
                     self.open_shop()
                 else:
@@ -1836,6 +2036,11 @@ class Game:
                 if enemy_type:
                     if enemy_type == EnemyType.FINAL_BOSS:
                         boss = FinalBoss(self.path, enemy_type, self)
+                        self.enemies.add(boss)
+                        self.final_boss = boss
+                        self.start_boss_fight()
+                    elif enemy_type == EnemyType.WORLD_SEED:
+                        boss = WorldSeedBoss(self.path, enemy_type, self)
                         self.enemies.add(boss)
                         self.final_boss = boss
                         self.start_boss_fight()
@@ -1852,39 +2057,39 @@ class Game:
 
 
     def _roll_weather(self, wave_num):
-        """按波数抽取天气（50 / 100 波固定永夜）。"""
-        if wave_num in (50, FINAL_BOSS_WAVE):
+        """按波数抽取天气。
+
+        永夜已移出天气池：非 BOSS 波永远不会抽到永夜。
+        50 / 100 波固定永夜；150 波（阿尔法）改为随机非永夜天气，
+        P4/P5 由 apply_alpha_terrain 再强制永夜。
+        120-129「天灾」纪元只抽恶劣天气。
+        """
+        if wave_num in (HEROBRINE_WAVE, OMEGA_WAVE):
             return Weather.ENDLESS_NIGHT
-        pool = list(WEATHER_POOL)
-        if 50 < wave_num < FINAL_BOSS_WAVE:
-            pool.append(Weather.ENDLESS_NIGHT)
-        return random.choice(pool)
+        if (EPOCH_WEATHER_WAVE_BAND[0] <= wave_num <= EPOCH_WEATHER_WAVE_BAND[1]):
+            return random.choice(EPOCH_WEATHER_POOLS)
+        return random.choice(WEATHER_POOL)
 
     def select_weather(self):
         self.fog_visible = False
         self.lava_timer = 0
+        # 新的一波开始：阿尔法的圣火不会跨波延续（世界重生成 / 换图清洗）
+        for t in self.towers:
+            if getattr(t, "sacred_fire", False):
+                t.sacred_fire = False
         self.weather = self._roll_weather(self.wave_manager.current_wave)
         self._build_background(night_mode=(self.weather == Weather.ENDLESS_NIGHT),
                                gold_ore_positions=self.gold_ore_positions)
-        base_temp = WEATHER_CONFIG[self.weather]["temp"]
-        self.temperature = base_temp
-        for t in self.towers:
-            self.temperature += self.tower_temp_effect(t)
-        self.temperature += self.enchantment_temp_bonus()
+        self.recompute_temperature()
         self.save_game()
         self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
         if self.weather == Weather.ACID_RAIN and Enchantment.WAX in self.enchantments:
             self.bee_spawn_remaining = 10
             self.bee_spawn_timer = 0
-        if self.weather == Weather.ENDLESS_NIGHT and not self.herobrine_spawned:
+        if self.weather == Weather.ENDLESS_NIGHT and self.wave_manager.current_wave in BOSS_ONLY_WAVES:
+            # 永夜是 BOSS 专属氛围（普通波不刷，见 _roll_weather），The End 同理只在 50/100/150 播
             audio.stop_music()
-            boss_bgm = None
-            for bgm in assets.bgm_files:
-                if "Celestial Fury" in bgm or "The End" in bgm:
-                    boss_bgm = bgm
-                    break
-            if boss_bgm:
-                audio.play_music(assets.resource_path(boss_bgm), -1)
+            self.play_boss_bgm()
         if self.weather == Weather.ACID_RAIN:
             if Enchantment.WAX not in self.enchantments:
                 self.apply_acid_rain_downgrade()
@@ -1909,12 +2114,15 @@ class Game:
     def play_random_bgm(self):
         if not assets.bgm_files:
             return
-        if len(assets.bgm_files) == 1:
-            idx = 0
-        else:
-            available = [i for i in range(len(assets.bgm_files)) if i != assets.bgm_index]
-            idx = random.choice(available)
+        # 「The End」是 50/100/150 波 BOSS 战专属曲，随机歌单永远不抽它
+        pool = [i for i, name in enumerate(assets.bgm_files) if not _is_boss_bgm(name)]
+        if not pool:
+            pool = list(range(len(assets.bgm_files)))
+        if len(pool) > 1 and assets.bgm_index in pool:
+            pool.remove(assets.bgm_index)
+        idx = random.choice(pool)
         assets.bgm_index = idx
+        self.current_bgm = assets.bgm_files[idx]
         audio.play_music(assets.resource_path(assets.bgm_files[idx]), 0)
 
     def update_weather_particles(self):
@@ -2006,6 +2214,7 @@ class Game:
             self.coins -= cost
             t = Tower(tower_type, x, y, self)
             self.towers.add(t)
+            audio.play_sound(assets.place_sound)
             if tower_type == TowerType.PRODUCTION:
                 multiplier = 2 if (x, y) in self.gold_ore_positions else 1
                 self.gold_per_second += multiplier
@@ -2104,6 +2313,8 @@ class Game:
         self.damage_texts.empty()
         self.damage_stats.reset()
         self.damage_element = None
+        # 当前正在结算伤害的炮塔（供「魅惑 → 治疗」判定用，平时为 None）
+        self.damage_source_tower = None
         self.stats_open = False
 
         self.coins = 2500
@@ -2119,6 +2330,8 @@ class Game:
         self.emerald_per_wave = 0
         self.last_global_production_time = pygame.time.get_ticks()
         self.temperature = 30
+        self.climate_temp_delta = 0
+        self.climate_temp_timer = 0
         self.lava_timer = 0
         self.weather = Weather.SUNNY
         self.weather_particles = []
