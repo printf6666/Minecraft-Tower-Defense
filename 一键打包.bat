@@ -80,6 +80,7 @@ for %%D in (libexpat.dll libbz2.dll liblzma.dll libmpdec-4.dll ffi.dll) do (
     --exclude-module matplotlib ^
     --exclude-module PIL ^
     --exclude-module tkinter ^
+    --add-data "background;background" ^
     --add-data "bgm;bgm" ^
     --add-data "debuff;debuff" ^
     --add-data "enchantment;enchantment" ^

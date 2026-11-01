@@ -290,7 +290,7 @@ class Enemy(pygame.sprite.Sprite):
         if self.burn_time > 0:
             self.burn_time -= 1
             if self.burn_time % 30 == 0:
-                # 燃烧跳伤 = 温度 × 烈焰粉 × 灯火通明 × (1 + 火系伤害加成)
+                # 燃烧跳伤 = 温度 × 烈焰粉 × (1 + 火系伤害加成)
                 dmg = self.game.burn_tick_damage(self.burn_damage)
                 reward = self.take_damage(dmg, color=ORANGE, scale=1.0, element="fire", dot=True)
                 self.game.coins += reward
@@ -343,11 +343,6 @@ class Enemy(pygame.sprite.Sprite):
             self.kill()
             return False
 
-        # 「时光倒流」：全场敌人以原速沿原路倒退，退到起点就停住（不再前进）
-        if getattr(self.game, "time_rewind_active", 0) > 0:
-            self.move_backward(self.speed)
-            return False
-
         if self.enemy_type in (EnemyType.GHOST, EnemyType.WITHER, EnemyType.BLAZE):
             tx, ty = self.ghost_target
             dx = tx - self.pos_x
@@ -387,33 +382,6 @@ class Enemy(pygame.sprite.Sprite):
 
         self.rect.center = (self.pos_x, self.pos_y)
         return False
-
-    def move_backward(self, step):
-        """沿路径往回走 step 像素（「时光倒流」用）。
-
-        路径节点语义与 update() 一致：path_index 是「已经到达的那个节点」，
-        所以倒退的目标就是 path[path_index]；path_index 为 0 时退回起点即止。
-        飞行单位（幽灵/凋灵/烈焰人）的 path_index 恒为 0，同样朝起点退。
-        """
-        if not self.path:
-            return
-        if self.path_index <= 0:
-            tx, ty = self.path[0]
-        else:
-            tx, ty = self.path[self.path_index]
-        tx = tx * TILE_SIZE + TILE_SIZE // 2
-        ty = ty * TILE_SIZE + TILE_SIZE // 2
-        dx = tx - self.pos_x
-        dy = ty - self.pos_y
-        dist = math.hypot(dx, dy)
-        if dist <= step:
-            self.pos_x, self.pos_y = tx, ty
-            if self.path_index > 0:
-                self.path_index -= 1
-        elif dist > 0:
-            self.pos_x += dx / dist * step
-            self.pos_y += dy / dist * step
-        self.rect.center = (self.pos_x, self.pos_y)
 
     def get_active_buffs(self):
         buff_list = []

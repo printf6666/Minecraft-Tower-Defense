@@ -41,17 +41,8 @@ INFO_BORDER_WIDTH = 3
 INFO_BORDER_COLOR = (255, 255, 255)
 INFO_PADDING = 20
 
-RESTART_BTN_X = INFO_BORDER_X
-RESTART_BTN_Y = INFO_BORDER_Y + INFO_BORDER_SIZE + 20
-RESTART_BTN_WIDTH = 256
-RESTART_BTN_HEIGHT = 60
-RESTART_BTN_COLOR = (80, 80, 80)
-
-EXIT_BTN_X = RESTART_BTN_X + RESTART_BTN_WIDTH
-EXIT_BTN_Y = RESTART_BTN_Y
-EXIT_BTN_WIDTH = SCREEN_WIDTH - EXIT_BTN_X
-EXIT_BTN_HEIGHT = 60
-EXIT_BTN_COLOR = (120, 30, 30)
+# 「重新开始 / 退出游戏」已收进 ESC 暂停窗口（布局见 ui.py 的 PAUSE_* / PAUSE_BUTTONS），
+# 侧栏不再常驻这两个按钮，因此这里不再保留它们的矩形常量。
 
 # 「重新开始」二次确认的有效帧数（60fps 下约 3 秒）。
 # 主菜单右下角曾有一块 512x60 的隐形热区，点一下就无声删档；
@@ -65,13 +56,7 @@ TOP_PANEL_Y = 10
 TOP_PANEL_WIDTH = 460
 TOP_PANEL_HEIGHT = 60
 
-# 局内「伤害统计」按钮（右侧操作说明下方、底部炮塔栏上方）
-STATS_BTN_X = INFO_BORDER_X
-STATS_BTN_Y = SCREEN_HEIGHT - 128 - 80
-STATS_BTN_WIDTH = INFO_BORDER_SIZE
-STATS_BTN_HEIGHT = 54
-STATS_BTN_COLOR = (52, 52, 74)
-STATS_BTN_BORDER = (150, 150, 210)
+# 局内侧栏的「伤害统计」按钮已移除：改用 TAB 键或 ESC 暂停窗口里的按钮打开。
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -115,7 +100,7 @@ class Enchantment(Enum):
     DENSE = 9
     WIND_BURST = 10
     POISON_CONTRACT = 11
-    TIME_REWIND = 12   # 原 BURN（高温燃烧），已替换为「时光倒流」
+    # 12 号空位：原「高温燃烧」→「时光倒流」都已删除，预留给后续新附魔（枚举值 12 不要占用）
     BLAZE_POWDER = 13
     FROZEN_DEEP = 14
     DRAGON_LEGEND = 15
@@ -128,7 +113,7 @@ class Enchantment(Enum):
     RESONANCE_STORM = 22
     EMBER_REBIRTH = 23
     WAX = 24
-    INFINITY_GAUNTLET = 25
+    # 25 号空位：原「无限手套」已删除，预留给后续新附魔（枚举值 25 不要占用）
     UNSTABLE_CRYSTAL = 26
     POWER_V = 27
     LANTERN = 28
@@ -144,50 +129,39 @@ ENCHANTMENT_DATA = {
     Enchantment.WIND: {"name": "风系强化", "desc": "风系伤害+20%", "cost": 100},
     Enchantment.POISON: {"name": "毒系强化", "desc": "毒系伤害+20%", "cost": 100},
     Enchantment.BOMB: {"name": "爆炸强化", "desc": "爆炸伤害+20%", "cost": 100},
-    Enchantment.DENSE: {"name": "致密V", "desc": "重锤获得距离增伤，伤害+5/px", "cost": 300},
-    Enchantment.WIND_BURST: {"name": "风爆", "desc": "蓄风印记爆炸伤害固定为5000点", "cost": 200},
+    Enchantment.DENSE: {"name": "致密V", "desc": "重锤获得距离增伤，伤害+5/px", "cost": 400},
+    Enchantment.WIND_BURST: {"name": "风爆", "desc": "蓄风印记爆炸伤害固定为5000点", "cost": 400},
     Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "同时存在剧毒环刃与九头蛇毒箭时，中毒敌人被击败有10%概率爆炸，对周围敌人造成(基础毒伤+中毒层数)×18的伤害并击晕5秒，基础毒伤永久+1", "cost": 400},
-    Enchantment.TIME_REWIND: {"name": "时光倒流", "desc": "同时存在时间洪流怀表与时序僭越之钟时，每 60 秒全场敌人沿原路倒退 8 秒（最多退回起点）", "cost": 1600},
     Enchantment.BLAZE_POWDER: {"name": "烈焰粉", "desc": "敌人永远燃烧，燃烧伤害+30%", "cost": 400},
     Enchantment.FROZEN_DEEP: {"name": "冰封深渊", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹冻结时长+0.5秒，冰墙存在时间翻倍", "cost": 400},
     Enchantment.DRAGON_LEGEND: {"name": "龙族传说", "desc": "同时存在冰龙塔、火龙塔、电龙塔时，龙伤害与百分比真实伤害翻倍，且龙移动速度+75%", "cost": 1600},
     Enchantment.ENDLESS_GREED: {"name": "无尽贪婪", "desc": "集齐七种无尽炮塔后，其子弹5%概率爆炸，造成1%最大生命伤害并获得500金币", "cost": 1600},
     Enchantment.RAIN_FIRE: {"name": "水火相容", "desc": "雨天/雷暴/酸雨可以点燃敌人", "cost": 200},
     Enchantment.WITHER_ROSE: {"name": "凋零玫瑰", "desc": "同时拥有凋零之首与凋零核弹时，凋零debuff额外附加0.1%最大生命，凋零核弹伤害额外附加0.8%最大生命", "cost": 1600},
-    Enchantment.LAVA: {"name": "岩浆桶", "desc": "每5秒提高1温度，每波开始时重置", "cost": 200},
-    Enchantment.TELESCOPE: {"name": "望远镜", "desc": "所有炮塔射程增加1格", "cost": 200},
-    Enchantment.PULSE_SHIELD: {"name": "脉冲护盾", "desc": "护盾被击碎后进入脉冲状态8秒，期间免疫所有伤害", "cost": 800},
-    Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，雷神之锤每攻击200次，所有雷盾反击一次并引爆所有蓄风印记", "cost": 1600},
-    Enchantment.EMBER_REBIRTH: {"name": "余烬重生", "desc": "同时存在满级龙息塔与8座满级核弹塔时，点击龙息塔按Q花费5万金币献祭：塔消失、全场核弹立即冷却齐射，巨型陨石从天而降、着地时对全场敌人造成1000000007伤害。献祭花费逐次翻倍", "cost": 3200},
+    Enchantment.LAVA: {"name": "岩浆桶", "desc": "每5秒提高1温度，每波开始时重置", "cost": 400},
+    Enchantment.TELESCOPE: {"name": "望远镜", "desc": "所有炮塔射程增加1格", "cost": 400},
+    Enchantment.PULSE_SHIELD: {"name": "脉冲护盾", "desc": "护盾被击碎后进入脉冲状态8秒，期间免疫所有伤害", "cost": 1600},
+    Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，锤子累计攻击70次可手动释放：所有雷盾反击一次并引爆所有蓄风印记，冷却16.5秒", "cost": 1600},
+    Enchantment.EMBER_REBIRTH: {"name": "余烬重生", "desc": "同时存在满级龙息塔与8座满级核弹塔时，龙息塔累计攻击200次可手动释放：全场核弹立即齐射，巨型陨石从天而降、着地时对全场敌人造成1000000007伤害，冷却60秒", "cost": 6400},
     Enchantment.WAX: {"name": "蜜脾", "desc": "所有炮塔涂蜡，酸雨将无法破坏炮塔及护盾。酸雨开始后每0.5秒从终点扇形召唤5只蜜蜂，共召唤10次，蜜蜂随后寻敌，撞击敌人后死亡并造成其1%最大生命的毒系伤害", "cost": 400},
-    Enchantment.INFINITY_GAUNTLET: {"name": "无限手套", "desc": "鼠标位置将始终附着无限手套，鼠标点击敌人可对其造成各种伤害，伤害 = 攻击力 * 波数 ** 2 * (1 + 对应元素强化 + 均衡强化)", "cost": 1600},
     Enchantment.UNSTABLE_CRYSTAL: {"name": "不稳定水晶", "desc": "TNT类炮塔子弹爆炸有10%概率在周围道路格生成不稳定水晶，敌人碰到后受到其1%最大生命伤害并引发爆炸；核弹/凋零核弹爆炸时全场每个道路格各有10%概率生成", "cost": 1600},
     Enchantment.POWER_V: {"name": "力量V", "desc": "物理伤害+150%；地狱升华之弩对BOSS的百分比伤害提升至6%", "cost": 400},
-    Enchantment.LANTERN: {"name": "灯火通明", "desc": "场上存在3座满级星焰提灯时：燃烧伤害*1.5，火系伤害+80%，并永久驱散全场迷雾", "cost": 1000},
-    Enchantment.MASTERPIECE: {"name": "臻品呈现", "desc": "同时存在寒冰盾与神锅时：全局冰系伤害+240%；神锅每攻击200次释放大招，对全场敌人造成61803+500*|温度|伤害，并使其永久获得冰系破甲、冰冻4秒", "cost": 1600},
+    Enchantment.LANTERN: {"name": "灯火通明", "desc": "场上存在3座满级星焰提灯时：火系伤害+120%，并永久驱散全场迷雾", "cost": 1600},
+    Enchantment.MASTERPIECE: {"name": "臻品呈现", "desc": "场上存在神锅时：全局冰系伤害+240%；神锅每攻击60次即可手动释放大招，对全场敌人造成61803+500*|温度|伤害，并使其永久获得冰系破甲、冰冻4秒（释放后冷却15秒）", "cost": 1600},
 }
-
-GAUNTLET_ATTACKS = [
-    (TowerType.PHYSICAL, 20, 0.80, WHITE),
-    (TowerType.FLAME, 40, 0.02, ORANGE),
-    (TowerType.POISON, 30, 0.16, GREEN),
-    (TowerType.ICE, 20, 0.01, ICE_BLUE),
-    (TowerType.WIND, 20, 0.01, MINT),
-    (TowerType.ELECTRIC, 30, 0.02, ELECTRIC_PURPLE),
-]
 
 ENCHANTMENT_ORDER = [
     Enchantment.BALANCED, Enchantment.PHYSICAL, Enchantment.ICE, Enchantment.MAGIC,
     Enchantment.FLAME, Enchantment.ELECTRIC,
     Enchantment.WIND, Enchantment.POISON, Enchantment.BOMB, Enchantment.DENSE, Enchantment.WIND_BURST,
-    Enchantment.POISON_CONTRACT, Enchantment.TIME_REWIND, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
+    Enchantment.POISON_CONTRACT, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
     Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.WITHER_ROSE,
     # 火矢删除后的 20 号空位由望远镜占用（原 19 → 20），21 号起编号不变
     Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.PULSE_SHIELD,
     Enchantment.RESONANCE_STORM,
     Enchantment.EMBER_REBIRTH,
     Enchantment.WAX,
-    Enchantment.INFINITY_GAUNTLET,
+    # 25 号空位（原无限手套）
     Enchantment.UNSTABLE_CRYSTAL,
     Enchantment.POWER_V,
     Enchantment.LANTERN,
@@ -199,11 +173,8 @@ ENCHANTMENT_ORDER = [
 NON_REPEATABLE_ENCHANTMENTS = {e for e in Enchantment if e.value >= 9}
 
 # 主菜单「图鉴」按钮
-CODEX_BTN_X = 900
-CODEX_BTN_Y = 930
-CODEX_BTN_WIDTH = 760
-CODEX_BTN_HEIGHT = 80
-CODEX_BTN_COLOR = (46, 92, 150)
+# 主菜单按钮布局已移到 ui.py（MENU_BUTTONS / UiManager.get_menu_buttons），
+# 绘制与点击判定共用同一份矩形，这里不再保留副本。
 
 ENCHANT_BOX_WIDTH = 512
 ENCHANT_BOX_HEIGHT = 432
@@ -211,6 +182,29 @@ ENCHANT_BOX_Y = INFO_BORDER_Y - ENCHANT_BOX_HEIGHT
 ENCHANT_ICON_SIZE = 72
 ENCHANT_ICON_GAP = 8
 ENCHANT_ICONS_PER_ROW = 6
+
+# ==========================================================================================
+#  技能栏（侧栏最下方 512×384）
+#  三个组合附魔从「自动触发」改成「充能 → 手动释放 → 冷却」。
+#  充能上限 1 层：攒满即停，只能存一个择机释放。
+# ==========================================================================================
+SKILL_PANEL_X = INFO_BORDER_X                        # 2048
+SKILL_PANEL_Y = INFO_BORDER_Y + INFO_BORDER_SIZE     # 1024
+SKILL_PANEL_W = 512
+SKILL_PANEL_H = 384
+SKILL_ROW_H = 128          # 三行 × 128 = 384，正好铺满面板（无标题、无间距）
+
+SKILL_ORDER = ("resonance", "masterpiece", "ember")
+
+# need = 充能所需攻击次数（0 表示纯冷却）；cd = 释放后的冷却帧数；enchant = 对应的附魔
+SKILL_DATA = {
+    "resonance":   {"name": "共振风暴", "need": 70, "cd": 990,  "key": pygame.K_i,
+                    "enchant": Enchantment.RESONANCE_STORM},
+    "masterpiece": {"name": "臻品呈现", "need": 60, "cd": 900,  "key": pygame.K_j,
+                    "enchant": Enchantment.MASTERPIECE},
+    "ember":       {"name": "余烬重生", "need": 200, "cd": 3600, "key": pygame.K_k,
+                    "enchant": Enchantment.EMBER_REBIRTH},
+}
 class BombSubType(Enum):
     SNOW = 1
     ICE = 2
@@ -258,8 +252,8 @@ LANTERN_TEMP_MULT = 2
 LANTERN_BURN_FRAMES = 4 * 60     # 燃烧 4 秒
 LANTERN_DAMAGE_COLOR = ORANGE    # 冲击波飘字（橙色，与火系一致）
 LANTERN_ENCHANT_TOWERS = 3       # 「灯火通明」需要的满级提灯数量
-LANTERN_BURN_MULT = 1.5          # 灯火通明：全局燃烧伤害倍率（乘算）
-LANTERN_FIRE_BONUS = 80          # 灯火通明：火系伤害加成（加算，百分点）
+# 灯火通明只加火系伤害，不再改燃烧伤害（原来的 ×1.5 已移除）
+LANTERN_FIRE_BONUS = 120         # 灯火通明：火系伤害加成（加算，百分点）
 
 
 # ==========================================================================================
@@ -340,8 +334,9 @@ ICE_BROKEN_RESIST_DOWN = 1.0     # 冰系破甲：冰系抗性 -100 个百分点
 
 # 「臻品呈现」附魔
 MASTERPIECE_ICE_BONUS = 240      # 冰系伤害 +240%（加算，百分点）
-RESONANCE_ATTACKS = 200          # 雷神之锤每攻击 N 次触发一次共振风暴
-MASTERPIECE_ATTACKS = 200        # 神锅每攻击 N 次释放大招
+RESONANCE_ATTACKS = SKILL_DATA["resonance"]["need"]     # 雷神之锤攒够 N 次攻击 = 共振风暴可用
+MASTERPIECE_ATTACKS = SKILL_DATA["masterpiece"]["need"]  # 神锅攒够 N 次攻击 = 臻品呈现可用
+EMBER_ATTACKS = SKILL_DATA["ember"]["need"]              # 龙息塔攒够 N 次攻击 = 余烬重生可用
 MASTERPIECE_DAMAGE = 61803       # 大招基础伤害
 MASTERPIECE_TEMP_MULT = 500      # 大招温度系数：伤害 = 61803 + 500 * |温度|
 MASTERPIECE_FREEZE_FRAMES = 4 * 60   # 大招冰冻 4 秒
@@ -359,14 +354,6 @@ ULTIMATE_VIDEO_FPS = 30
 TIME_AURA_RANGE = {1: 192, 2: 320, 3: 448}   # 阶级 → 光环半边长（3x3 / 5x5 / 7x7）
 TIME_DAMAGE_BRANCH = 2                        # 提供伤害加成的三阶分支号
 
-# 「时光倒流」附魔（原「高温燃烧」位置，编号 12）
-# 条件：时间洪流怀表（分支一）+ 时序僭越之钟（分支二）同时在场。
-# 这两座都是三阶形态，所以两座都必须至少 Lv11（Lv11 以下叫时钟 / 加速火把，不算）
-TIME_REWIND_COST = 1600
-TIME_REWIND_MIN_LEVEL = 11       # 三阶门槛：两座都要 Lv11+
-TIME_REWIND_COOLDOWN = 60 * 60   # 每 60 秒触发一次
-TIME_REWIND_DURATION = 8 * 60    # 倒退持续 8 秒
-TIME_REWIND_CLOCK_Y = 300        # 时钟 UI 的中心 y（屏幕中间偏上）
 
 
 # ==========================================================================================

@@ -144,12 +144,14 @@ class Game:
         self.mushroom_explosions = []
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
-        self.resonance_counter = 0
-        self.masterpiece_counter = 0     # 臻品呈现：场上所有神锅共用的攻击计数
-        # 时光倒流：倒计时（帧）与生效剩余帧数。只有「满级怀表 + 满级僭越之钟」同时在场才走表。
-        self.time_rewind_timer = TIME_REWIND_COOLDOWN
-        self.time_rewind_active = 0
-        self.sacrifices = 0
+        # ---- 技能栏（三个组合附魔改成手动释放）----
+        # charge 只由攻击累加、只由释放清零；卖塔/拆组合都不清空。
+        self.resonance_counter = 0       # 共振风暴：充能（0 ~ RESONANCE_ATTACKS）
+        self.masterpiece_counter = 0     # 臻品呈现：充能（0 ~ MASTERPIECE_ATTACKS）
+        self.resonance_cd = 0            # 共振风暴：释放后的冷却剩余帧
+        self.masterpiece_cd = 0          # 臻品呈现：释放后的冷却剩余帧
+        self.ember_counter = 0           # 余烬重生：龙息塔攻击充能（0 ~ 200）
+        self.ember_cd = 0                # 余烬重生：释放后的冷却剩余帧
         self.meteors = []
         self.bees = []
         self.bee_spawn_remaining = 0
@@ -285,11 +287,11 @@ class Game:
         sys.exit()
 
     def handle_game_click(self, mouse_x, mouse_y, grid_x, grid_y):
-        """游戏内左键单击：选塔图标 / 无限手套打怪 / 选塔 / 建塔。
+        """游戏内左键单击：选塔图标 / 选塔 / 建塔。
 
-        从 handle_events 抽出来的，因为那里还要先处理「重新开始」「退出」
-        两个按钮判定，混在一起会让 elif 分支层级变深、容易再把按钮判定
-        写到 MENU 分支外面（那正是隐形热区删档 bug 的成因）。
+        从 handle_events 抽出来的，因为那里还要先处理暂停窗口等模态判定，
+        混在一起会让 elif 分支层级变深、容易再把按钮判定写到 MENU 分支外面
+        （那正是隐形热区删档 bug 的成因）。
         """
         icon_clicked = None
         for rect, ttype, key_label in self.ui_manager.get_tower_icon_rects():
@@ -301,24 +303,6 @@ class Game:
             self.selected_tower = None
             self.selected_tower_type = icon_clicked
             self.show_range = False
-        elif Enchantment.INFINITY_GAUNTLET in self.enchantments:
-            gauntlet_hit = False
-            for e in self.enemies:
-                if e.health > 0 and e.rect.collidepoint(mouse_x, mouse_y):
-                    self.gauntlet_attack(e)
-                    gauntlet_hit = True
-                    break
-            if not gauntlet_hit:
-                clicked_tower = self.get_tower_at(grid_x, grid_y)
-                if clicked_tower:
-                    self.selected_tower = clicked_tower
-                    self.selected_tower_type = None
-                    self.show_range = True
-                else:
-                    self.selected_tower = None
-                    self.show_range = False
-                    if self.selected_tower_type and self.can_build_tower(grid_x, grid_y):
-                        self.build_tower(grid_x, grid_y, self.selected_tower_type)
         else:
             clicked_tower = self.get_tower_at(grid_x, grid_y)
             if clicked_tower:
@@ -342,7 +326,7 @@ class Game:
                 self.codex.handle_event(event)
                 continue
 
-            # 伤害统计弹窗是模态的：只响应关闭（X / ESC / TAB）
+            # 伤害统计弹窗是模态的：只响应关闭（右上角 X / TAB / ESC）
             if self.stats_open:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if self.ui_manager.get_stats_close_rect().collidepoint(pygame.mouse.get_pos()):
@@ -355,45 +339,53 @@ class Game:
                 if event.button == 1:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
 
-                    if (self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION, GameState.PAUSED)
-                            and self.ui_manager.get_stats_button_rect().collidepoint(mouse_x, mouse_y)):
-                        self.stats_open = True
-                        return
+                    # 暂停窗口是模态的：只响应窗口里的四个按钮，其它点击一律吞掉
+                    if self.state == GameState.PAUSED:
+                        for btn_key, btn_rect in self.ui_manager.get_pause_menu_buttons():
+                            if not btn_rect.collidepoint(mouse_x, mouse_y):
+                                continue
+                            if btn_key == "restart":
+                                # 二次确认：第一下只亮红提示，窗口期内再点才真重置
+                                if self.confirm_reset > 0:
+                                    self.confirm_reset = 0
+                                    self.reset_game()
+                                else:
+                                    self.confirm_reset = CONFIRM_RESET_FRAMES
+                            elif btn_key == "codex":
+                                self.codex.toggle()
+                            elif btn_key == "stats":
+                                self.stats_open = True
+                            elif btn_key == "quit":
+                                self.quit_game()
+                            break
+                        continue
 
                     grid_x = mouse_x // TILE_SIZE
                     grid_y = mouse_y // TILE_SIZE
 
                     if self.state == GameState.MENU:
-                        if 900 <= mouse_x <= 1660 and 840 <= mouse_y <= 920:
-                            self.start_game()
-                        elif (CODEX_BTN_X <= mouse_x <= CODEX_BTN_X + CODEX_BTN_WIDTH
-                              and CODEX_BTN_Y <= mouse_y <= CODEX_BTN_Y + CODEX_BTN_HEIGHT):
-                            self.codex.toggle()
-                        elif 900 <= mouse_x <= 1660 and 1020 <= mouse_y <= 1100:
-                            self.quit_game()
+                        # 按钮矩形与绘制共用同一份布局（ui.get_menu_buttons）
+                        for btn_key, btn_rect in self.ui_manager.get_menu_buttons():
+                            if not btn_rect.collidepoint(mouse_x, mouse_y):
+                                continue
+                            if btn_key == "start":
+                                self.start_game()
+                            elif btn_key == "codex":
+                                self.codex.toggle()
+                            elif btn_key == "quit":
+                                self.quit_game()
+                            break
 
-                    elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION,
-                                        GameState.PAUSED):
-                        # 重新开始 / 退出按钮只在游戏内绘制（ui.py 的 draw_ui）。
-                        # 判定必须放在 MENU 分支之外：曾把这两段写在这里之前 →
-                        # 主菜单右下角 (2048~2560, 1044~1104) 成了看不见的热区，
-                        # 玩家点一下就 reset_game() 无声删档。
-                        if (RESTART_BTN_X <= mouse_x <= RESTART_BTN_X + RESTART_BTN_WIDTH and
-                                RESTART_BTN_Y <= mouse_y <= RESTART_BTN_Y + RESTART_BTN_HEIGHT):
-                            # 二次确认：第一下只亮提示，窗口期内再点才真重置
-                            if self.confirm_reset > 0:
-                                self.confirm_reset = 0
-                                self.reset_game()
-                            else:
-                                self.confirm_reset = CONFIRM_RESET_FRAMES
-                            return
-
-                        if (EXIT_BTN_X <= mouse_x <= EXIT_BTN_X + EXIT_BTN_WIDTH and
-                                EXIT_BTN_Y <= mouse_y <= EXIT_BTN_Y + EXIT_BTN_HEIGHT):
-                            self.quit_game()
-                            return
-
-                        self.handle_game_click(mouse_x, mouse_y, grid_x, grid_y)
+                    elif self.state in (GameState.PLAYING, GameState.WAVE_PREPARATION):
+                        # 技能格优先：点中就释放，不再落到地图上
+                        hit_skill = False
+                        for skill_id, row in self.ui_manager.get_skill_row_rects():
+                            if row.collidepoint(mouse_x, mouse_y):
+                                self.try_release_skill(skill_id)
+                                hit_skill = True
+                                break
+                        if not hit_skill:
+                            self.handle_game_click(mouse_x, mouse_y, grid_x, grid_y)
 
                     elif self.state == GameState.SHOP:
                         bought = False
@@ -436,6 +428,15 @@ class Game:
                         GameState.PLAYING, GameState.WAVE_PREPARATION, GameState.PAUSED,
                         GameState.VICTORY, GameState.GAME_OVER):
                     self.stats_open = True
+                    continue
+                # 技能释放：I / J / K（只在战斗与待战状态生效，暂停/商店里按了不动）
+                skill_key = None
+                for key_id, cfg in SKILL_DATA.items():
+                    if event.key == cfg["key"]:
+                        skill_key = key_id
+                        break
+                if skill_key is not None:
+                    self.try_release_skill(skill_key)
                     continue
                 for ttype, name, cost, key in TOWER_DATA:
                     if event.key == key:
@@ -514,9 +515,6 @@ class Game:
                         # 三阶两个分支：时间洪流怀表（攻速）→ 时序僭越之钟（伤害）
                         self.selected_tower.time_branch = self.selected_tower.time_branch % 2 + 1
                         self.selected_tower.update_sprite()
-                    elif event.key == pygame.K_q and self.selected_tower and self.ember_rebirth_active():
-                        if self.selected_tower.type == TowerType.FLAME and self.selected_tower.level == 15 and self.selected_tower.flame_branch == 1:
-                            self.sacrifice_tower()
                     elif event.key == pygame.K_s and self.selected_tower:
                         cost_map = {ttype: cost for ttype, name, cost, key in TOWER_DATA}
                         sell_price = cost_map[self.selected_tower.type] * self.selected_tower.level
@@ -603,7 +601,9 @@ class Game:
                     for enemy in self.enemies:
                         enemy.take_damage(damage, color=ORANGE, element="electric")
                         self.apply_hard_stun(enemy, 60)
-                        enemy.burn_time = float('inf')
+                        # 永久燃烧：用有限大值而不是 inf —— inf % 30 会得到 nan，
+                        # 燃烧跳伤永远不触发（和「烈焰粉」的 999999 保持一致）
+                        enemy.burn_time = 999999
                         enemy.burn_damage = max(enemy.burn_damage, self.temperature)
 
     def trigger_resonance_storm(self):
@@ -619,7 +619,7 @@ class Game:
                 for enemy in self.enemies:
                     enemy.take_damage(damage, color=ORANGE, element="electric")
                     self.apply_hard_stun(enemy, 60)
-                    enemy.burn_time = float('inf')
+                    enemy.burn_time = 999999
                     enemy.burn_damage = max(enemy.burn_damage, self.temperature)
         for enemy in self.enemies:
             if enemy.wind_mark_tower is not None:
@@ -640,20 +640,12 @@ class Game:
         nuclear_count = sum(1 for t in self.towers if t.type == TowerType.BOMB and t.is_nuclear and t.level == 15 and t.bomb_branch == 1)
         return has_dragon and nuclear_count >= 8
 
-    def sacrifice_tower(self):
-        t = self.selected_tower
-        if t is None or not self.ember_rebirth_active():
-            return False
-        if not (t.type == TowerType.FLAME and t.level == 15 and t.flame_branch == 1):
-            return False
-        cost = 50000 * (2 ** self.sacrifices)
-        if self.coins < cost:
-            return False
-        self.coins -= cost
-        self.sacrifices += 1
-        self.temperature -= t.level
-        t.kill()
-        self.selected_tower = None
+    def trigger_ember_rebirth(self):
+        """「余烬重生」技能释放：全场核弹立即齐射 + 巨型陨石落地。
+
+        旧版是「按 Q 献祭掉满级龙息塔、花 5 万金币」，现在改成技能：
+        龙息塔不再消失、也不花钱，只消耗充能与冷却。
+        """
         for tb in self.towers:
             if tb.type == TowerType.BOMB and tb.is_nuclear and tb.bomb_branch == 1:
                 missile = NuclearMissile(tb.rect.centerx, tb.rect.centery,
@@ -663,8 +655,7 @@ class Game:
                 tb.last_shot = self.game_time
                 tb.ember_salvo = False
         self.meteors.append(Meteor(self))
-        self.save_game()
-        return True
+        audio.play_sound(assets.explode_sound)
 
     def add_meteor_hit(self, x, y):
         # 陨石吃火系伤害加成；打 BOSS 只打穿当前这一层，溢出伤害不带到下一层
@@ -711,11 +702,24 @@ class Game:
                     # 金矿产量是时间塔的通用光环，两个分支都保留
                     if other.type == TowerType.PRODUCTION:
                         other.production_buff += n
+        # 三项产量一律按「场上现有金矿塔」重算，而不是增量加减。
+        # 原来 gold_per_wave / emerald_per_wave 是建塔升级时 +、卖塔时 -，
+        # 但读档时 _spawn_tower_from_data 会逐级 upgrade() 把贡献又加一遍，
+        # 而存档里的旧值也照样读进来 —— 每读一次档就翻一份，绿宝石产量会滚成天文数字。
+        gold_pw = 0
+        emerald_pw = 0
         for t in self.towers:
-            if t.type == TowerType.PRODUCTION:
-                mult = 2 if t.is_on_gold_ore else 1
-                gold_ps += t.level * mult * (1 + t.production_buff / 100)
+            if t.type != TowerType.PRODUCTION:
+                continue
+            mult = 2 if t.is_on_gold_ore else 1
+            gold_ps += t.level * mult * (1 + t.production_buff / 100)
+            if t.level >= 6:
+                gold_pw += (t.level - 5) * mult
+            if t.level >= 11:
+                emerald_pw += EMERALD_PER_WAVE_BY_LEVEL.get(t.level, 3)
         self.gold_per_second = gold_ps
+        self.gold_per_wave = gold_pw
+        self.emerald_per_wave = emerald_pw
 
     def spawn_damage_text(self, value, pos, color=RED, scale=1.4, speed_x=0.0, speed_y=-2, boss=False):
         if boss:
@@ -787,9 +791,17 @@ class Game:
                 "enchantments": [e.value for e in self.enchantments],
                 "poison_base_damage": self.poison_base_damage,
                 "damage_stats": self.damage_stats.to_dict(),
-                "sacrifices": self.sacrifices,
                 "gold_ore_positions": [list(p) for p in self.gold_ore_positions],
                 "towers": towers_data,
+                # 技能栏的充能与冷却（旧存档没有这些字段，读档时按 0 兜底）
+                "skills": {
+                    "resonance": self.resonance_counter,
+                    "resonance_cd": self.resonance_cd,
+                    "masterpiece": self.masterpiece_counter,
+                    "masterpiece_cd": self.masterpiece_cd,
+                    "ember": self.ember_counter,
+                    "ember_cd": self.ember_cd,
+                },
             }
             # 原子写：先写 .tmp 并 fsync，再 os.replace 覆盖。
             # 原实现直接 open(path,"w") 后 json.dump —— 写到一半断电/被关窗口
@@ -855,12 +867,14 @@ class Game:
         self.mushroom_explosions = []
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
-        self.resonance_counter = 0
-        self.masterpiece_counter = 0     # 臻品呈现：场上所有神锅共用的攻击计数
-        # 时光倒流：倒计时（帧）与生效剩余帧数。只有「满级怀表 + 满级僭越之钟」同时在场才走表。
-        self.time_rewind_timer = TIME_REWIND_COOLDOWN
-        self.time_rewind_active = 0
-        self.sacrifices = 0
+        # ---- 技能栏（三个组合附魔改成手动释放）----
+        # charge 只由攻击累加、只由释放清零；卖塔/拆组合都不清空。
+        self.resonance_counter = 0       # 共振风暴：充能（0 ~ RESONANCE_ATTACKS）
+        self.masterpiece_counter = 0     # 臻品呈现：充能（0 ~ MASTERPIECE_ATTACKS）
+        self.resonance_cd = 0            # 共振风暴：释放后的冷却剩余帧
+        self.masterpiece_cd = 0          # 臻品呈现：释放后的冷却剩余帧
+        self.ember_counter = 0           # 余烬重生：龙息塔攻击充能（0 ~ 200）
+        self.ember_cd = 0                # 余烬重生：释放后的冷却剩余帧
         self.meteors = []
         self.bees = []
         self.bee_spawn_remaining = 0
@@ -1135,13 +1149,23 @@ class Game:
                 base_poison = 5
         self.poison_base_damage = base_poison
         self.damage_stats.load_dict(data.get("damage_stats"))
-        self.sacrifices = data.get("sacrifices", 0)
+        # 技能栏：旧存档没有 skills 字段，按 0 兜底（技能立即可用）
+        sk = data.get("skills") or {}
+        self.resonance_counter = max(0, min(RESONANCE_ATTACKS, int(sk.get("resonance", 0))))
+        self.resonance_cd = max(0, int(sk.get("resonance_cd", 0)))
+        self.masterpiece_counter = max(0, min(MASTERPIECE_ATTACKS, int(sk.get("masterpiece", 0))))
+        self.masterpiece_cd = max(0, int(sk.get("masterpiece_cd", 0)))
+        self.ember_counter = max(0, min(SKILL_DATA["ember"]["need"], int(sk.get("ember", 0))))
+        self.ember_cd = max(0, int(sk.get("ember_cd", 0)))
         wave_num = max(1, data.get("wave", 1))
         self.wave_manager.current_wave = wave_num - 1
         # 旧存档里可能有已经删掉的塔（比如剑系 type=11），
         # _spawn_tower_from_data 内部会跳过无法识别的类型，而不是让整份存档读不出来
         for td in data.get("towers", []):
             self._spawn_tower_from_data(td)
+        # 逐级 upgrade() 会把产量贡献累加进 gold_per_wave / emerald_per_wave，
+        # 而上面又读过存档里的旧值 —— 这里统一按场上塔重算一次，覆盖掉重复累加。
+        self.apply_time_buffs()
         self.recompute_temperature()
         self.wave_manager.start_new_wave()
         if self.wave_manager.current_wave in BOSS_ONLY_WAVES:
@@ -1244,33 +1268,125 @@ class Game:
             MasterpieceShockwave(cx, cy, radius))
 
     def masterpiece_active(self):
-        """臻品呈现的生效条件：持有该附魔，且场上同时有寒冰盾（盾塔分支 2）与神锅（冰塔分支 4）。"""
+        """臻品呈现的生效条件：持有该附魔，且场上有神锅（冰塔分支 4）。
+
+        已不再要求寒冰盾 —— 神锅在场即生效（冰系 +240%、神锅攻击充能）。
+        """
         if Enchantment.MASTERPIECE not in self.enchantments:
             return False
-        has_pot = any(t.type == TowerType.ICE and t.level >= 11 and t.ice_branch == HOLY_POT_BRANCH
-                      for t in self.towers)
-        has_ice_shield = any(t.type == TowerType.SHIELD and t.level >= 11 and t.shield_branch == 2
+        return any(t.type == TowerType.ICE and t.level >= 11 and t.ice_branch == HOLY_POT_BRANCH
+                   for t in self.towers)
+
+    # ---------------------------------------------------------------- 技能栏
+    #  三个组合附魔从「自动触发」改成「充能 → 手动释放 → 冷却」。
+    #  充能上限 1 层：攒满即停，只能存一个择机释放。
+
+    def skill_unlocked(self, key):
+        """是否已经买过这个附魔 —— 没买过就连技能格都不画。"""
+        return SKILL_DATA[key]["enchant"] in self.enchantments
+
+    def skill_condition_met(self, key):
+        """组合条件：附魔 + 对应的塔同时在场上。不满足时只是不能充能/释放，层数保留。"""
+        if key == "resonance":
+            if Enchantment.RESONANCE_STORM not in self.enchantments:
+                return False
+            has_hammer = any(t.type == TowerType.WIND and t.level >= 11 and t.wind_branch == 2
                              for t in self.towers)
-        return has_pot and has_ice_shield
+            has_shield = any(t.type == TowerType.SHIELD and t.level >= 11 and t.shield_branch == 3
+                             for t in self.towers)
+            return has_hammer and has_shield
+        if key == "masterpiece":
+            return self.masterpiece_active()
+        return self.ember_rebirth_active()
 
-    def time_rewind_available(self):
-        """「时光倒流」的生效条件：持有该附魔，且场上同时有怀表（分支一）与僭越之钟（分支二）。
+    def skill_charge(self, key):
+        """当前充能层数。"""
+        if key == "resonance":
+            return self.resonance_counter
+        if key == "masterpiece":
+            return self.masterpiece_counter
+        return self.ember_counter
 
-        这两个名字都是三阶形态，所以两座都必须至少 Lv11 —— Lv11 以下叫时钟 / 加速火把，不算。
-        """
-        if Enchantment.TIME_REWIND not in self.enchantments:
+    def skill_cd(self, key):
+        """剩余冷却帧数。"""
+        if key == "resonance":
+            return self.resonance_cd
+        if key == "masterpiece":
+            return self.masterpiece_cd
+        return self.ember_cd
+
+    def skill_can_charge(self, key):
+        """还能不能继续攒 —— 条件满足且没攒满。卖塔不会清空已攒的层数。"""
+        if not self.skill_condition_met(key):
             return False
-        has_watch = has_clock = False
-        for t in self.towers:
-            if t.type != TowerType.TIME or t.level < TIME_REWIND_MIN_LEVEL:
-                continue
-            if t.time_branch == 1:
-                has_watch = True
-            elif t.time_branch == 2:
-                has_clock = True
-            if has_watch and has_clock:
-                return True
-        return has_watch and has_clock
+        return self.skill_charge(key) < SKILL_DATA[key]["need"]
+
+    def skill_ready(self, key):
+        """可以释放：条件满足 + 攒满 + 冷却结束。"""
+        if not self.skill_condition_met(key):
+            return False
+        cfg = SKILL_DATA[key]
+        if self.skill_charge(key) < cfg["need"]:
+            return False
+        if self.skill_cd(key) > 0:
+            return False
+        return True
+
+    def skill_state(self, key):
+        """给 UI 用：(状态, 进度0~1, 当前数, 需求数, 冷却剩余秒)。
+
+        状态：locked（组合塔不齐）/ charging（充能中）/ ready（可释放）
+        """
+        cfg = SKILL_DATA[key]
+        need = cfg["need"]
+        charge = self.skill_charge(key)
+        cd = self.skill_cd(key)
+        progress = 1.0 if need <= 0 else min(1.0, charge / need)
+        if self.skill_ready(key):
+            state = "ready"
+        elif not self.skill_condition_met(key):
+            state = "locked"
+        else:
+            state = "charging"
+        return state, progress, charge, need, cd / 60.0
+
+    def skill_missing_text(self, key):
+        """锁定态给玩家看的「缺什么」。"""
+        if key == "resonance":
+            has_hammer = any(t.type == TowerType.WIND and t.level >= 11 and t.wind_branch == 2
+                             for t in self.towers)
+            return "缺雷盾" if has_hammer else "缺雷神之锤"
+        if key == "masterpiece":
+            # 不再需要寒冰盾，只差神锅这一种情况
+            return "缺神锅"
+        # 余烬重生：满级龙息塔 + 8 座满级核弹
+        has_dragon = any(t.type == TowerType.FLAME and t.level == 15 and t.flame_branch == 1
+                         for t in self.towers)
+        return "缺 8 座满级核弹" if has_dragon else "缺满级龙息塔"
+
+    def try_release_skill(self, key):
+        """唯一的技能释放入口。返回是否真的放出去了。"""
+        if key not in SKILL_DATA:
+            return False
+        if self.state not in (GameState.PLAYING, GameState.WAVE_PREPARATION):
+            return False
+        # 释放瞬间再校验一次：塔可能刚被卖掉 / 被圣火降级
+        if not self.skill_ready(key):
+            return False
+        cfg = SKILL_DATA[key]
+        if key == "resonance":
+            self.resonance_counter = 0
+            self.resonance_cd = cfg["cd"]
+            self.trigger_resonance_storm()
+        elif key == "masterpiece":
+            self.masterpiece_counter = 0
+            self.masterpiece_cd = cfg["cd"]
+            self.trigger_masterpiece_ultimate()
+        else:
+            self.ember_counter = 0
+            self.ember_cd = cfg["cd"]
+            self.trigger_ember_rebirth()
+        return True
 
     def trigger_masterpiece_ultimate(self):
         """「臻品呈现」大招起手：先播动画，伤害等动画放完再结算。
@@ -1350,21 +1466,19 @@ class Game:
         if tower_type == TowerType.PHYSICAL \
                 and Enchantment.POWER_V in self.enchantments:
             bonus += 150
-        # 灯火通明：火系伤害 +80%（加算，不随附魔重复叠加）
+        # 灯火通明：火系伤害 +120%（加算，不随附魔重复叠加）
         if tower_type == TowerType.FLAME and self.lantern_active():
             bonus += LANTERN_FIRE_BONUS
-        # 臻品呈现：需要「寒冰盾 + 神锅」同时在场，才给全局冰系 +240%（加算）
+        # 臻品呈现：神锅在场就给全局冰系 +240%（加算），已不再要求寒冰盾
         if tower_type == TowerType.ICE and self.masterpiece_active():
             bonus += MASTERPIECE_ICE_BONUS * self.enchantments.count(Enchantment.MASTERPIECE)
         return 1.0 + bonus / 100.0
 
     def burn_tick_damage(self, base):
-        """燃烧每跳的实际伤害 = 基础 × 烈焰粉 × 灯火通明 × (1 + 火系伤害加成)。"""
+        """燃烧每跳的实际伤害 = 基础 × 烈焰粉 × (1 + 火系伤害加成)。"""
         dmg = base
         if Enchantment.BLAZE_POWDER in self.enchantments:
             dmg *= 1.3
-        if self.lantern_active():
-            dmg *= LANTERN_BURN_MULT
         dmg *= self.get_element_damage_multiplier("fire")
         return int(dmg)
 
@@ -1380,37 +1494,6 @@ class Game:
 
     def enchantment_temp_bonus(self):
         return 0
-
-    def gauntlet_attack(self, enemy):
-        weights = [a[2] for a in GAUNTLET_ATTACKS]
-        tower_type, atk, _, color = random.choices(GAUNTLET_ATTACKS, weights=weights)[0]
-        prev_element = self.damage_element
-        self.damage_element = stats.tower_element(tower_type)
-        wave = max(1, self.wave_manager.current_wave)
-        damage = int(atk * wave ** 2 * self.get_enchant_damage_multiplier(tower_type))
-        reward = enemy.take_damage(damage, color=color)
-        self.coins += reward
-        if tower_type == TowerType.FLAME:
-            enemy.apply_burn(max(1, self.temperature), 2 * 60)
-        elif tower_type == TowerType.POISON:
-            enemy.apply_poison(1)
-        elif tower_type == TowerType.ICE:
-            enemy.apply_freeze(int(0.25 * 60))
-        elif tower_type == TowerType.WIND:
-            armored = (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED,
-                       EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED)
-            enemy.apply_knockback(12)
-            if enemy.enemy_type not in armored:
-                enemy.wind_mark_tower = SimpleNamespace(damage=damage, wind_knockback=12)
-        elif tower_type == TowerType.ELECTRIC:
-            col = enemy.rect.centerx // TILE_SIZE
-            for e in self.enemies:
-                if e.rect.centerx // TILE_SIZE == col and e.health > 0:
-                    reward = e.take_damage(damage, color=color)
-                    self.coins += reward
-                    e.on_lightning_hit()
-            self.add_lightning(enemy.rect.centerx, 800, False)
-        self.damage_element = prev_element
 
     def frost_combo_active(self):
         if Enchantment.FROZEN_DEEP not in self.enchantments:
@@ -1770,15 +1853,13 @@ class Game:
                     self.temperature -= self.climate_temp_delta
                     self.climate_temp_delta = 0
 
-            # 「时光倒流」：满级怀表 + 满级僭越之钟同时在场的 60 秒循环
-            if self.time_rewind_active > 0:
-                self.time_rewind_active -= 1
-            elif self.time_rewind_available():
-                self.time_rewind_timer -= 1
-                if self.time_rewind_timer <= 0:
-                    self.time_rewind_timer = TIME_REWIND_COOLDOWN
-                    self.time_rewind_active = TIME_REWIND_DURATION
-                    audio.play_sound(assets.teleport_sound)
+            # 技能冷却推进。三个技能都改成手动释放，这里只走表，不再自动触发。
+            if self.resonance_cd > 0:
+                self.resonance_cd -= 1
+            if self.masterpiece_cd > 0:
+                self.masterpiece_cd -= 1
+            if self.ember_cd > 0:
+                self.ember_cd -= 1
 
             for enemy in self.enemies:
                 reached_end = enemy.update()
@@ -2198,7 +2279,6 @@ class Game:
             "emeralds": self.emeralds,
             "enchantments": list(self.enchantments),
             "poison_base_damage": self.poison_base_damage,
-            "sacrifices": self.sacrifices,
             "gold_per_second": self.gold_per_second,
             "gold_per_wave": self.gold_per_wave,
             "emerald_per_wave": self.emerald_per_wave,
@@ -2206,6 +2286,15 @@ class Game:
             "weather": self.weather,
             "enemies_killed": self.enemies_killed,
             "damage_stats": self.damage_stats.to_dict(),
+            # 技能栏的充能与冷却也一起回滚，否则「重来本波」会带着上一波的进度
+            "skills": {
+                "resonance": self.resonance_counter,
+                "resonance_cd": self.resonance_cd,
+                "masterpiece": self.masterpiece_counter,
+                "masterpiece_cd": self.masterpiece_cd,
+                "ember": self.ember_counter,
+                    "ember_cd": self.ember_cd,
+            },
             "towers": towers_data,
             "wave": {
                 # 用 getattr 兜底：快照可能在任何时刻被要求（例如还没开波就点了重来），
@@ -2427,9 +2516,6 @@ class Game:
         self._lantern_towers = 0
         self.ultimate_video = None
         self.masterpiece_pending = False
-        # 时光倒流：重来本波时冷却与生效状态一并归零，避免带着「倒退中」重开
-        self.time_rewind_timer = TIME_REWIND_COOLDOWN
-        self.time_rewind_active = 0
 
         # 3) 炮塔按快照重建（本波新建 / 升级 / 出售的塔全部作废）
         self.towers.empty()
@@ -2441,12 +2527,18 @@ class Game:
         self.emeralds = snap["emeralds"]
         self.enchantments = list(snap["enchantments"])
         self.poison_base_damage = snap["poison_base_damage"]
-        self.sacrifices = snap["sacrifices"]
         self.gold_per_second = snap["gold_per_second"]
         self.gold_per_wave = snap["gold_per_wave"]
         self.emerald_per_wave = snap["emerald_per_wave"]
         self.enemies_killed = snap["enemies_killed"]
         self.damage_stats.load_dict(snap["damage_stats"])
+        sk = snap.get("skills") or {}
+        self.resonance_counter = max(0, min(RESONANCE_ATTACKS, int(sk.get("resonance", 0))))
+        self.resonance_cd = max(0, int(sk.get("resonance_cd", 0)))
+        self.masterpiece_counter = max(0, min(MASTERPIECE_ATTACKS, int(sk.get("masterpiece", 0))))
+        self.masterpiece_cd = max(0, int(sk.get("masterpiece_cd", 0)))
+        self.ember_counter = max(0, min(SKILL_DATA["ember"]["need"], int(sk.get("ember", 0))))
+        self.ember_cd = max(0, int(sk.get("ember_cd", 0)))
 
         # 5) 天气 / 温度回滚（本波天气被改写、冰冻核弹降温等一并作废）
         self.weather = snap["weather"]
@@ -2535,12 +2627,14 @@ class Game:
         self.mushroom_explosions = []
         self.shockwave_effects = []
         self.thunderstorm_timer = 0
-        self.resonance_counter = 0
-        self.masterpiece_counter = 0     # 臻品呈现：场上所有神锅共用的攻击计数
-        # 时光倒流：倒计时（帧）与生效剩余帧数。只有「满级怀表 + 满级僭越之钟」同时在场才走表。
-        self.time_rewind_timer = TIME_REWIND_COOLDOWN
-        self.time_rewind_active = 0
-        self.sacrifices = 0
+        # ---- 技能栏（三个组合附魔改成手动释放）----
+        # charge 只由攻击累加、只由释放清零；卖塔/拆组合都不清空。
+        self.resonance_counter = 0       # 共振风暴：充能（0 ~ RESONANCE_ATTACKS）
+        self.masterpiece_counter = 0     # 臻品呈现：充能（0 ~ MASTERPIECE_ATTACKS）
+        self.resonance_cd = 0            # 共振风暴：释放后的冷却剩余帧
+        self.masterpiece_cd = 0          # 臻品呈现：释放后的冷却剩余帧
+        self.ember_counter = 0           # 余烬重生：龙息塔攻击充能（0 ~ 200）
+        self.ember_cd = 0                # 余烬重生：释放后的冷却剩余帧
         self.meteors = []
         self.bees = []
         self.bee_spawn_remaining = 0

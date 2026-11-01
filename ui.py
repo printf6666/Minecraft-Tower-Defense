@@ -75,6 +75,136 @@ def _command_block_img(alpha):
     return img
 
 
+# ==========================================================================================
+#  主菜单
+#  · 背景：background/bg1..7 轮播，每 MENU_BG_SECONDS 秒交叉淡入淡出
+#  · 按钮布局集中在这里，绘制与点击判定共用同一份矩形，避免再次出现"隐形热区"
+# ==========================================================================================
+MENU_BG_SECONDS = 7.0        # 每张停留时长（含淡入淡出）
+MENU_BG_FADE = 0.16          # 末尾这一段比例用来交叉淡化（0.16 → 约 1.1 秒）
+MENU_BTN_W = 760
+MENU_BTN_H = 104
+MENU_BTN_GAP = 30
+MENU_BTN_TOP = int(SCREEN_HEIGHT * 0.40)
+MENU_TITLE_Y = int(SCREEN_HEIGHT * 0.155)
+
+# key -> (文字, 常态色, 悬停色, 边框色)
+MENU_BUTTONS = (
+    ("start", "开始游戏", (52, 132, 76), (74, 182, 104), (150, 235, 170)),
+    ("codex", "查看图鉴", (46, 88, 146), (66, 126, 198), (150, 200, 255)),
+    ("quit", "退出游戏", (132, 52, 56), (182, 74, 80), (255, 160, 160)),
+)
+
+# ---- 暂停窗口（ESC 弹出，四个按钮） ----
+PAUSE_PANEL_W = 720
+PAUSE_PANEL_H = 690
+PAUSE_BTN_W = 560
+PAUSE_BTN_H = 96
+PAUSE_BTN_GAP = 22
+PAUSE_PANEL_TOP = 150          # 按钮区距面板顶部
+
+PAUSE_BUTTONS = (
+    ("restart", "重新开始", (52, 132, 76), (74, 182, 104), (150, 235, 170)),
+    ("codex", "查看图鉴", (46, 88, 146), (66, 126, 198), (150, 200, 255)),
+    ("stats", "伤害统计", (96, 74, 150), (126, 100, 190), (200, 175, 255)),
+    ("quit", "退出游戏", (132, 52, 56), (182, 74, 80), (255, 160, 160)),
+)
+
+_menu_fonts = {}
+_menu_bgs = None
+_menu_plate = {}
+
+
+def menu_font(size):
+    f = _menu_fonts.get(size)
+    if f is None:
+        f = pygame.font.Font(assets.resource_path("Minecraft.ttf"), size)
+        _menu_fonts[size] = f
+    return f
+
+
+def _menu_button_plate(w, h, color, radius):
+    """按钮的投影 / 高光小表面，按尺寸缓存，避免每帧新建。"""
+    key = (w, h, color, radius)
+    surf = _menu_plate.get(key)
+    if surf is None:
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(surf, color, surf.get_rect(), border_radius=radius)
+        _menu_plate[key] = surf
+    return surf
+
+
+# 技能栏锁定态用的灰度图标（按附魔缓存，避免每帧复制）
+_skill_gray_icons = {}
+
+
+def _skill_gray_icon(ench):
+    img = _skill_gray_icons.get(ench)
+    if img is None:
+        img = assets.enchantment_icons[ench].copy()
+        img.fill((90, 90, 90, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        _skill_gray_icons[ench] = img
+    return img
+
+
+def draw_panel_button(screen, rect, label, base, hover, edge, hot, font_size=52):
+    """菜单 / 暂停窗共用的按钮样式：投影 + 圆角 + 顶部高光 + 描边 + 文字投影。"""
+    body = hover if hot else base
+    r = rect.move(0, -4) if hot else rect
+    screen.blit(_menu_button_plate(r.width, r.height, (0, 0, 0, 115), 18), (r.x + 5, r.y + 9))
+    pygame.draw.rect(screen, body, r, border_radius=18)
+    screen.blit(_menu_button_plate(r.width - 10, r.height // 2,
+                                   (255, 255, 255, 44 if hot else 26), 14),
+                (r.x + 5, r.y + 5))
+    pygame.draw.rect(screen, edge if hot else tuple(c // 2 + 40 for c in body),
+                     r, 3 if hot else 2, border_radius=18)
+    font = menu_font(font_size)
+    text = font.render(label, True, (255, 255, 255))
+    shadow = font.render(label, True, (12, 14, 22))
+    pos = (r.centerx - text.get_width() // 2, r.centery - text.get_height() // 2 - 2)
+    screen.blit(shadow, (pos[0] + 3, pos[1] + 3))
+    screen.blit(text, pos)
+
+
+def _menu_scrim():
+    """上深下浅的黑色渐变，用来压住背景高光、保证标题可读。
+
+    直接烘焙进每张背景图，运行时就不用再叠一层全屏半透明表面了。
+    """
+    s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    for y in range(SCREEN_HEIGHT):
+        t = y / max(1, SCREEN_HEIGHT - 1)
+        a = int(58 + 132 * (1.0 - t) ** 1.6)
+        pygame.draw.line(s, (0, 0, 0, a), (0, y), (SCREEN_WIDTH, y))
+    return s
+
+
+def _load_menu_backgrounds():
+    """把 background/bg*.png 缩放裁切到屏幕尺寸，并烘焙压暗渐变。缺图直接跳过。"""
+    global _menu_bgs
+    if _menu_bgs is not None:
+        return _menu_bgs
+    scrim = _menu_scrim()
+    bgs = []
+    for i in range(1, 8):
+        path = f"background/bg{i}.png"
+        try:
+            img = pygame.image.load(assets.resource_path(path)).convert()
+        except Exception:
+            continue
+        w, h = img.get_size()
+        scale = max(SCREEN_WIDTH / w, SCREEN_HEIGHT / h)
+        img = pygame.transform.smoothscale(img, (max(1, int(w * scale)), max(1, int(h * scale))))
+        # 居中裁切到屏幕尺寸（等比放大后一定有一边超出）
+        ox = max(0, (img.get_width() - SCREEN_WIDTH) // 2)
+        oy = max(0, (img.get_height() - SCREEN_HEIGHT) // 2)
+        img = img.subsurface((ox, oy, SCREEN_WIDTH, SCREEN_HEIGHT)).copy()
+        img.blit(scrim, (0, 0))
+        bgs.append(img)
+    _menu_bgs = bgs
+    return bgs
+
+
 def shop_desc_line_count():
     global _shop_desc_lines
     if _shop_desc_lines is None:
@@ -131,14 +261,17 @@ def get_tower_info(game, tower):
         else:
             info = [f"箭塔 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
     elif tower.type == TowerType.PRODUCTION:
+        # 产量可能带小数（时间塔的百分比光环），显示时统一取整，不露浮点尾巴
+        gold_ps = int(round(game.gold_per_second))
         if tower.level >= 11:
-            info = [f"绿宝石块 Lv{tower.level}", f"全局产量:{game.gold_per_second}/s",
-                    f"全局每波产出:{5 * game.gold_per_wave}*当前波数", f"每波获得{game.emerald_per_wave}颗绿宝石"]
+            info = [f"绿宝石块 Lv{tower.level}", f"全局产量:{gold_ps}/s",
+                    f"全局每波产出:{5 * game.gold_per_wave}*当前波数",
+                    f"每波获得{int(round(game.emerald_per_wave))}颗绿宝石"]
         elif tower.level >= 6:
             info = [f"下界合金矿 Lv{tower.level}", f"全局每波产出:{5 * game.gold_per_wave}*当前波数",
-                    f"全局产量:{game.gold_per_second}/s", "放置在金矿石上时产出+100%"]
+                    f"全局产量:{gold_ps}/s", "放置在金矿石上时产出+100%"]
         else:
-            info = [f"金矿 Lv{tower.level}", f"全局产量:{game.gold_per_second}/s", "放置在金矿石上时产出+100%"]
+            info = [f"金矿 Lv{tower.level}", f"全局产量:{gold_ps}/s", "放置在金矿石上时产出+100%"]
     elif tower.type == TowerType.ICE:
         if tower.level >= 11:
             if tower.ice_branch == HOLY_POT_BRANCH:
@@ -153,9 +286,9 @@ def get_tower_info(game, tower):
                         "按R切换形态"]
                 if Enchantment.MASTERPIECE in game.enchantments:
                     if game.masterpiece_active():
-                        info.append(f"大招:{game.masterpiece_counter}/{MASTERPIECE_ATTACKS}")
+                        info.append(f"技能充能:{game.masterpiece_counter}/{MASTERPIECE_ATTACKS}")
                     else:
-                        info.append("需寒冰盾+神锅才生效")
+                        info.append("需持有「臻品呈现」附魔")
             elif tower.ice_branch == 2:
                 ice_dmg = {11: 30, 12: 60, 13: 90, 14: 120, 15: 150}
                 info = [f"唤龙冰晶石 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"冻结:{tower.freeze_time}s",
@@ -224,8 +357,7 @@ def get_tower_info(game, tower):
                 info = [f"龙息 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{burn_preview(game)}/s,持续4s",
                         f"龙息:{dmg_mult}倍|温度|/s", f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s", "按R切换形态"]
                 if Enchantment.EMBER_REBIRTH in game.enchantments and tower.level == 15:
-                    cost = 50000 * (2 ** game.sacrifices)
-                    info.append(f"Q 献祭:{cost}金币")
+                    info.append(f"技能充能:{game.ember_counter}/{EMBER_ATTACKS}")
         elif tower.level >= 6:
             info = [f"火球 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{burn_preview(game)}/s,持续4s",
                     f"击晕:{tower.stun_time}s", f"攻击间隔:0.5s"]
@@ -376,8 +508,14 @@ def get_tower_info(game, tower):
     elif getattr(tower, "is_holy_pot", None) and tower.is_holy_pot():
         # 射程是全屏，信息里已经写了，不用再显示「射程:18.9」这种没意义的数字
         info.extend([f"升级:{upgrade_str}"])
+    elif tower.type in (TowerType.PRODUCTION, TowerType.TIME):
+        # 不攻击的塔射程恒为 0，显示「射程:0.0」纯属噪音
+        info.extend([f"升级:{upgrade_str}"])
     else:
-        info.extend([f"射程:{round(tower.get_effective_range() / TILE_SIZE, 1)}", f"升级:{upgrade_str}"])
+        # 整数射程不要写成 3.0（4.5 这种仍然保留一位小数）
+        tiles = tower.get_effective_range() / TILE_SIZE
+        tiles = int(tiles) if abs(tiles - round(tiles)) < 1e-6 else round(tiles, 1)
+        info.extend([f"射程:{tiles}", f"升级:{upgrade_str}"])
     sell_price = base_cost_map[tower.type] * tower.level
     info.append(f"出售:{sell_price}")
     if getattr(tower, "charm_timer", 0) > 0:
@@ -393,20 +531,97 @@ class UIManager:
         self.game = game
         self._lantern_light_cache = {}
 
+    def get_menu_buttons(self):
+        """主菜单三个按钮的矩形。绘制和点击判定共用，保证不会出现点不到的隐形热区。"""
+        x = (SCREEN_WIDTH - MENU_BTN_W) // 2
+        out = []
+        for i, (key, _label, _base, _hover, _edge) in enumerate(MENU_BUTTONS):
+            y = MENU_BTN_TOP + i * (MENU_BTN_H + MENU_BTN_GAP)
+            out.append((key, pygame.Rect(x, y, MENU_BTN_W, MENU_BTN_H)))
+        return out
+
+    def get_pause_panel_rect(self):
+        return pygame.Rect((SCREEN_WIDTH - PAUSE_PANEL_W) // 2,
+                           (SCREEN_HEIGHT - PAUSE_PANEL_H) // 2,
+                           PAUSE_PANEL_W, PAUSE_PANEL_H)
+
+    def get_pause_menu_buttons(self):
+        """暂停窗口的四个按钮。绘制与点击判定共用同一份矩形。"""
+        panel = self.get_pause_panel_rect()
+        x = panel.centerx - PAUSE_BTN_W // 2
+        out = []
+        for i, (key, _label, _base, _hover, _edge) in enumerate(PAUSE_BUTTONS):
+            y = panel.y + PAUSE_PANEL_TOP + i * (PAUSE_BTN_H + PAUSE_BTN_GAP)
+            out.append((key, pygame.Rect(x, y, PAUSE_BTN_W, PAUSE_BTN_H)))
+        return out
+
+    def draw_menu_background(self):
+        screen = self.game.screen
+        bgs = _load_menu_backgrounds()
+        if not bgs:
+            screen.fill(BLACK)
+        else:
+            n = len(bgs)
+            slot = pygame.time.get_ticks() / 1000.0 / MENU_BG_SECONDS
+            idx = int(slot) % n
+            frac = slot - int(slot)
+            screen.blit(bgs[idx], (0, 0))
+            fade_from = 1.0 - MENU_BG_FADE
+            if frac >= fade_from:
+                # 用 set_alpha 直接淡化下一张：只改标志位，不用每帧复制整屏表面
+                nxt = bgs[(idx + 1) % n]
+                nxt.set_alpha(int(255 * (frac - fade_from) / MENU_BG_FADE))
+                screen.blit(nxt, (0, 0))
+                nxt.set_alpha(255)
+
     def draw_menu(self):
         pygame.mouse.set_visible(True)
-        title = assets.font_large.render("像素防线:晶域守卫", True, WHITE)
-        self.game.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 300))
-        pygame.draw.rect(self.game.screen, GREEN, (900, 840, 760, 80))
-        start_text = assets.font_medium.render("开始游戏", True, WHITE)
-        self.game.screen.blit(start_text, (1200, 855))
-        pygame.draw.rect(self.game.screen, CODEX_BTN_COLOR,
-                         (CODEX_BTN_X, CODEX_BTN_Y, CODEX_BTN_WIDTH, CODEX_BTN_HEIGHT))
-        codex_text = assets.font_medium.render("查看图鉴", True, WHITE)
-        self.game.screen.blit(codex_text, (1200, CODEX_BTN_Y + 15))
-        pygame.draw.rect(self.game.screen, RED, (900, 1020, 760, 80))
-        exit_text = assets.font_medium.render("退出游戏", True, WHITE)
-        self.game.screen.blit(exit_text, (1200, 1035))
+        screen = self.game.screen
+        self.draw_menu_background()
+        mx, my = pygame.mouse.get_pos()
+
+        # ---- 标题 ----
+        title_text = "像素防线：晶域守卫"
+        title_font = menu_font(132)
+        title = title_font.render(title_text, True, (255, 255, 255))
+        tx = SCREEN_WIDTH // 2 - title.get_width() // 2
+        ty = MENU_TITLE_Y
+        shadow = title_font.render(title_text, True, (10, 12, 20))
+        for dx, dy in ((6, 7), (4, 5), (8, 9)):
+            screen.blit(shadow, (tx + dx, ty + dy))
+        screen.blit(title, (tx, ty))
+
+        sub = menu_font(38).render(
+            "MINECRAFT  TOWER  DEFENSE      •      150 波  •  11 种炮塔  •  30 个附魔",
+            True, (206, 220, 245))
+        sub_shadow = menu_font(38).render(
+            "MINECRAFT  TOWER  DEFENSE      •      150 波  •  11 种炮塔  •  30 个附魔",
+            True, (16, 18, 26))
+        sx = SCREEN_WIDTH // 2 - sub.get_width() // 2
+        sy = ty + title.get_height() + 10
+        screen.blit(sub_shadow, (sx + 3, sy + 3))
+        screen.blit(sub, (sx, sy))
+
+        # 标题下的装饰线：中间亮、两端淡出
+        line_y = sy + sub.get_height() + 26
+        half = 220
+        seg = _menu_button_plate(4, 3, (120, 200, 255, 255), 0)
+        for i in range(0, half * 2, 4):
+            a = int(210 * (1 - abs(i - half) / half))
+            if a <= 0:
+                continue
+            seg.set_alpha(a)
+            screen.blit(seg, (SCREEN_WIDTH // 2 - half + i, line_y))
+        seg.set_alpha(255)
+
+        # ---- 按钮 ----
+        for key, rect in self.get_menu_buttons():
+            _k, label, base, hover, edge = next(b for b in MENU_BUTTONS if b[0] == key)
+            draw_panel_button(screen, rect, label, base, hover, edge,
+                              rect.collidepoint(mx, my), 52)
+
+        # 底部原本有一行操作提示，但里面的「右键取消 / F1 图鉴」与实际按键不符，
+        # 与其写错不如不写 —— 操作方式进游戏后看按钮和塔面板即可。
 
     def draw_game(self):
         self.game.screen.blit(self.game.background_surface, (0, 0))
@@ -526,7 +741,6 @@ class UIManager:
 
         self.draw_boss_screen_fx()
         self.draw_ui()
-        self.draw_time_rewind()
         self.draw_boss_hud()
         self.draw_herobrine_health_bar()
 
@@ -539,16 +753,8 @@ class UIManager:
         if self.game.state == GameState.PAUSED:
             self.draw_pause_overlay()
 
-        gauntlet_cursor = (
-            Enchantment.INFINITY_GAUNTLET in self.game.enchantments
-            and self.game.state in (GameState.PLAYING, GameState.WAVE_PREPARATION, GameState.PAUSED)
-        )
-        pygame.mouse.set_visible(not (gauntlet_cursor or video_active))
-        if gauntlet_cursor:
-            icon = assets.enchantment_icons_raw.get(Enchantment.INFINITY_GAUNTLET)
-            if icon:
-                mx, my = pygame.mouse.get_pos()
-                self.game.screen.blit(icon, (mx - icon.get_width() // 2, my - icon.get_height() // 2))
+        # 大招动画是全屏演出，期间把系统指针藏起来
+        pygame.mouse.set_visible(not video_active)
 
     def draw_ui(self):
         pygame.draw.rect(self.game.screen, BLACK, (0, 0, SCREEN_WIDTH, 80))
@@ -610,31 +816,114 @@ class UIManager:
                                   badge.get_width() + 8, badge.get_height() + 8))
                 self.game.screen.blit(badge, (rect.right - badge.get_width() - 4, rect.bottom - badge.get_height() - 4))
 
-        # 「重新开始」需要连点两次才生效（见 game.handle_events）。
-        # 处于确认窗口时按钮变红并改文案，让玩家知道这一下会真的重置。
-        confirm_pending = getattr(self.game, "confirm_reset", 0) > 0
-        restart_color = (170, 40, 40) if confirm_pending else RESTART_BTN_COLOR
-        pygame.draw.rect(self.game.screen, restart_color,
-                         (RESTART_BTN_X, RESTART_BTN_Y, RESTART_BTN_WIDTH, RESTART_BTN_HEIGHT))
-        restart_label = "再点一次确认" if confirm_pending else "重新开始"
-        restart_text = assets.font_small.render(restart_label, True, WHITE)
-        self.game.screen.blit(restart_text, (RESTART_BTN_X + 40, RESTART_BTN_Y + 10))
+        # 侧栏不再放「重新开始 / 退出游戏 / 伤害统计」和操作说明：
+        # 前两个收进 ESC 暂停窗口，伤害统计用 TAB 或暂停窗口里的按钮打开。
+        self.draw_skill_panel()
 
-        pygame.draw.rect(self.game.screen, EXIT_BTN_COLOR,
-                         (EXIT_BTN_X, EXIT_BTN_Y, EXIT_BTN_WIDTH, EXIT_BTN_HEIGHT))
-        exit_text = assets.font_small.render("退出游戏", True, WHITE)
-        self.game.screen.blit(exit_text, (EXIT_BTN_X + EXIT_BTN_WIDTH // 2 - exit_text.get_width() // 2, EXIT_BTN_Y + 10))
+    # ---------------------------------------------------------------- 技能栏
+    def get_skill_row_rects(self):
+        """技能行矩形（含未解锁的占位行）。绘制与点击判定共用同一份。
 
-        stats_btn = self.get_stats_button_rect()
-        pygame.draw.rect(self.game.screen, STATS_BTN_COLOR, stats_btn)
-        pygame.draw.rect(self.game.screen, STATS_BTN_BORDER, stats_btn, 2)
-        stats_label = assets.font_small.render("伤害统计 (TAB)", True, WHITE)
-        self.game.screen.blit(stats_label, (stats_btn.centerx - stats_label.get_width() // 2,
-                                            stats_btn.centery - stats_label.get_height() // 2))
+        三行各 128px，正好铺满 384 的面板，不留标题也不留间距。
+        """
+        out = []
+        for i, key in enumerate(SKILL_ORDER):
+            y = SKILL_PANEL_Y + i * SKILL_ROW_H
+            out.append((key, pygame.Rect(SKILL_PANEL_X, y, SKILL_PANEL_W, SKILL_ROW_H)))
+        return out
 
-        instructions = ["操作说明:", "0~9选择炮塔", "U升级 S出售", "R切换分支 E升5级", "ESC暂停"]
-        for i, text in enumerate(instructions):
-            self.game.screen.blit(assets.font_small.render(text, True, WHITE), (2156, 1144 + i * 48))
+    def draw_skill_panel(self):
+        """侧栏最下方的技能栏：充能 → 手动释放 → 冷却。
+
+        只要买过任意一个组合附魔就画面板；没买的技能只留一条极淡的分隔线，
+        保证 I / J / K 三格的位置固定，不会因为解锁顺序而跳来跳去。
+        """
+        game = self.game
+        screen = game.screen
+        if not any(game.skill_unlocked(k) for k in SKILL_ORDER):
+            return
+
+        panel = pygame.Rect(SKILL_PANEL_X, SKILL_PANEL_Y, SKILL_PANEL_W, SKILL_PANEL_H)
+        # 三行各 128px 铺满整块面板，所以不再画独立底板/标题，只留一圈外框
+        screen.fill((26, 30, 42), panel)
+
+        mx, my = pygame.mouse.get_pos()
+        for key, row in self.get_skill_row_rects():
+            if not game.skill_unlocked(key):
+                # 未解锁：整行留空，只在中间画一条极淡的分隔提示
+                line = _menu_button_plate(row.width - 120, 2, (255, 255, 255, 18), 1)
+                screen.blit(line, (row.x + 60, row.centery))
+                continue
+
+            cfg = SKILL_DATA[key]
+            state, progress, charge, need, cd_sec = game.skill_state(key)
+            hovered = row.collidepoint(mx, my) and state == "ready"
+            cooling = charge >= need and cd_sec > 0
+
+            # 行底（整块铺满，靠 1px 分隔线区分）
+            bg = (48, 56, 76) if state == "ready" else (34, 40, 54)
+            screen.fill(bg, row)
+
+            # 边框：就绪金色呼吸 / 其它不画（靠分隔线）
+            if state == "ready":
+                pulse = 0.5 + 0.5 * math.sin(game.game_time * 0.08)
+                edge = (255, 200 + int(40 * pulse), 60 + int(120 * pulse))
+                pygame.draw.rect(screen, edge, row.inflate(-6, -6), 3)
+            else:
+                edge = (70, 80, 104)
+
+            # 图标（128 高，上下居中）
+            icon = assets.enchantment_icons[cfg["enchant"]]
+            if state == "locked":
+                icon = _skill_gray_icon(cfg["enchant"])
+            screen.blit(icon, (row.x + 18, row.y + 28))
+
+            # 名称 + 状态文字
+            name_color = (150, 158, 176) if state == "locked" else (240, 245, 255)
+            name = assets.font_small.render(cfg["name"], True, name_color)
+            screen.blit(name, (row.x + 108, row.y + 24))
+
+            if state == "locked":
+                sub_text, sub_color = game.skill_missing_text(key), (150, 150, 168)
+            elif cooling:
+                sub_text, sub_color = f"冷却 {cd_sec:.1f}s", (150, 170, 200)
+            elif state == "ready":
+                sub_text, sub_color = "就绪", (255, 225, 130)
+            else:
+                sub_text = f"{charge}/{need}" if need > 0 else "待冷却"
+                sub_color = (170, 190, 215)
+            sub = assets.font_tower_level.render(sub_text, True, sub_color)
+            screen.blit(sub, (row.x + 108, row.y + 70))
+
+            # 键位角标
+            badge = assets.font_tower_level.render(pygame.key.name(cfg["key"]).upper(), True,
+                                                   (255, 235, 150) if state == "ready" else (140, 148, 168))
+            bw = max(30, badge.get_width() + 16)
+            box = pygame.Rect(row.right - bw - 18, row.y + 18, bw, 32)
+            pygame.draw.rect(screen, (52, 60, 80), box, border_radius=6)
+            pygame.draw.rect(screen, edge, box, 1, border_radius=6)
+            screen.blit(badge, (box.centerx - badge.get_width() // 2,
+                                box.centery - badge.get_height() // 2))
+
+            # 进度条：贴在行底部，避免和上方两行文字打架
+            bar = pygame.Rect(row.x + 18, row.bottom - 20, row.width - 36, 8)
+            pygame.draw.rect(screen, (48, 44, 62), bar, border_radius=4)
+            if progress > 0:
+                fill = bar.copy()
+                fill.width = max(4, int(bar.width * progress))
+                if state == "ready":
+                    color = (255, 205, 60) if not hovered else (255, 235, 140)
+                elif cooling:
+                    color = (110, 130, 170)
+                else:
+                    color = (120, 200, 255)
+                pygame.draw.rect(screen, color, fill, border_radius=4)
+
+        # 行分隔线 + 整块外框（三行各 128，正好铺满 384）
+        for i in range(1, len(SKILL_ORDER)):
+            y = panel.y + i * SKILL_ROW_H
+            pygame.draw.line(screen, (70, 80, 104), (panel.x, y), (panel.right, y), 1)
+        pygame.draw.rect(screen, (104, 128, 172), panel, 3)
 
     def get_enchant_icon_rects(self):
         rects = []
@@ -818,59 +1107,6 @@ class UIManager:
                              (tower.rect.centerx - radius, tower.rect.centery - TILE_SIZE - radius),
                              special_flags=pygame.BLEND_RGBA_SUB)
 
-    def draw_time_rewind(self):
-        """「时光倒流」的 UI：屏幕中间偏上的白色透明钟表，指针逆时针转 8 秒。"""
-        active = getattr(self.game, "time_rewind_active", 0)
-        if active <= 0:
-            return
-        total = TIME_REWIND_DURATION
-        elapsed = total - active
-        alpha = 235
-        if elapsed < 20:
-            alpha = int(235 * elapsed / 20)
-        left = total - elapsed
-        if left < 40:
-            alpha = min(alpha, int(235 * max(0, left) / 40))
-        if alpha <= 0:
-            return
-
-        cx = SCREEN_WIDTH // 2
-        cy = TIME_REWIND_CLOCK_Y
-        radius = 140
-        pad = 8
-        surf = pygame.Surface(((radius + pad) * 2, (radius + pad) * 2), pygame.SRCALPHA)
-        c = radius + pad
-        white = (255, 255, 255, alpha)
-
-        # 极淡的白色底，让钟面在花哨的地图上也能看清（仍然是"白色透明"）
-        pygame.draw.circle(surf, (255, 255, 255, max(0, alpha // 8)), (c, c), radius)
-        pygame.draw.circle(surf, white, (c, c), radius, 7)
-        for i in range(12):
-            ang = math.radians(i * 30 - 90)
-            r1 = radius - 10
-            r2 = radius - (34 if i % 3 == 0 else 22)
-            pygame.draw.line(surf, white,
-                             (c + r1 * math.cos(ang), c + r1 * math.sin(ang)),
-                             (c + r2 * math.cos(ang), c + r2 * math.sin(ang)),
-                             7 if i % 3 == 0 else 4)
-
-        def hand(angle_deg, length, width):
-            a = math.radians(angle_deg - 90)
-            pygame.draw.line(surf, white, (c, c),
-                             (c + length * math.cos(a), c + length * math.sin(a)), width)
-
-        # 逆时针：角度取负。分针 8 秒转两圈，时针转四分之一圈
-        minute_deg = -elapsed * 720.0 / total
-        hour_deg = -elapsed * 90.0 / total
-        hand(hour_deg, radius * 0.45, 11)
-        hand(minute_deg, radius * 0.72, 7)
-        pygame.draw.circle(surf, white, (c, c), 9)
-
-        self.game.screen.blit(surf, (cx - c, cy - c))
-        label = assets.font_medium.render("时光倒流", True, (255, 255, 255))
-        label.set_alpha(alpha)
-        self.game.screen.blit(label, (cx - label.get_width() // 2, cy + radius + 12))
-
     def draw_weather_particles(self):
         for p in self.game.weather_particles:
             if p[-1] == "rain":
@@ -928,11 +1164,30 @@ class UIManager:
         self.game.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, banner_y + 10))
 
     def draw_pause_overlay(self):
-        blit_tint(self.game.screen, (0, 0, 0), 128)
-        pause_text = assets.font_large.render("已暂停", True, WHITE)
-        continue_text = assets.font_small.render("按 ESC 继续", True, WHITE)
-        self.game.screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
-        self.game.screen.blit(continue_text, (SCREEN_WIDTH // 2 - continue_text.get_width() // 2, SCREEN_HEIGHT // 2 + 20))
+        """ESC 暂停窗口：重新开始 / 查看图鉴 / 伤害统计 / 退出游戏。"""
+        screen = self.game.screen
+        blit_tint(screen, (0, 0, 0), 168)
+
+        panel = self.get_pause_panel_rect()
+        screen.blit(_menu_button_plate(panel.width, panel.height, (24, 28, 40, 246), 24),
+                    panel.topleft)
+        pygame.draw.rect(screen, (104, 128, 172), panel, 3, border_radius=24)
+
+        title = menu_font(76).render("已暂停", True, (242, 246, 255))
+        screen.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 36))
+
+        mx, my = pygame.mouse.get_pos()
+        confirm_pending = getattr(self.game, "confirm_reset", 0) > 0
+        for key, rect in self.get_pause_menu_buttons():
+            _k, label, base, hover, edge = next(b for b in PAUSE_BUTTONS if b[0] == key)
+            if key == "restart" and confirm_pending:
+                # 二次确认：按钮变亮红并改文案，让玩家知道这一下会真的重置
+                label, base, hover, edge = "再点一次确认", (176, 36, 40), (214, 58, 62), (255, 190, 190)
+            draw_panel_button(screen, rect, label, base, hover, edge,
+                              rect.collidepoint(mx, my), 46)
+
+        hint = menu_font(28).render("按 ESC 继续游戏", True, (168, 182, 206))
+        screen.blit(hint, (panel.centerx - hint.get_width() // 2, panel.bottom - 52))
 
     def get_gameover_restart_wave_rect(self):
         return pygame.Rect(620, 850, 620, 80)
@@ -1020,7 +1275,10 @@ class UIManager:
         boss_en = getattr(boss, "display_en", FINAL_BOSS_EN_NAME)
 
         screen = game.screen
-        bar_x, bar_y, bar_w, bar_h = 330, 86, 1900, 44
+        # 血条以「地图区域」（0~INFO_BORDER_X）为中心，不再按整屏居中 ——
+        # 否则右端会伸进侧栏，把附魔图标盖住
+        bar_x, bar_y, bar_w, bar_h = 64, 86, 1920, 44
+        bar_cx = bar_x + bar_w // 2
         ratio = max(0.0, min(1.0, boss.health / boss.max_health))
         phase_color = phase_colors[boss.phase - 1]
 
@@ -1044,7 +1302,7 @@ class UIManager:
 
         phase_text = assets.font_tower_level.render(
             f"阶段 {boss.phase} : {phase_names[boss.phase - 1]}", True, WHITE)
-        screen.blit(phase_text, (SCREEN_WIDTH // 2 - phase_text.get_width() // 2, bar_y + 7))
+        screen.blit(phase_text, (bar_cx - phase_text.get_width() // 2, bar_y + 7))
 
         layer_text = assets.font_tower_level.render(
             f"{max(0, boss.current_layer)} / {total_layers} 层", True, (255, 230, 160))
@@ -1055,21 +1313,22 @@ class UIManager:
             alpha = min(255, game.boss_banner_timer * 4)
             banner = pygame.Surface((1500, 40), pygame.SRCALPHA)
             banner.fill((0, 0, 0, min(200, alpha)))
-            screen.blit(banner, (SCREEN_WIDTH // 2 - 750, 134))
+            screen.blit(banner, (bar_cx - 750, 134))
             text = assets.font_tower_level.render(game.boss_banner_text, True, (255, 220, 150))
             text.set_alpha(alpha)
-            screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 140))
+            screen.blit(text, (bar_cx - text.get_width() // 2, 140))
 
         # 世界重载 / 停服读条
         if boss.reloading:
             reload_label = getattr(boss, "reload_label", "世界重载")
             remain = max(0, boss.reload_timer) / 60.0
             charge = 1.0 - boss.reload_timer / max(1, boss.reload_total)
-            pygame.draw.rect(screen, (30, 0, 0), (760, 188, 1040, 24))
-            pygame.draw.rect(screen, (255, 70, 50), (760, 188, int(1040 * charge), 24))
-            pygame.draw.rect(screen, (255, 220, 200), (760, 188, 1040, 24), 2)
+            reload_x = bar_cx - 520
+            pygame.draw.rect(screen, (30, 0, 0), (reload_x, 188, 1040, 24))
+            pygame.draw.rect(screen, (255, 70, 50), (reload_x, 188, int(1040 * charge), 24))
+            pygame.draw.rect(screen, (255, 220, 200), (reload_x, 188, 1040, 24), 2)
             warn = assets.font_tower_level.render(f"{reload_label} {remain:.1f}s —— 击破任意一层可打断", True, WHITE)
-            screen.blit(warn, (SCREEN_WIDTH // 2 - warn.get_width() // 2, 216))
+            screen.blit(warn, (bar_cx - warn.get_width() // 2, 216))
 
         # 规则覆写提示：占用右上角空白位置
         if game.boss_rule:
@@ -1086,9 +1345,6 @@ class UIManager:
                                     panel.centery - rule_text.get_height() // 2))
 
     # ------------------------------------------------------------------ 伤害统计
-
-    def get_stats_button_rect(self):
-        return pygame.Rect(STATS_BTN_X, STATS_BTN_Y, STATS_BTN_WIDTH, STATS_BTN_HEIGHT)
 
     def get_stats_panel_rect(self):
         # 高度跟着属性条数走：剑系删掉后只剩 7 行，写死 1020 会在底部空出一大块
@@ -1167,11 +1423,14 @@ class UIManager:
             pct_surf = assets.font_tower_level.render(pct_text, True, (200, 200, 220))
             screen.blit(pct_surf, (panel.x + 1225, y + 20))
 
+        # 右上角关闭叉号
         close = self.get_stats_close_rect()
         pygame.draw.rect(screen, (70, 30, 40), close)
         pygame.draw.rect(screen, (255, 120, 120), close, 2)
-        pygame.draw.line(screen, WHITE, (close.x + 16, close.y + 16), (close.right - 16, close.bottom - 16), 4)
-        pygame.draw.line(screen, WHITE, (close.right - 16, close.y + 16), (close.x + 16, close.bottom - 16), 4)
+        pygame.draw.line(screen, WHITE, (close.x + 16, close.y + 16),
+                         (close.right - 16, close.bottom - 16), 4)
+        pygame.draw.line(screen, WHITE, (close.right - 16, close.y + 16),
+                         (close.x + 16, close.bottom - 16), 4)
 
         note = assets.font_tower_level.render(
             "统计口径：凋零→毒系；无尽贪婪/不稳定水晶→爆炸；余烬陨石→火系；蜜脾蜂群→毒系",

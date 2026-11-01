@@ -587,11 +587,17 @@ class Tower(pygame.sprite.Sprite):
                     bullet.poison_stacks = self.level
             bullets.append(bullet)
 
+        # 「共振风暴」现在是手动技能：这里只充能，不再自动触发。
+        # 组合条件不满足时（缺雷盾）不加层，但已经攒下的层数保留 —— 卖塔也不清空。
         if self.type == TowerType.WIND and self.level >= 11 and self.wind_branch == 2:
-            self.game.resonance_counter += 1
-            if self.game.resonance_counter >= RESONANCE_ATTACKS:
-                self.game.resonance_counter = 0
-                self.game.trigger_resonance_storm()
+            if self.game.skill_can_charge("resonance"):
+                self.game.resonance_counter = min(RESONANCE_ATTACKS,
+                                                  self.game.resonance_counter + 1)
+
+        # 「余烬重生」：满级龙息塔每次开火 +1 层（攒满 EMBER_ATTACKS 才能手动释放）
+        if self.type == TowerType.FLAME and self.level == 15 and self.flame_branch == 1:
+            if self.game.skill_can_charge("ember"):
+                self.game.ember_counter = min(EMBER_ATTACKS, self.game.ember_counter + 1)
 
         if self.type == TowerType.ICE and self.level >= 11 and self.ice_branch == 2:
             if random.random() < DRAGON_SUMMON_CHANCE:
@@ -654,15 +660,12 @@ class Tower(pygame.sprite.Sprite):
         target = random.choice(alive)
         bolt = IceStarBolt(self.rect.centerx, self.rect.centery, target,
                            self.holy_pot_damage(), self.game)
-        # 「臻品呈现」：场上所有神锅共用同一个计数，凑满 MASTERPIECE_ATTACKS 次就放大招。
-        # 这里刻意对齐雷神之锤的 resonance_counter —— 按塔各算各的话，
-        # 一座锅要自己打满 MASTERPIECE_ATTACKS 次（1 秒 1 发 ≈ 3 分钟）才有反应，铺了 9 座也还是 3 分钟，
-        # 体感就是「打了半天无事发生」。
-        if self.game.masterpiece_active():
-            self.game.masterpiece_counter += 1
-            if self.game.masterpiece_counter >= MASTERPIECE_ATTACKS:
-                self.game.masterpiece_counter = 0
-                self.game.trigger_masterpiece_ultimate()
+        # 「臻品呈现」同样是手动技能：只充能，不自动放大招。
+        # 场上所有神锅共用同一个计数（按塔各算各的话，一座锅 1 秒 1 发太慢，铺了 9 座也还是慢）。
+        # 神锅不在场时（没有三阶神锅）不加层，已攒的层数保留。
+        if self.game.skill_can_charge("masterpiece"):
+            self.game.masterpiece_counter = min(MASTERPIECE_ATTACKS,
+                                                self.game.masterpiece_counter + 1)
         return [bolt]
 
     def draw_range(self, surface):
