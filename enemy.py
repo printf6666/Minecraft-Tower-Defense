@@ -4,7 +4,7 @@ import random
 import assets
 import stats
 from config import *
-from effects import CreeperExplosion, PoisonContractExplosion
+from effects import CreeperExplosion, PoisonContractExplosion, PlagueBurst
 from tower import WindExplosion
 
 
@@ -553,6 +553,19 @@ class Enemy(pygame.sprite.Sprite):
                     exp = PoisonContractExplosion(self.rect.centerx, self.rect.centery,
                                                   self.game, self.poison_stacks)
                     self.game.poison_splashes.append(exp)
+            # 「瘟疫」：中毒敌人死亡时，把 5% 的层数扩散给周围敌人（不足 1 层则不扩散）
+            if self.poison_stacks > 0 and Enchantment.PLAGUE in self.game.enchantments:
+                transfer = int(self.poison_stacks * PLAGUE_TRANSFER_RATE)
+                if transfer > 0:
+                    cx, cy = self.rect.centerx, self.rect.centery
+                    for other in self.game.enemies:
+                        if other is self or other.health <= 0:
+                            continue
+                        dx = other.rect.centerx - cx
+                        dy = other.rect.centery - cy
+                        if dx * dx + dy * dy <= PLAGUE_RADIUS * PLAGUE_RADIUS:
+                            other.apply_poison(transfer)
+                    self.game.plague_bursts.append(PlagueBurst(cx, cy, PLAGUE_RADIUS))
             self.kill()
             return self.reward
         return 0

@@ -278,6 +278,34 @@ class HorizontalLightningEffect:
             screen.blit(img, rect)
 
 
+class PlagueBurst:
+    """「瘟疫」的纯视觉：中毒敌人死亡时向外扩散一圈绿环。
+
+    层数转移由 enemy.take_damage 直接结算，这里只负责让玩家看见发生了什么。
+    """
+
+    def __init__(self, x, y, radius=128):
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.duration = 8
+        self.total = 8
+
+    def update(self):
+        self.duration -= 1
+        return self.duration > 0
+
+    def draw(self, screen):
+        t = 1.0 - self.duration / self.total          # 0 → 1
+        r = max(4, int(self.radius * t))
+        alpha = int(150 * (1.0 - t))
+        if alpha <= 0:
+            return
+        s = pygame.Surface((r * 2 + 4, r * 2 + 4), pygame.SRCALPHA)
+        pygame.draw.circle(s, (120, 255, 140, alpha), (r + 2, r + 2), r, 3)
+        screen.blit(s, (self.x - r - 2, self.y - r - 2))
+
+
 class PoisonSplash:
     def __init__(self, x, y, damage, stacks, game):
         self.x = x

@@ -11,7 +11,7 @@ import audio
 from config import *
 from enemy import Enemy, DamageText
 from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet, MAP_CENTER_X, MAP_CENTER_Y
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal, LanternShockwave, IceStarBurst, MasterpieceShockwave, BaguaArray
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, PlagueBurst, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal, LanternShockwave, IceStarBurst, MasterpieceShockwave, BaguaArray
 from video_player import UltimateVideo
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
@@ -137,6 +137,7 @@ class Game:
         self.hell_rays = []
         self.resonance_storms = []
         self.poison_splashes = []
+        self.plague_bursts = []      # 「瘟疫」的扩散绿环（纯视觉）
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []
@@ -861,6 +862,7 @@ class Game:
         self.hell_rays = []
         self.resonance_storms = []
         self.poison_splashes = []
+        self.plague_bursts = []      # 「瘟疫」的扩散绿环（纯视觉）
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []
@@ -2068,6 +2070,9 @@ class Game:
             for splash in self.poison_splashes[:]:
                 if not splash.update():
                     self.poison_splashes.remove(splash)
+            for burst in self.plague_bursts[:]:
+                if not burst.update():
+                    self.plague_bursts.remove(burst)
 
             for splash in self.wither_splashes[:]:
                 if not splash.update():
@@ -2490,7 +2495,7 @@ class Game:
         self._text_merge_map.clear()
         for attr in ("dragon_breath_pools", "lightning_effects", "wind_explosions",
                      "endless_greed_explosions", "ice_explosions", "hell_rays",
-                     "resonance_storms", "poison_splashes", "wither_splashes",
+                     "resonance_storms", "poison_splashes", "plague_bursts", "wither_splashes",
                      "horizontal_lightning_effects", "tnt_explosions",
                      "mushroom_explosions", "shockwave_effects", "meteors", "bees",
                      "crystals", "lantern_shockwaves", "stars", "ice_star_bursts",
@@ -2621,6 +2626,7 @@ class Game:
         self.hell_rays = []
         self.resonance_storms = []
         self.poison_splashes = []
+        self.plague_bursts = []      # 「瘟疫」的扩散绿环（纯视觉）
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []

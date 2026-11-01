@@ -100,7 +100,7 @@ class Enchantment(Enum):
     DENSE = 9
     WIND_BURST = 10
     POISON_CONTRACT = 11
-    # 12 号空位：原「高温燃烧」→「时光倒流」都已删除，预留给后续新附魔（枚举值 12 不要占用）
+    PLAGUE = 12        # 瘟疫（原「高温燃烧」→「时光倒流」的位置）
     BLAZE_POWDER = 13
     FROZEN_DEEP = 14
     DRAGON_LEGEND = 15
@@ -132,6 +132,7 @@ ENCHANTMENT_DATA = {
     Enchantment.DENSE: {"name": "致密V", "desc": "重锤获得距离增伤，伤害+5/px", "cost": 400},
     Enchantment.WIND_BURST: {"name": "风爆", "desc": "蓄风印记爆炸伤害固定为5000点", "cost": 400},
     Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "同时存在剧毒环刃与九头蛇毒箭时，中毒敌人被击败有10%概率爆炸，对周围敌人造成(基础毒伤+中毒层数)×18的伤害并击晕5秒，基础毒伤永久+1", "cost": 400},
+    Enchantment.PLAGUE: {"name": "瘟疫", "desc": "中毒的敌人死亡后，将其中毒层数的 5% 转移给周围敌人", "cost": 400},
     Enchantment.BLAZE_POWDER: {"name": "烈焰粉", "desc": "敌人永远燃烧，燃烧伤害+30%", "cost": 400},
     Enchantment.FROZEN_DEEP: {"name": "冰封深渊", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹冻结时长+0.5秒，冰墙存在时间翻倍", "cost": 400},
     Enchantment.DRAGON_LEGEND: {"name": "龙族传说", "desc": "同时存在冰龙塔、火龙塔、电龙塔时，龙伤害与百分比真实伤害翻倍，且龙移动速度+75%", "cost": 1600},
@@ -154,7 +155,7 @@ ENCHANTMENT_ORDER = [
     Enchantment.BALANCED, Enchantment.PHYSICAL, Enchantment.ICE, Enchantment.MAGIC,
     Enchantment.FLAME, Enchantment.ELECTRIC,
     Enchantment.WIND, Enchantment.POISON, Enchantment.BOMB, Enchantment.DENSE, Enchantment.WIND_BURST,
-    Enchantment.POISON_CONTRACT, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
+    Enchantment.POISON_CONTRACT, Enchantment.PLAGUE, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
     Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.WITHER_ROSE,
     # 火矢删除后的 20 号空位由望远镜占用（原 19 → 20），21 号起编号不变
     Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.PULSE_SHIELD,
@@ -337,6 +338,10 @@ MASTERPIECE_ICE_BONUS = 240      # 冰系伤害 +240%（加算，百分点）
 RESONANCE_ATTACKS = SKILL_DATA["resonance"]["need"]     # 雷神之锤攒够 N 次攻击 = 共振风暴可用
 MASTERPIECE_ATTACKS = SKILL_DATA["masterpiece"]["need"]  # 神锅攒够 N 次攻击 = 臻品呈现可用
 EMBER_ATTACKS = SKILL_DATA["ember"]["need"]              # 龙息塔攒够 N 次攻击 = 余烬重生可用
+
+# 「瘟疫」：中毒敌人死亡时，把 5% 的层数扩散给周围敌人
+PLAGUE_TRANSFER_RATE = 0.05
+PLAGUE_RADIUS = TILE_SIZE          # 以尸体为中心 1 格
 MASTERPIECE_DAMAGE = 61803       # 大招基础伤害
 MASTERPIECE_TEMP_MULT = 500      # 大招温度系数：伤害 = 61803 + 500 * |温度|
 MASTERPIECE_FREEZE_FRAMES = 4 * 60   # 大招冰冻 4 秒

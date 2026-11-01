@@ -718,6 +718,8 @@ class UIManager:
             storm.draw(self.game.screen)
         for splash in self.game.poison_splashes:
             splash.draw(self.game.screen)
+        for burst in self.game.plague_bursts:
+            burst.draw(self.game.screen)
         for splash in self.game.wither_splashes:
             splash.draw(self.game.screen)
         for effect in self.game.horizontal_lightning_effects:
