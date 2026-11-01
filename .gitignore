@@ -17,3 +17,6 @@ save.json.tmp
 save.json.bak
 save.json.corrupt.bak
 crash.log
+# Godot
+godot/.godot/
+godot/*.tmp

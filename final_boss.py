@@ -992,16 +992,19 @@ class FinalBoss(Enemy):
         if self.reloading:
             # 咏唱期间是破绽窗口：受到 1.5 倍伤害，便于玩家打断
             final_dmg = int(final_dmg * 1.5)
+        # 溢出伤害不算数：只结算当前这层剩余的血量
+        health_before = max(0, self.health)
         self.health -= final_dmg
+        shown_dmg = min(final_dmg, health_before)
         self.hit_flash = 4
         if self.game:
             tx, ty, tvx = self._next_dmg_text_slot()
-            self.game.spawn_damage_text(final_dmg, (tx, ty), color=color, scale=scale,
+            self.game.spawn_damage_text(shown_dmg, (tx, ty), color=color, scale=scale,
                                         speed_x=tvx + text_speed_x,
                                         speed_y=self._dmg_text_vy, boss=True)
-            if final_dmg > 0 and getattr(self.game, "damage_stats", None) is not None:
+            if shown_dmg > 0 and getattr(self.game, "damage_stats", None) is not None:
                 elem = element or getattr(self.game, "damage_element", None)
-                self.game.damage_stats.add(elem, final_dmg)
+                self.game.damage_stats.add(elem, shown_dmg)
 
         if layers > 1:
             return self._pierce_layers(int(layers))

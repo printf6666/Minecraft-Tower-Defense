@@ -6,9 +6,9 @@ class TowerType(Enum):
     PHYSICAL = 1
     PRODUCTION = 2
     ICE = 3
-    TELEPORT = 4
+    MAGIC = 4          # 原 TELEPORT（魔法系）
     FLAME = 5
-    TRIDENT = 6
+    ELECTRIC = 6       # 原 TRIDENT（电系）
     WIND = 7
     POISON = 8
     BOMB = 9
@@ -18,9 +18,9 @@ TOWER_DATA = [
     (TowerType.PHYSICAL,   "物理", 100,  pygame.K_1),
     (TowerType.PRODUCTION, "金矿", 50,   pygame.K_2),
     (TowerType.ICE,        "冰系", 150,  pygame.K_3),
-    (TowerType.TELEPORT,   "传送", 300,  pygame.K_4),
+    (TowerType.MAGIC,      "魔法系", 300,  pygame.K_4),
     (TowerType.FLAME,      "火系", 200,  pygame.K_5),
-    (TowerType.TRIDENT,    "三叉", 400,  pygame.K_6),
+    (TowerType.ELECTRIC,   "电系", 400,  pygame.K_6),
     (TowerType.WIND,       "风系", 250,  pygame.K_7),
     (TowerType.POISON,     "毒系", 175,  pygame.K_8),
     (TowerType.BOMB,       "TNT", 500,  pygame.K_9),
@@ -88,6 +88,7 @@ ORANGE = (255, 165, 0)
 ELECTRIC_PURPLE = (178, 0, 255)
 PURPLE = (128, 0, 128)
 TELEPORT_PURPLE = (138, 43, 226)
+MAGIC_PINK = (255, 130, 200)      # 魔法系伤害：飘字与伤害统计统一粉色
 MINT = (152, 255, 152)
 
 
@@ -104,25 +105,25 @@ class Enchantment(Enum):
     BALANCED = 0
     PHYSICAL = 1
     ICE = 2
-    FLAME = 3
-    TRIDENT = 4
-    WIND = 5
-    POISON = 6
-    BOMB = 7
-    DENSE = 8
-    WIND_BURST = 9
-    POISON_CONTRACT = 10
-    BURN = 11
-    BLAZE_POWDER = 12
-    FROZEN_DEEP = 13
-    DRAGON_LEGEND = 14
-    ENDLESS_GREED = 15
-    RAIN_FIRE = 16
-    WITHER_ROSE = 17
-    LAVA = 18
-    TELESCOPE = 19
-    # 火矢已删除：枚举值 20 保留只为旧存档反序列化不炸，读档时会被过滤掉
-    FIRE_ARROW = 20
+    # 魔法系强化：插在第 3 位，原 3~19 后移 1 位（20 是原火矢删除后的空位，正好接住望远镜）
+    MAGIC = 3
+    FLAME = 4
+    ELECTRIC = 5       # 原 TRIDENT（电系强化）
+    WIND = 6
+    POISON = 7
+    BOMB = 8
+    DENSE = 9
+    WIND_BURST = 10
+    POISON_CONTRACT = 11
+    BURN = 12
+    BLAZE_POWDER = 13
+    FROZEN_DEEP = 14
+    DRAGON_LEGEND = 15
+    ENDLESS_GREED = 16
+    RAIN_FIRE = 17
+    WITHER_ROSE = 18
+    LAVA = 19
+    TELESCOPE = 20
     PULSE_SHIELD = 21
     RESONANCE_STORM = 22
     EMBER_REBIRTH = 23
@@ -135,10 +136,11 @@ class Enchantment(Enum):
 
 ENCHANTMENT_DATA = {
     Enchantment.BALANCED: {"name": "均衡强化", "desc": "所有伤害+5%", "cost": 100},
-    Enchantment.PHYSICAL: {"name": "物理强化", "desc": "物理伤害+15%", "cost": 100},
+    Enchantment.PHYSICAL: {"name": "物理强化", "desc": "物理伤害+20%", "cost": 100},
     Enchantment.ICE: {"name": "冰系强化", "desc": "冰系伤害+20%", "cost": 100},
+    Enchantment.MAGIC: {"name": "魔法系强化", "desc": "魔法伤害+20%", "cost": 100},
     Enchantment.FLAME: {"name": "火系强化", "desc": "火系伤害+20%", "cost": 100},
-    Enchantment.TRIDENT: {"name": "电系强化", "desc": "电系伤害+20%", "cost": 100},
+    Enchantment.ELECTRIC: {"name": "电系强化", "desc": "电系伤害+20%", "cost": 100},
     Enchantment.WIND: {"name": "风系强化", "desc": "风系伤害+20%", "cost": 100},
     Enchantment.POISON: {"name": "毒系强化", "desc": "毒系伤害+20%", "cost": 100},
     Enchantment.BOMB: {"name": "爆炸强化", "desc": "爆炸伤害+20%", "cost": 100},
@@ -147,7 +149,7 @@ ENCHANTMENT_DATA = {
     Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "同时存在剧毒环刃与九头蛇毒箭时，中毒敌人被击败有10%概率爆炸，对周围敌人造成(基础毒伤+中毒层数)×18的伤害并击晕5秒，基础毒伤永久+1", "cost": 400},
     Enchantment.BURN: {"name": "高温燃烧", "desc": "燃烧伤害翻倍", "cost": 200},
     Enchantment.BLAZE_POWDER: {"name": "烈焰粉", "desc": "敌人永远燃烧，燃烧伤害+30%", "cost": 400},
-    Enchantment.FROZEN_DEEP: {"name": "冰冻三尺", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹冻结时长+0.5秒，冰墙存在时间翻倍", "cost": 400},
+    Enchantment.FROZEN_DEEP: {"name": "冰封深渊", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹冻结时长+0.5秒，冰墙存在时间翻倍", "cost": 400},
     Enchantment.DRAGON_LEGEND: {"name": "龙族传说", "desc": "同时存在冰龙塔、火龙塔、电龙塔时，龙伤害与百分比真实伤害翻倍，且龙移动速度+75%", "cost": 1600},
     Enchantment.ENDLESS_GREED: {"name": "无尽贪婪", "desc": "集齐七种无尽炮塔后，其子弹5%概率爆炸，造成1%最大生命伤害并获得500金币", "cost": 1600},
     Enchantment.RAIN_FIRE: {"name": "水火相容", "desc": "雨天/雷暴/酸雨可以点燃敌人", "cost": 200},
@@ -171,15 +173,16 @@ GAUNTLET_ATTACKS = [
     (TowerType.POISON, 30, 0.16, GREEN),
     (TowerType.ICE, 20, 0.01, ICE_BLUE),
     (TowerType.WIND, 20, 0.01, MINT),
-    (TowerType.TRIDENT, 30, 0.02, ELECTRIC_PURPLE),
+    (TowerType.ELECTRIC, 30, 0.02, ELECTRIC_PURPLE),
 ]
 
 ENCHANTMENT_ORDER = [
-    Enchantment.BALANCED, Enchantment.PHYSICAL, Enchantment.ICE, Enchantment.FLAME, Enchantment.TRIDENT,
+    Enchantment.BALANCED, Enchantment.PHYSICAL, Enchantment.ICE, Enchantment.MAGIC,
+    Enchantment.FLAME, Enchantment.ELECTRIC,
     Enchantment.WIND, Enchantment.POISON, Enchantment.BOMB, Enchantment.DENSE, Enchantment.WIND_BURST,
     Enchantment.POISON_CONTRACT, Enchantment.BURN, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
     Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.WITHER_ROSE,
-    # 火矢已删除：ENCHANTMENT_ORDER 里原第 21 位（TELESCOPE 之后）暂时空缺，后续放新附魔
+    # 火矢删除后的 20 号空位由望远镜占用（原 19 → 20），21 号起编号不变
     Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.PULSE_SHIELD,
     Enchantment.RESONANCE_STORM,
     Enchantment.EMBER_REBIRTH,
@@ -191,7 +194,9 @@ ENCHANTMENT_ORDER = [
     Enchantment.MASTERPIECE,
 ]
 
-NON_REPEATABLE_ENCHANTMENTS = {Enchantment.DENSE, Enchantment.WIND_BURST}
+# 0~8 号附魔（均衡/物理/冰/魔法/火/电/风/毒/爆炸）可重复购买并叠加；
+# 9 号起（致密、风爆及所有特殊附魔）只能拥有一次，买过就不再出现在商店。
+NON_REPEATABLE_ENCHANTMENTS = {e for e in Enchantment if e.value >= 9}
 
 # 主菜单「图鉴」按钮
 CODEX_BTN_X = 900
@@ -226,6 +231,17 @@ ICE_NUKE_FREEZE_FRAMES = 4 * 60     # 全场冰冻 4 秒
 ICE_NUKE_TEMP_DROP = 40             # 临时气候修正：额外降温 40 度
 ICE_NUKE_TEMP_FRAMES = 8 * 60       # 降温持续 8 秒
 
+# ==========================================================================================
+#  金毒马铃薯（魔法塔三阶分支 3，贴图 4-3-3）
+#  物理系；攻击力同无尽催化剂（0~2 倍随机伤害）+ 当前金币 1% 固定加成；
+#  2% 概率施加海量中毒层数
+# ==========================================================================================
+GOLD_POTATO_COIN_BONUS = 0.01       # 当前金币 × 1% 计入伤害
+GOLD_POTATO_POISON_CHANCE = 0.02    # 中毒触发概率
+GOLD_POTATO_POISON_STACKS = {11: 32000, 12: 64000, 13: 96000, 14: 128000, 15: 160000}
+# 毒马铃薯（二阶分支 2，Lv6-10）中毒层数
+POTATO_POISON_STACKS = {6: 400, 7: 800, 8: 1200, 9: 1600, 10: 2000}
+
 EMERALD_PER_WAVE_BY_LEVEL = {11: 1, 12: 2, 13: 3, 14: 4, 15: 5}
 
 # ==========================================================================================
@@ -251,7 +267,7 @@ LANTERN_FIRE_BONUS = 80          # 灯火通明：火系伤害加成（加算，
 #  这一条计入 take_damage 的增伤乘区，与抗性乘区分开算。
 # ==========================================================================================
 # ==========================================================================================
-#  卧龙 —— 三叉戟塔（6）三阶分支 3，Lv11 起解锁
+#  卧龙 —— 电系塔（6）三阶分支 3，Lv11 起解锁
 #  攻击与 6-3-1 / 6-3-2 相同（金币 1% 加伤 + 整列闪电）。
 #  自身无敌；靠「攻击」和「挨打」攒能量，满 100 在道路上放一座八卦阵。
 # ==========================================================================================

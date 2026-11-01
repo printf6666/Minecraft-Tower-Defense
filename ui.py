@@ -70,7 +70,7 @@ def get_tower_info(game, tower):
                 info = [f"天堂陨落长弓 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s", f"金币1%作为伤害加成", f"12方向散射", "按 R 切换分支"]
             elif tower.physical_branch == 3:
                 info = [f"地狱升华之弩 Lv{tower.level}", "发射黑色射线", "随机秒杀一个敌人",
-                        "对BOSS造成5%生命伤害", f"攻击间隔:{(19 - tower.level)}s", "按 R 切换分支"]
+                        "对BOSS造成5%生命伤害", f"攻击间隔:{(19 - tower.level) * 2}s", "按 R 切换分支"]
             else:
                 info = [f"时空撕裂之矢 Lv{tower.level}", f"伤害:{tower.damage}", f"攻击间隔:0.5s",
                         f"金币1%作为伤害加成", f"抗性降低:敌人抗性-20%", "按 R 切换分支"]
@@ -126,18 +126,22 @@ def get_tower_info(game, tower):
                     f"攻击间隔:0.5s"]
         else:
             info = [f"雪球 Lv{tower.level}", f"减速:50%", f"伤害:{tower.damage}", f"攻击间隔:{tower.fire_rate / 60}s"]
-    elif tower.type == TowerType.TELEPORT:
+    elif tower.type == TowerType.MAGIC:
         if tower.teleport_branch == 2:
             if tower.level >= 11:
                 info = [f"无尽催化剂 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
                         f"八方向散射", f"必定施加随机永久debuff", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
             elif tower.level >= 6:
-                poison_stacks = {6: 600, 7: 700, 8: 800, 9: 900, 10: 1000}
+                poison_stacks = POTATO_POISON_STACKS
                 info = [f"毒马铃薯 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
-                        f"2%施加{poison_stacks.get(tower.level, 600)}层中毒", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+                        f"2%施加{poison_stacks.get(tower.level, 400)}层中毒", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
             else:
                 info = [f"幸运四叶草 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
                         f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+        elif tower.teleport_branch == 3:
+            info = [f"金毒马铃薯 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}+金币1%",
+                    f"八方向散射", f"2%施加{GOLD_POTATO_POISON_STACKS.get(tower.level, 32000)}层中毒",
+                    f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
         else:
             if tower.level >= 11:
                 info = [f"终望珍珠 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
@@ -176,7 +180,7 @@ def get_tower_info(game, tower):
         else:
             info = [f"火焰弹 Lv{tower.level}", f"伤害:{tower.damage}", f"燃烧:{burn_preview(game)}/s,持续4s",
                     f"攻击间隔:{tower.fire_rate / 60}s"]
-    elif tower.type == TowerType.TRIDENT:
+    elif tower.type == TowerType.ELECTRIC:
         if tower.level >= 11:
             if tower.trident_branch == CROUCH_DRAGON_BRANCH:
                 bagua_dmg = game.bagua_damage(tower)
@@ -265,7 +269,7 @@ def get_tower_info(game, tower):
                 info = [f"雷盾 Lv{tower.level}",
                         f"护盾破碎:全屏{dmg_mult}点伤害", "击晕全场1秒并永久燃烧", "按 R 切换分支"]
         elif tower.level >= 6:
-            info = [f"铁壁盾 Lv{tower.level}", "每60秒给5*5范围内随机3个塔施加护盾"]
+            info = [f"骑士盾 Lv{tower.level}", "每60秒给5*5范围内随机3个塔施加护盾"]
         else:
             info = [f"老木盾 Lv{tower.level}", "每90秒给3*3范围内随机1个塔施加护盾"]
     elif tower.type == TowerType.BOMB:
@@ -816,7 +820,7 @@ class UIManager:
         text1 = assets.font_large.render("游戏结束!", True, RED)
         self.game.screen.blit(text1, (SCREEN_WIDTH // 2 - text1.get_width() // 2, 400))
 
-        # 左：重来本波。只清场重打，不动存档也不动炮塔，所以单击即可
+        # 左：重来本波。整波回滚到开波状态（本波的建塔/花费/附魔全部作废），不碰存档
         wave_rect = self.get_gameover_restart_wave_rect()
         pygame.draw.rect(self.game.screen, (45, 95, 155), wave_rect)
         pygame.draw.rect(self.game.screen, (140, 195, 255), wave_rect, 3)
@@ -836,7 +840,8 @@ class UIManager:
                                          run_rect.centery - run_text.get_height() // 2))
 
         hint = assets.font_small.render(
-            "本波重来保留炮塔、金币与附魔；本局重开会覆盖存档", True, (190, 190, 190))
+            "本波重来＝回到开波状态（本波建塔/花费/附魔全部作废）；本局重开会覆盖存档",
+            True, (190, 190, 190))
         self.game.screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 990))
         hint2 = assets.font_small.render("按 TAB 查看伤害统计", True, (160, 160, 160))
         self.game.screen.blit(hint2, (SCREEN_WIDTH // 2 - hint2.get_width() // 2, 1038))

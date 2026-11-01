@@ -484,13 +484,16 @@ class Enemy(pygame.sprite.Sprite):
             final_dmg = damage * (1.0 - self.resistance(elem))
         # 用 round 而不是直接 int：1000 * (1-0.8) 在浮点下是 199.99997，截断会白丢 1 点
         final_dmg = int(round(final_dmg))
+        # 溢出伤害不算数：只结算敌人当前剩余的血量（例如剩 80 血挨 1 万伤害，记 80）
+        health_before = max(0, self.health)
         self.health -= final_dmg
+        shown_dmg = final_dmg if final_dmg <= 0 else min(final_dmg, health_before)
 
         if self.game:
-            self.game.spawn_damage_text(final_dmg, self.rect.center, color=color, scale=scale,
+            self.game.spawn_damage_text(shown_dmg, self.rect.center, color=color, scale=scale,
                                         speed_x=text_speed_x)
-            if final_dmg > 0 and getattr(self.game, "damage_stats", None) is not None:
-                self.game.damage_stats.add(elem, final_dmg)
+            if shown_dmg > 0 and getattr(self.game, "damage_stats", None) is not None:
+                self.game.damage_stats.add(elem, shown_dmg)
 
         if self.health <= 0:
             if self.enemy_type == EnemyType.HEROBRINE:

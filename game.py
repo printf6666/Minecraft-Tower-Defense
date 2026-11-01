@@ -26,7 +26,8 @@ ELEMENT_TO_TOWER_TYPE = {
     "physical": TowerType.PHYSICAL,
     "fire": TowerType.FLAME,
     "ice": TowerType.ICE,
-    "electric": TowerType.TRIDENT,
+    "magic": TowerType.MAGIC,
+    "electric": TowerType.ELECTRIC,
     "wind": TowerType.WIND,
     "poison": TowerType.POISON,
     "explosion": TowerType.BOMB,
@@ -117,6 +118,7 @@ class Game:
         self.temperature = 30
         self.climate_temp_delta = 0
         self.climate_temp_timer = 0
+        self.wave_snapshot = None
         self.lava_timer = 0
         self.weather = Weather.SUNNY
         self.weather_particles = []
@@ -177,6 +179,9 @@ class Game:
         # 到期自动清零并重算 —— 直接改 temperature 会被换天气/群系重建覆盖掉。
         self.climate_temp_delta = 0
         self.climate_temp_timer = 0
+
+        # 开波状态快照（内存）：重来本波时整波回滚到这里，不落盘、不生成备份文件
+        self.wave_snapshot = None
 
         self.enchantments = []
         self.poison_base_damage = 5
@@ -484,14 +489,19 @@ class Game:
                         self.selected_tower.flame_branch = self.selected_tower.flame_branch % 3 + 1
                         self.selected_tower.recalculate_stats()
                         self.selected_tower.update_sprite()
-                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.TRIDENT and self.selected_tower.level >= 11:
+                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.ELECTRIC and self.selected_tower.level >= 11:
                         # 三阶三分支：海渊裂空之戟 / 唤龙电晶石 / 卧龙
                         self.selected_tower.trident_branch = self.selected_tower.trident_branch % 3 + 1
                         self.selected_tower.update_sprite()
-                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.TELEPORT:
-                        self.selected_tower.teleport_branch = 3 - self.selected_tower.teleport_branch
-                        self.selected_tower.recalculate_stats()
-                        self.selected_tower.update_sprite()
+                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.MAGIC:
+                        tw = self.selected_tower
+                        if tw.level >= 11:
+                            # 三阶三分支：终望珍珠 → 无尽催化剂 → 金毒马铃薯
+                            tw.teleport_branch = tw.teleport_branch % 3 + 1
+                        else:
+                            tw.teleport_branch = 3 - tw.teleport_branch
+                        tw.recalculate_stats()
+                        tw.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
                         self.selected_tower.shield_branch = self.selected_tower.shield_branch % 3 + 1
                         self.selected_tower.update_sprite()
@@ -785,6 +795,7 @@ class Game:
         self.temperature = 30
         self.climate_temp_delta = 0
         self.climate_temp_timer = 0
+        self.wave_snapshot = None
         self.lava_timer = 0
         self.weather = Weather.SUNNY
         self.weather_particles = []
@@ -1084,36 +1095,10 @@ class Game:
         self.sacrifices = data.get("sacrifices", 0)
         wave_num = max(1, data.get("wave", 1))
         self.wave_manager.current_wave = wave_num - 1
+        # 旧存档里可能有已经删掉的塔（比如剑系 type=11），
+        # _spawn_tower_from_data 内部会跳过无法识别的类型，而不是让整份存档读不出来
         for td in data.get("towers", []):
-            try:
-                ttype = TowerType(td["type"])
-            except ValueError:
-                # 旧存档里可能有已经删掉的塔（比如剑系 type=11），跳过而不是让整份存档读不出来
-                continue
-            t = Tower(ttype, td["x"], td["y"], self)
-            while t.level < td["level"]:
-                t.upgrade()
-            t.physical_branch = td.get("physical_branch", 1)
-            t.wind_branch = td.get("wind_branch", 1)
-            t.ice_branch = td.get("ice_branch", 1)
-            t.flame_branch = td.get("flame_branch", 1)
-            t.poison_branch = td.get("poison_branch", 1)
-            t.bomb_branch = td.get("bomb_branch", 1)
-            t.trident_branch = td.get("trident_branch", 1)
-            t.teleport_branch = td.get("teleport_branch", 1)
-            t.shield_branch = td.get("shield_branch", 1)
-            if hasattr(t, 'bomb_subtype'):
-                sv = td.get("bomb_subtype")
-                t.bomb_subtype = BombSubType(sv) if sv is not None else BombSubType.SNOW
-            if hasattr(t, 'is_nuclear'):
-                t.is_nuclear = td.get("is_nuclear", False)
-            t.has_shield = td.get("has_shield", False)
-            # 分支是在升级之后才套用的，所以带分支数值的塔必须整体重算一次，
-            # 否则读档后神锅会保留「普通冰塔」的数值（伤害 55 而不是 500+）
-            if ttype in (TowerType.TELEPORT, TowerType.FLAME, TowerType.ICE):
-                t.recalculate_stats()
-            t.update_sprite()
-            self.towers.add(t)
+            self._spawn_tower_from_data(td)
         self.recompute_temperature()
         self.wave_manager.start_new_wave()
         if self.wave_manager.current_wave in BOSS_ONLY_WAVES:
@@ -1134,6 +1119,8 @@ class Game:
             # 只剩 BOSS 波会走到这里（上面 force_boss_weather 已放过 The End，
             # 这里只负责把永夜配色重建出来，不动音乐）
             self._build_background(night_mode=True, gold_ore_positions=saved_ore)
+        # 读档后的状态即视为「开波状态」：重来本波回滚到读档这一刻
+        self._take_wave_snapshot()
 
     def add_dragon_breath(self, x, y, temperature, tower_level, stun_time):
         pool = DragonBreathPool(x, y, temperature, tower_level, stun_time, self)
@@ -1282,10 +1269,11 @@ class Game:
         bonus = 0
         bonus += 5 * self.enchantments.count(Enchantment.BALANCED)
         type_map = {
-            Enchantment.PHYSICAL: (TowerType.PHYSICAL, TowerType.TELEPORT),
+            Enchantment.PHYSICAL: (TowerType.PHYSICAL,),
             Enchantment.ICE: (TowerType.ICE,),
+            Enchantment.MAGIC: (TowerType.MAGIC,),
             Enchantment.FLAME: (TowerType.FLAME,),
-            Enchantment.TRIDENT: (TowerType.TRIDENT,),
+            Enchantment.ELECTRIC: (TowerType.ELECTRIC,),
             Enchantment.WIND: (TowerType.WIND,),
             Enchantment.POISON: (TowerType.POISON,),
             Enchantment.BOMB: (TowerType.BOMB,),
@@ -1293,11 +1281,11 @@ class Game:
         for ench, types in type_map.items():
             if tower_type in types:
                 if ench == Enchantment.PHYSICAL:
-                    bonus += 15 * self.enchantments.count(ench)
+                    bonus += 20 * self.enchantments.count(ench)
                 else:
                     bonus += 20 * self.enchantments.count(ench)
-        # 力量V：物理伤害 +150%（与「物理强化」同乘区、同口径：箭塔/传送塔的物理伤害）
-        if tower_type in (TowerType.PHYSICAL, TowerType.TELEPORT) \
+        # 力量V：物理伤害 +150%（与「物理强化」同乘区、同口径：只有箭塔吃物理）
+        if tower_type == TowerType.PHYSICAL \
                 and Enchantment.POWER_V in self.enchantments:
             bonus += 150
         # 灯火通明：火系伤害 +80%（加算，不随附魔重复叠加）
@@ -1354,7 +1342,7 @@ class Game:
             enemy.apply_knockback(12)
             if enemy.enemy_type not in armored:
                 enemy.wind_mark_tower = SimpleNamespace(damage=damage, wind_knockback=12)
-        elif tower_type == TowerType.TRIDENT:
+        elif tower_type == TowerType.ELECTRIC:
             col = enemy.rect.centerx // TILE_SIZE
             for e in self.enemies:
                 if e.rect.centerx // TILE_SIZE == col and e.health > 0:
@@ -1399,7 +1387,7 @@ class Game:
             return False
         has_ice = any(t.type == TowerType.ICE and t.level >= 11 and t.ice_branch == 2 for t in self.towers)
         has_fire = any(t.type == TowerType.FLAME and t.level >= 11 and t.flame_branch == 2 for t in self.towers)
-        has_electric = any(t.type == TowerType.TRIDENT and t.level >= 11 and t.trident_branch == 2 for t in self.towers)
+        has_electric = any(t.type == TowerType.ELECTRIC and t.level >= 11 and t.trident_branch == 2 for t in self.towers)
         return has_ice and has_fire and has_electric
 
     def endless_greed_active(self):
@@ -1408,10 +1396,10 @@ class Game:
         has_t1 = any(t.type == TowerType.PHYSICAL and t.level >= 11 and t.physical_branch == 1 for t in self.towers)
         has_t2 = any(t.type == TowerType.PHYSICAL and t.level >= 11 and t.physical_branch == 2 for t in self.towers)
         has_t3 = any(t.type == TowerType.PHYSICAL and t.level >= 11 and t.physical_branch == 3 for t in self.towers)
-        has_e1 = any(t.type == TowerType.TELEPORT and t.level >= 11 and t.teleport_branch == 1 for t in self.towers)
-        has_e2 = any(t.type == TowerType.TELEPORT and t.level >= 11 and t.teleport_branch == 2 for t in self.towers)
+        has_e1 = any(t.type == TowerType.MAGIC and t.level >= 11 and t.teleport_branch == 1 for t in self.towers)
+        has_e2 = any(t.type == TowerType.MAGIC and t.level >= 11 and t.teleport_branch == 2 for t in self.towers)
         has_w1 = any(t.type == TowerType.WIND and t.level >= 11 and t.wind_branch == 1 for t in self.towers)
-        has_tr1 = any(t.type == TowerType.TRIDENT and t.level >= 11 and t.trident_branch == 1 for t in self.towers)
+        has_tr1 = any(t.type == TowerType.ELECTRIC and t.level >= 11 and t.trident_branch == 1 for t in self.towers)
         return has_t1 and has_t2 and has_t3 and has_e1 and has_e2 and has_w1 and has_tr1
 
     def endless_greed_explode(self, x, y):
@@ -1530,7 +1518,7 @@ class Game:
                 # 神锅（分支 4）的数值来自独立数值表，逐项加减会算歪；
                 # 降到 Lv10 以下时也要顺手退回普通冰塔形态，所以整体重算一次。
                 t.recalculate_stats()
-            elif t.type == TowerType.TELEPORT:
+            elif t.type == TowerType.MAGIC:
                 if t.teleport_branch == 2:
                     t.damage -= 100
                     t.range -= TILE_SIZE // 2
@@ -1549,7 +1537,7 @@ class Game:
                 if old_level >= 6:
                     t.stun_time = round(t.stun_time - 0.1, 1)
                 self.temperature -= 1
-            elif t.type == TowerType.TRIDENT:
+            elif t.type == TowerType.ELECTRIC:
                 t.damage -= 25
                 t.range -= TILE_SIZE // 2
                 t.fire_rate = min(60, t.fire_rate + 6)
@@ -1635,9 +1623,9 @@ class Game:
                     self.apply_sacred_fire(neighbor)
 
     def _shop_pool(self):
+        # 0~8 号可重复购买，始终留在池子里；9 号起拥有后不再出现
         return [e for e in ENCHANTMENT_ORDER
-                if (e.value >= 10 or e in NON_REPEATABLE_ENCHANTMENTS) and e not in self.enchantments
-                or (e.value < 10 and e not in NON_REPEATABLE_ENCHANTMENTS)]
+                if e not in NON_REPEATABLE_ENCHANTMENTS or e not in self.enchantments]
 
     def open_shop(self):
         if self.shop_offers_wave != self.wave_manager.current_wave or not self.shop_offers:
@@ -1665,7 +1653,7 @@ class Game:
         self.weather_banner_timer = 180
 
     def buy_enchantment(self, ench):
-        if (ench.value >= 10 or ench in NON_REPEATABLE_ENCHANTMENTS) and ench in self.enchantments:
+        if ench in NON_REPEATABLE_ENCHANTMENTS and ench in self.enchantments:
             return
         cost = ENCHANTMENT_DATA[ench]["cost"]
         if self.emeralds < cost:
@@ -2111,6 +2099,88 @@ class Game:
                 if enemy.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED):
                     enemy.broken = True
 
+        # 开波状态定稿：记一份内存快照，供「重新开始本波」整波回滚
+        self._take_wave_snapshot()
+
+    def _take_wave_snapshot(self):
+        """记录开波瞬间的状态快照（纯内存，不落盘、不生成备份文件）。
+
+        重来本波时整波回滚到这一刻：本波建/卖/升级的塔、花掉或赚到的金币、
+        买到的附魔、天气与温度变化全部作废 —— 语义等同「中途退出后重新进档」，
+        因为 select_weather 里的 save_game 写的也是同一份开波状态。
+        """
+        towers_data = []
+        for t in self.towers:
+            towers_data.append({
+                "x": t.x, "y": t.y, "type": t.type.value, "level": t.level,
+                "physical_branch": t.physical_branch, "wind_branch": t.wind_branch,
+                "ice_branch": t.ice_branch, "flame_branch": t.flame_branch,
+                "poison_branch": t.poison_branch, "bomb_branch": t.bomb_branch,
+                "trident_branch": t.trident_branch, "teleport_branch": t.teleport_branch,
+                "shield_branch": t.shield_branch,
+                "bomb_subtype": t.bomb_subtype.value if getattr(t, "bomb_subtype", None) else None,
+                "is_nuclear": getattr(t, "is_nuclear", False),
+                "has_shield": getattr(t, "has_shield", False),
+            })
+        wm = self.wave_manager
+        self.wave_snapshot = {
+            "coins": self.coins,
+            "emeralds": self.emeralds,
+            "enchantments": list(self.enchantments),
+            "poison_base_damage": self.poison_base_damage,
+            "sacrifices": self.sacrifices,
+            "gold_per_second": self.gold_per_second,
+            "gold_per_wave": self.gold_per_wave,
+            "emerald_per_wave": self.emerald_per_wave,
+            "temperature": self.temperature,
+            "weather": self.weather,
+            "enemies_killed": self.enemies_killed,
+            "damage_stats": self.damage_stats.to_dict(),
+            "towers": towers_data,
+            "wave": {
+                "current_wave": wm.current_wave,
+                "enemies_spawned": wm.enemies_spawned,
+                "enemies_to_spawn": wm.enemies_to_spawn,
+                "gold_armored_count": wm.gold_armored_count,
+                "gold_armored_spawned": wm.gold_armored_spawned,
+                "ghost_count": wm.ghost_count,
+                "ghost_spawned": wm.ghost_spawned,
+                "spawn_delay": wm.spawn_delay,
+                "spawn_timer": wm.spawn_timer,
+                "wave_timer": wm.wave_timer,
+            },
+        }
+
+    def _spawn_tower_from_data(self, td):
+        """按字典（存档 / 开波快照）重建一座炮塔。读档与重来本波共用。"""
+        try:
+            ttype = TowerType(td["type"])
+        except (ValueError, KeyError):
+            return
+        t = Tower(ttype, td["x"], td["y"], self)
+        while t.level < td.get("level", 1):
+            t.upgrade()
+        t.physical_branch = td.get("physical_branch", 1)
+        t.wind_branch = td.get("wind_branch", 1)
+        t.ice_branch = td.get("ice_branch", 1)
+        t.flame_branch = td.get("flame_branch", 1)
+        t.poison_branch = td.get("poison_branch", 1)
+        t.bomb_branch = td.get("bomb_branch", 1)
+        t.trident_branch = td.get("trident_branch", 1)
+        t.teleport_branch = td.get("teleport_branch", 1)
+        t.shield_branch = td.get("shield_branch", 1)
+        if hasattr(t, "bomb_subtype"):
+            sv = td.get("bomb_subtype")
+            t.bomb_subtype = BombSubType(sv) if sv is not None else BombSubType.SNOW
+        if hasattr(t, "is_nuclear"):
+            t.is_nuclear = td.get("is_nuclear", False)
+        t.has_shield = td.get("has_shield", False)
+        # 分支是在升级之后才套用的，带分支数值的塔必须整体重算一次
+        if ttype in (TowerType.MAGIC, TowerType.FLAME, TowerType.ICE):
+            t.recalculate_stats()
+        t.update_sprite()
+        self.towers.add(t)
+
     def play_random_bgm(self):
         if not assets.bgm_files:
             return
@@ -2238,35 +2308,41 @@ class Game:
         self.weather_banner_timer = 240
 
     def restart_wave(self):
-        """从本波开头重来：炮塔 / 金币 / 附魔 / 温度全部保留，只把这一波清场重打。
+        """重来本波：整波回滚到开波时的内存快照。
 
-        和 reset_game 的区别是「不碰存档、不碰炮塔」，所以只需要清掉场上的敌人、
-        子弹和一次性特效，再把 wave_manager 的生成进度归零 —— 不调用 start_new_wave，
-        波数保持不变，同一波从头再打一遍。
+        本波里建/卖/升级的炮塔、花掉或赚到的金币、买到的附魔、天气与温度变化
+        全部作废 —— 效果等同「中途退出后重新进档」。不碰磁盘、不生成备份文件，
+        快照在 select_weather（每次开波）时记录。
         """
+        snap = getattr(self, "wave_snapshot", None)
+        if snap is None:
+            # 兜底：理论上不会走到（每次开波都会记录），没有快照就按当前状态重新记一份
+            self._take_wave_snapshot()
+            snap = self.wave_snapshot
+
+        # 1) 清场：敌人 / 弹幕 / 所有一次性特效
         self.enemies.empty()
         self.bullets.empty()
         self.dragons.empty()
         self.damage_texts.empty()
-
         for attr in ("dragon_breath_pools", "lightning_effects", "wind_explosions",
                      "endless_greed_explosions", "ice_explosions", "hell_rays",
                      "resonance_storms", "poison_splashes", "wither_splashes",
                      "horizontal_lightning_effects", "tnt_explosions",
                      "mushroom_explosions", "shockwave_effects", "meteors", "bees",
                      "crystals", "lantern_shockwaves", "stars", "ice_star_bursts",
-                     "masterpiece_shockwaves", "weather_particles",
+                     "masterpiece_shockwaves", "weather_particles", "creeper_explosions",
                      "command_blocks", "ice_walls"):
             getattr(self, attr, []).clear()
 
-        # 第 50 / 100 波死亡重来时，BOSS 相关状态必须一起复位，否则不会重新召唤
+        # 2) BOSS / 召唤状态复位（否则 50 / 100 / 150 波重来不会重新召唤）
         self._init_boss_state()
         self.herobrine = None
         self.herobrine_spawned = False
         self.herobrine_summon_timer = 0
         self.herobrine_phase = 0
         self.herobrine_summon_queue = []
-
+        self.command_block_timer = 0
         self.bee_spawn_remaining = 0
         self.bee_spawn_timer = 0
         self.thunderstorm_timer = 0
@@ -2278,19 +2354,48 @@ class Game:
         self.ultimate_video = None
         self.masterpiece_pending = False
 
-        # 本波从头再打：只把生成进度归零，波数不变
-        wm = self.wave_manager
-        wm.enemies_spawned = 0
-        wm.gold_armored_spawned = 0
-        wm.ghost_spawned = 0
-        wm.spawn_timer = 0
-        wm.wave_timer = 0
+        # 3) 炮塔按快照重建（本波新建 / 升级 / 出售的塔全部作废）
+        self.towers.empty()
+        for td in snap["towers"]:
+            self._spawn_tower_from_data(td)
 
+        # 4) 资源 / 附魔 / 派生数值回滚
+        self.coins = snap["coins"]
+        self.emeralds = snap["emeralds"]
+        self.enchantments = list(snap["enchantments"])
+        self.poison_base_damage = snap["poison_base_damage"]
+        self.sacrifices = snap["sacrifices"]
+        self.gold_per_second = snap["gold_per_second"]
+        self.gold_per_wave = snap["gold_per_wave"]
+        self.emerald_per_wave = snap["emerald_per_wave"]
+        self.enemies_killed = snap["enemies_killed"]
+        self.damage_stats.load_dict(snap["damage_stats"])
+
+        # 5) 天气 / 温度回滚（本波天气被改写、冰冻核弹降温等一并作废）
+        self.weather = snap["weather"]
+        self._build_background(night_mode=(self.weather == Weather.ENDLESS_NIGHT),
+                               gold_ore_positions=self.gold_ore_positions)
+        self.temperature = snap["temperature"]
+        self.climate_temp_delta = 0
+        self.climate_temp_timer = 0
+        self.weather_banner_text = WEATHER_CONFIG[self.weather]["desc"]
+        self.weather_banner_timer = 0
+
+        # 6) 波次进度回滚（波数不变，生成进度回到开波那一刻）
+        for key, value in snap["wave"].items():
+            setattr(self.wave_manager, key, value)
+
+        # 7) 界面状态复位
         self.state = GameState.PLAYING
         self.stats_open = False
         self.confirm_reset = 0
         self.selected_tower = None
-        self.weather_banner_timer = 0
+        self.selected_tower_type = None
+        self.show_range = False
+        self.pending_first_wave_weather = False
+
+        # 磁盘存档同步成回滚后的状态（写的是当前状态，不是备份文件）
+        self.save_game()
 
     def reset_game(self):
         # 存档不删除，改成改名备份：.bak 会被下一次 save_game 覆盖，
@@ -2332,6 +2437,7 @@ class Game:
         self.temperature = 30
         self.climate_temp_delta = 0
         self.climate_temp_timer = 0
+        self.wave_snapshot = None
         self.lava_timer = 0
         self.weather = Weather.SUNNY
         self.weather_particles = []

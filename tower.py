@@ -25,9 +25,9 @@ MAX_BRANCH = {
     TowerType.PHYSICAL:   {1: 1, 2: 1, 3: 3},
     TowerType.PRODUCTION: {1: 1, 2: 1, 3: 1},
     TowerType.ICE:        {1: 1, 2: 1, 3: 4},
-    TowerType.TELEPORT:   {1: 2, 2: 2, 3: 2},
+    TowerType.MAGIC:   {1: 2, 2: 2, 3: 3},
     TowerType.FLAME:      {1: 1, 2: 1, 3: 3},
-    TowerType.TRIDENT:    {1: 1, 2: 1, 3: 3},
+    TowerType.ELECTRIC:    {1: 1, 2: 1, 3: 3},
     TowerType.WIND:       {1: 1, 2: 1, 3: 2},
     TowerType.POISON:     {1: 2, 2: 2, 3: 3},
     TowerType.BOMB:       {1: 1, 2: 5, 3: 3},
@@ -52,7 +52,7 @@ def tower_sprite_path(ttype, level, **br):
         b = br.get("ice_branch", 1)
     elif ttype == TowerType.FLAME and stage == 3:
         b = br.get("flame_branch", 1)
-    elif ttype == TowerType.TRIDENT and stage == 3:
+    elif ttype == TowerType.ELECTRIC and stage == 3:
         b = br.get("trident_branch", 1)
     elif ttype == TowerType.WIND and stage == 3:
         b = br.get("wind_branch", 1)
@@ -62,8 +62,8 @@ def tower_sprite_path(ttype, level, **br):
         # 毒系一阶就能切 2 个分支，三阶有 3 个
         pb = br.get("poison_branch", 1)
         b = pb if stage == 3 else min(pb, 2)
-    elif ttype == TowerType.TELEPORT:
-        # 传送三阶都是 2 个分支
+    elif ttype == TowerType.MAGIC:
+        # 魔法塔三阶有 3 个分支
         b = br.get("teleport_branch", 1)
     elif ttype == TowerType.BOMB:
         if stage == 2:
@@ -155,7 +155,7 @@ class Tower(pygame.sprite.Sprite):
             self.fire_rate = 60
             self.cost = 150
             self.upgrade_cost = 225
-        elif self.type == TowerType.TELEPORT:
+        elif self.type == TowerType.MAGIC:
             if self.teleport_branch == 2:
                 self.range = TILE_SIZE * 3
                 self.damage = 100
@@ -171,7 +171,7 @@ class Tower(pygame.sprite.Sprite):
             self.fire_rate = 60
             self.cost = 200
             self.upgrade_cost = 300
-        elif self.type == TowerType.TRIDENT:
+        elif self.type == TowerType.ELECTRIC:
             self.range = TILE_SIZE * 2
             self.damage = 20
             self.fire_rate = 60
@@ -242,8 +242,9 @@ class Tower(pygame.sprite.Sprite):
             self.range += TILE_SIZE // 4
             self.fire_rate = max(30, self.fire_rate - 6)
             if self.level >= 6: self.freeze_time = round(self.freeze_time + 0.1, 1)
-        elif self.type == TowerType.TELEPORT:
-            if self.teleport_branch == 2:
+        elif self.type == TowerType.MAGIC:
+            if self.teleport_branch in (2, 3):
+                # 毒马铃薯 / 金毒马铃薯：同一套成长曲线
                 self.damage += 100
                 self.range += TILE_SIZE // 2
                 self.fire_rate = max(30, self.fire_rate - 6)
@@ -258,7 +259,7 @@ class Tower(pygame.sprite.Sprite):
             self.range += TILE_SIZE // 4
             self.fire_rate = max(30, self.fire_rate - 6)
             if self.level >= 6: self.stun_time = round(self.stun_time + 0.1, 1)
-        elif self.type == TowerType.TRIDENT:
+        elif self.type == TowerType.ELECTRIC:
             self.damage += 20
             self.range += TILE_SIZE // 2
             self.fire_rate = max(30, self.fire_rate - 6)
@@ -297,11 +298,12 @@ class Tower(pygame.sprite.Sprite):
         if self.type == TowerType.ICE:
             self._recalc_ice()
             return
-        if self.type != TowerType.TELEPORT:
+        if self.type != TowerType.MAGIC:
             return
         self.teleport_chance = 0.01
         self.oneshot_chance = 0
-        if self.teleport_branch == 2:
+        if self.teleport_branch in (2, 3):
+            # 毒马铃薯 / 金毒马铃薯：攻击力同无尽催化剂
             self.damage = 100 + (self.level - 1) * 100
             self.range = TILE_SIZE * 3 + (self.level - 1) * (TILE_SIZE // 2)
         else:
@@ -391,7 +393,8 @@ class Tower(pygame.sprite.Sprite):
         if self.disabled_timer > 0:
             return False
         if self.type == TowerType.PHYSICAL and self.level >= 11 and self.physical_branch == 3:
-            return current_time - self.last_shot >= (19 - self.level) * 60
+            # 地狱升华之弩：间隔 16/14/12/10/8 秒（原 8/7/6/5/4 秒，整体翻倍）
+            return current_time - self.last_shot >= (19 - self.level) * 2 * 60
         total_bonus = self.attack_speed_buff
         if self.game.weather == Weather.AURORA and self.game.temperature < 0:
             total_bonus += abs(self.game.temperature)
@@ -497,9 +500,11 @@ class Tower(pygame.sprite.Sprite):
                 if best.enemy_type in (EnemyType.HEROBRINE, EnemyType.FINAL_BOSS, EnemyType.WORLD_SEED):
                     pct = 0.06 if Enchantment.POWER_V in self.game.enchantments else 0.05
                     dmg = int(best.max_health * pct)
+                    reward = best.take_damage(dmg, color=RED, scale=1.4)
                 else:
-                    dmg = 999999999
-                reward = best.take_damage(dmg, color=RED, scale=1.4)
+                    # 秒杀：伤害取敌人当前剩余血量（真实伤害，正好打死、不虚报溢出）
+                    reward = best.take_damage(max(1, int(best.health)), color=RED, scale=1.4,
+                                              ignore_armor=True)
                 self.game.coins += reward
                 ray = HellRay(self.rect.centerx, self.rect.centery,
                               best.rect.centerx, best.rect.centery)
@@ -592,7 +597,7 @@ class Tower(pygame.sprite.Sprite):
                 dragon = Dragon(self.game.path, "fire", self.level, self.game)
                 self.game.dragons.add(dragon)
 
-        if self.type == TowerType.TELEPORT and self.teleport_branch == 2:
+        if self.type == TowerType.MAGIC and self.teleport_branch in (2, 3):
             if self.level >= 11:
                 directions = [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1)]
             else:
@@ -682,8 +687,8 @@ class Tower(pygame.sprite.Sprite):
         return self.shield_pulse_timer > 0
 
     def is_crouch_dragon(self):
-        """卧龙：三叉戟塔 Lv11+ 分支 3。"""
-        return (self.type == TowerType.TRIDENT and self.level >= 11
+        """卧龙：电系塔 Lv11+ 分支 3。"""
+        return (self.type == TowerType.ELECTRIC and self.level >= 11
                 and self.trident_branch == CROUCH_DRAGON_BRANCH)
 
     def is_invincible(self):
@@ -809,7 +814,7 @@ class Bullet(pygame.sprite.Sprite):
         if self.tower_type == TowerType.PHYSICAL and self.tower_level >= 6:
             dmg += int(self.game.coins * 0.01)
 
-        if self.tower_type == TowerType.TRIDENT:
+        if self.tower_type == TowerType.ELECTRIC:
             if self.tower_level >= 6:
                 gold_bonus = int(self.game.coins * 0.01)
                 dmg += gold_bonus
@@ -828,16 +833,19 @@ class Bullet(pygame.sprite.Sprite):
                 elif branch == 1:
                     dmg += int(self.traveled * 5)
 
-        if self.tower_type == TowerType.TELEPORT and self.teleport_branch == 2:
+        if self.tower_type == TowerType.MAGIC and self.teleport_branch == 2:
             dmg = random.randint(0, self.damage * 2)
+        elif self.tower_type == TowerType.MAGIC and self.teleport_branch == 3:
+            # 金毒马铃薯：攻击力同无尽催化剂（0~2 倍随机），额外 + 当前金币 1%
+            dmg = random.randint(0, self.damage * 2) + int(self.game.coins * GOLD_POTATO_COIN_BONUS)
 
         mult = self.game.get_enchant_damage_multiplier(self.tower_type)
-        # 力量V 的「物理伤害+150%」走 get_enchant_damage_multiplier 的物理乘区（含传送塔）
+        # 力量V 的「物理伤害+150%」走 get_enchant_damage_multiplier 的物理乘区（只有箭塔吃物理）
         return int(dmg * mult)
 
     def calculate_lightning_damage(self):
         ldmg = self.lightning_damage
-        if self.tower_type == TowerType.TRIDENT:
+        if self.tower_type == TowerType.ELECTRIC:
             if self.tower_level >= 6:
                 gold_bonus = int(self.game.coins * 0.01)
                 ldmg += gold_bonus
@@ -901,11 +909,11 @@ class Bullet(pygame.sprite.Sprite):
             return WHITE
         elif self.tower_type == TowerType.ICE:
             return ICE_BLUE
-        elif self.tower_type == TowerType.TELEPORT:
-            return WHITE
+        elif self.tower_type == TowerType.MAGIC:
+            return MAGIC_PINK
         elif self.tower_type == TowerType.FLAME:
             return ORANGE
-        elif self.tower_type == TowerType.TRIDENT:
+        elif self.tower_type == TowerType.ELECTRIC:
             return ELECTRIC_PURPLE
         elif self.tower_type == TowerType.WIND:
             return MINT
@@ -921,7 +929,7 @@ class Bullet(pygame.sprite.Sprite):
             self.game.damage_element = self.damage_element
         final_dmg = self.calculate_final_damage()
 
-        if self.tower_type == TowerType.TELEPORT and self.tower_level >= 11 and self.teleport_branch == 1:
+        if self.tower_type == TowerType.MAGIC and self.tower_level >= 11 and self.teleport_branch == 1:
             hp_ratios = {11: 0.004, 12: 0.008, 13: 0.012, 14: 0.016, 15: 0.02}
             hp_bonus = int(enemy.max_health * hp_ratios.get(self.tower_level, 0))
             final_dmg += hp_bonus
@@ -943,9 +951,9 @@ class Bullet(pygame.sprite.Sprite):
         self.game.coins += reward
         self.apply_effects(enemy)
         if self.game.endless_greed_active():
-            is_greed = self.tower_type in (TowerType.PHYSICAL, TowerType.TELEPORT) or \
+            is_greed = self.tower_type in (TowerType.PHYSICAL, TowerType.MAGIC) or \
                 (self.tower_type == TowerType.WIND and self.wind_branch == 1) or \
-                (self.tower_type == TowerType.TRIDENT and self.trident_branch == 1)
+                (self.tower_type == TowerType.ELECTRIC and self.trident_branch == 1)
             if is_greed and random.random() < 0.05:
                 self.game.endless_greed_explode(enemy.rect.centerx, enemy.rect.centery)
         self.kill()
@@ -976,40 +984,46 @@ class Bullet(pygame.sprite.Sprite):
                         self.game.ice_explosions.append(exp)
                 else:
                     self.game.ice_explosions.append(exp)
-        if self.tower_type == TowerType.TELEPORT:
+        if self.tower_type == TowerType.MAGIC:
             if self.teleport_branch == 1:
                 if self.game.weather != Weather.MAGNETIC_STORM and random.random() < self.teleport_chance:
                     enemy.teleport_to_start()
                     if assets.teleport_sound:
                         assets.teleport_sound.play()
-                # 秒杀对分层 BOSS 无效（力量V 提值后 999999999 一发就是阿尔法 2/3 层，必须免疫）
+                # 秒杀对分层 BOSS 无效（否则一发就能穿掉阿尔法好几层，必须免疫）
                 if enemy.enemy_type not in (EnemyType.HEROBRINE, EnemyType.FINAL_BOSS, EnemyType.WORLD_SEED) and random.random() < self.oneshot_chance:
-                    reward = enemy.take_damage(999999999, color=RED, scale=1.2)
+                    # 秒杀伤害 = 敌人当前剩余血量（真实伤害，正好打死）
+                    reward = enemy.take_damage(max(1, int(enemy.health)), color=RED, scale=1.2,
+                                               ignore_armor=True)
                     self.game.coins += reward
             else:
                 if self.tower_level >= 6 and self.tower_level < 11:
-                    poison_chance = 0.02
-                    poison_stacks = {6: 600, 7: 700, 8: 800, 9: 900, 10: 1000}
-                    if random.random() < poison_chance:
-                        enemy.apply_poison(poison_stacks.get(self.tower_level, 600))
+                    # 毒马铃薯：2% 概率施加 400 / 800 / 1200 / 1600 / 2000 层中毒
+                    if random.random() < GOLD_POTATO_POISON_CHANCE:
+                        enemy.apply_poison(POTATO_POISON_STACKS.get(self.tower_level, 400))
                 elif self.tower_level >= 11:
-                    debuffs = ['burn', 'slow', 'speed', 'poison', 'wither', 'broken']
-                    debuff = random.choice(debuffs)
-                    if debuff == 'burn':
-                        if self.game.temperature > 0:
-                            rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
-                            if self.game.weather not in rain_weathers:
-                                enemy.apply_burn(self.game.temperature, 999999)
-                    elif debuff == 'slow':
-                        enemy.apply_slow(0.3, 999999)
-                    elif debuff == 'speed':
-                        enemy.apply_speed(0.5, 999999)
-                    elif debuff == 'poison':
-                        enemy.apply_poison(1)
-                    elif debuff == 'wither':
-                        enemy.apply_wither(999999)
-                    elif debuff == 'broken':
-                        enemy.broken = True
+                    if self.teleport_branch == 3:
+                        # 金毒马铃薯：2% 概率施加海量中毒
+                        if random.random() < GOLD_POTATO_POISON_CHANCE:
+                            enemy.apply_poison(GOLD_POTATO_POISON_STACKS.get(self.tower_level, 32000))
+                    else:
+                        debuffs = ['burn', 'slow', 'speed', 'poison', 'wither', 'broken']
+                        debuff = random.choice(debuffs)
+                        if debuff == 'burn':
+                            if self.game.temperature > 0:
+                                rain_weathers = (Weather.RAINY, Weather.THUNDERSTORM, Weather.ACID_RAIN, Weather.EXTREME_COLD)
+                                if self.game.weather not in rain_weathers:
+                                    enemy.apply_burn(self.game.temperature, 999999)
+                        elif debuff == 'slow':
+                            enemy.apply_slow(0.3, 999999)
+                        elif debuff == 'speed':
+                            enemy.apply_speed(0.5, 999999)
+                        elif debuff == 'poison':
+                            enemy.apply_poison(1)
+                        elif debuff == 'wither':
+                            enemy.apply_wither(999999)
+                        elif debuff == 'broken':
+                            enemy.broken = True
         if self.tower_type == TowerType.FLAME:
             burn_dmg = self.game.temperature
             enemy.apply_burn(burn_dmg, 240)
@@ -1022,7 +1036,7 @@ class Bullet(pygame.sprite.Sprite):
         if self.tower_type == TowerType.PHYSICAL:
             if self.tower_level >= 11 and not enemy.broken and self.physical_branch == 1:
                 enemy.broken = True
-        if self.tower_type == TowerType.TRIDENT:
+        if self.tower_type == TowerType.ELECTRIC:
             col = enemy.rect.centerx // TILE_SIZE
             lightning_dmg = self.calculate_lightning_damage()
             gold_bonus = int(self.game.coins * 0.01) if self.tower_level >= 6 else 0
@@ -1070,7 +1084,7 @@ class Bullet(pygame.sprite.Sprite):
                     if (e.rect.centerx - bx) ** 2 + (e.rect.centery - by) ** 2 > radius_sq:
                         continue
                     # 雷神之锤的闪电飘字用薄荷色，和风系伤害保持一致
-                    # （不要用 ELECTRIC_PURPLE，那是三叉戟电系的颜色）
+                    # （不要用 ELECTRIC_PURPLE，那是电系塔的颜色）
                     reward = e.take_damage(lightning_dmg, color=MINT, element="wind")
                     self.game.coins += reward
                 # 雷神之锤的命中特效固定用 resonance_storm 原尺寸帧，不缩放。

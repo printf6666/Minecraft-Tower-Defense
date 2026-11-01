@@ -1,10 +1,10 @@
 """按属性统计伤害。
 
-七种属性：物理 / 火系 / 冰系 / 电系 / 风系 / 毒系 / 爆炸。
+八种属性：物理 / 火系 / 冰系 / 魔法 / 电系 / 风系 / 毒系 / 爆炸。
 图标复用对应「强化附魔」的图标。
 
 归因约定：
-- 塔的伤害：箭塔/传送塔 = 物理，冰塔 = 冰系，火塔 = 火系，三叉戟 = 电系，
+- 塔的伤害：箭塔 = 物理，魔法塔 = 魔法，冰塔 = 冰系，火塔 = 火系，电系塔 = 电系，
   风塔 = 风系，毒塔 = 毒系，TNT/核弹 = 爆炸。
 - 减益：燃烧 = 火系，中毒 = 毒系，**凋零 = 毒系**（凋零由毒塔体系施加，
   单独拆一行意义不大），蓄风爆炸 = 风系。
@@ -22,7 +22,8 @@ ELEMENTS = [
     ("physical", "物理伤害", Enchantment.PHYSICAL, (235, 235, 235)),
     ("fire", "火系伤害", Enchantment.FLAME, (255, 128, 56)),
     ("ice", "冰系伤害", Enchantment.ICE, (130, 205, 255)),
-    ("electric", "电系伤害", Enchantment.TRIDENT, (205, 130, 255)),
+    ("magic", "魔法伤害", Enchantment.MAGIC, (255, 130, 200)),
+    ("electric", "电系伤害", Enchantment.ELECTRIC, (205, 130, 255)),
     ("wind", "风系伤害", Enchantment.WIND, (150, 255, 180)),
     ("poison", "毒系伤害", Enchantment.POISON, (130, 225, 90)),
     ("explosion", "爆炸伤害", Enchantment.BOMB, (255, 75, 75)),
@@ -35,10 +36,10 @@ ELEMENT_ENCHANT = {key: ench for key, _, ench, _ in ELEMENTS}
 # 塔 → 属性
 TOWER_ELEMENT = {
     TowerType.PHYSICAL: "physical",
-    TowerType.TELEPORT: "physical",
+    TowerType.MAGIC: "magic",
     TowerType.ICE: "ice",
     TowerType.FLAME: "fire",
-    TowerType.TRIDENT: "electric",
+    TowerType.ELECTRIC: "electric",
     TowerType.WIND: "wind",
     TowerType.POISON: "poison",
     TowerType.BOMB: "explosion",
