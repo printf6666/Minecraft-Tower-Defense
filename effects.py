@@ -539,20 +539,49 @@ class NuclearShockwave:
         if self.timer >= self.duration:
             self.done = True
 
-    def draw(self, screen):
-        if self.done:
-            return
+    def current_color(self):
+        """当前帧的圆盘颜色（含淡出 alpha）；已结束时返回 None。"""
+        if self.done or self.radius <= 0:
+            return None
         alpha = max(0, 120 - int(120 * self.timer / self.duration))
+        if alpha <= 0:
+            return None
         if self.bomb_branch == 2:
-            color = (0, 0, 0, alpha)
-        elif self.bomb_branch == 3:
+            return (0, 0, 0, alpha)
+        if self.bomb_branch == 3:
             # 冰冻核弹：天蓝色冲击波
-            color = (110, 200, 255, alpha)
-        else:
-            color = (255, 0, 0, alpha)
-        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
-        pygame.draw.circle(s, color, (self.radius, self.radius), self.radius)
-        screen.blit(s, (self.x - self.radius, self.y - self.radius))
+            return (110, 200, 255, alpha)
+        return (255, 0, 0, alpha)
+
+    def draw(self, screen):
+        # 单独绘制时也走批量路径（共享一张整屏临时表面）
+        draw_shockwaves(screen, [self])
+
+
+# 核弹冲击波合成用的整屏临时表面。
+# 原来每个冲击波每帧都要新建一张 (2r)² 的 SRCALPHA 表面（最大 2880×2880 ≈ 33MB），
+# 再整张 blit —— 单个就 11ms。多座核弹塔同时开火（冷却同步）时会叠十几个，直接卡死。
+# 现在改成：所有冲击波画进同一张 1920×1080 的临时表面，只清一次、只 blit 一次。
+_shockwave_scratch = None
+
+
+def draw_shockwaves(screen, waves):
+    global _shockwave_scratch
+    if not waves:
+        return
+    if _shockwave_scratch is None:
+        _shockwave_scratch = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    surf = _shockwave_scratch
+    surf.fill((0, 0, 0, 0))
+    drew = False
+    for wave in waves:
+        color = wave.current_color()
+        if color is None:
+            continue
+        pygame.draw.circle(surf, color, (int(wave.x), int(wave.y)), wave.radius)
+        drew = True
+    if drew:
+        screen.blit(surf, (0, 0))
 
 
 class LanternShockwave:
@@ -1032,10 +1061,13 @@ class BaguaArray:
             screen.blit(surf, surf.get_rect(center=(self.x, self.y)))
             return
 
-        # 自转：角度每变化 1° 才重新旋转一次，省掉大部分开销
-        if self._rot is None or abs(self.angle - self._rot_angle) >= 1.0:
-            self._rot = pygame.transform.rotozoom(base, -self.angle, 1.0)
-            self._rot_angle = self.angle
+        # 自转：角度按 4° 量化后再旋转。
+        # rotozoom 一张 256×256 的贴图要 ~0.8ms，每座阵每帧重算一次的话，几座阵就是 4ms；
+        # 量化后同样的视觉（法阵本来就在飞速旋转），开销降到 1/4。
+        target = int(self.angle / 4) * 4
+        if self._rot is None or target != self._rot_angle:
+            self._rot = pygame.transform.rotozoom(base, -target, 1.0)
+            self._rot_angle = target
 
         surf = self._rot
         # 出现 15 帧淡入、消失前 20 帧淡出（基础不透明度已经是 80%）

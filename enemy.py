@@ -2,6 +2,7 @@ import pygame
 import math
 import random
 import assets
+import stats
 from config import *
 from effects import CreeperExplosion, PoisonContractExplosion
 from tower import WindExplosion
@@ -289,7 +290,7 @@ class Enemy(pygame.sprite.Sprite):
         if self.burn_time > 0:
             self.burn_time -= 1
             if self.burn_time % 30 == 0:
-                # 燃烧跳伤 = 温度 × 烈焰粉 × 高温燃烧 × 灯火通明 × (1 + 火系伤害加成)
+                # 燃烧跳伤 = 温度 × 烈焰粉 × 灯火通明 × (1 + 火系伤害加成)
                 dmg = self.game.burn_tick_damage(self.burn_damage)
                 reward = self.take_damage(dmg, color=ORANGE, scale=1.0, element="fire", dot=True)
                 self.game.coins += reward
@@ -342,6 +343,11 @@ class Enemy(pygame.sprite.Sprite):
             self.kill()
             return False
 
+        # 「时光倒流」：全场敌人以原速沿原路倒退，退到起点就停住（不再前进）
+        if getattr(self.game, "time_rewind_active", 0) > 0:
+            self.move_backward(self.speed)
+            return False
+
         if self.enemy_type in (EnemyType.GHOST, EnemyType.WITHER, EnemyType.BLAZE):
             tx, ty = self.ghost_target
             dx = tx - self.pos_x
@@ -381,6 +387,33 @@ class Enemy(pygame.sprite.Sprite):
 
         self.rect.center = (self.pos_x, self.pos_y)
         return False
+
+    def move_backward(self, step):
+        """沿路径往回走 step 像素（「时光倒流」用）。
+
+        路径节点语义与 update() 一致：path_index 是「已经到达的那个节点」，
+        所以倒退的目标就是 path[path_index]；path_index 为 0 时退回起点即止。
+        飞行单位（幽灵/凋灵/烈焰人）的 path_index 恒为 0，同样朝起点退。
+        """
+        if not self.path:
+            return
+        if self.path_index <= 0:
+            tx, ty = self.path[0]
+        else:
+            tx, ty = self.path[self.path_index]
+        tx = tx * TILE_SIZE + TILE_SIZE // 2
+        ty = ty * TILE_SIZE + TILE_SIZE // 2
+        dx = tx - self.pos_x
+        dy = ty - self.pos_y
+        dist = math.hypot(dx, dy)
+        if dist <= step:
+            self.pos_x, self.pos_y = tx, ty
+            if self.path_index > 0:
+                self.path_index -= 1
+        elif dist > 0:
+            self.pos_x += dx / dist * step
+            self.pos_y += dy / dist * step
+        self.rect.center = (self.pos_x, self.pos_y)
 
     def get_active_buffs(self):
         buff_list = []
@@ -474,6 +507,12 @@ class Enemy(pygame.sprite.Sprite):
         # 不能靠「抗性 500% 算出负数」来免疫，那样反而会把敌人奶起来。
         if self.enemy_type == EnemyType.BLAZE and elem == "fire":
             return 0
+
+        # 时序僭越之钟：来源炮塔的伤害加成（光环按塔逐个生效，所以在结算处统一乘一次）
+        if src is not None:
+            dmg_buff = getattr(src, "damage_buff", 0)
+            if dmg_buff:
+                damage = damage * (1.0 + dmg_buff / 100.0)
 
         if ignore_armor:
             # 真实伤害：抗性与增伤乘区都不参与
@@ -572,25 +611,71 @@ class Enemy(pygame.sprite.Sprite):
             buff_start_x += assets.BUFF_SIZE
 
 
+# ==========================================================================================
+#  伤害飘字的渲染缓存
+#  后期同屏几百条飘字时，font.render + smoothscale + 每帧 surface.copy() 是主要开销。
+#  · 按 (文本, 颜色, 缩放) 缓存排版结果，重复数值直接复用同一张表面
+#  · 透明度分 8 档，只在该档变化时才复制一次表面（原来每帧都复制）
+# ==========================================================================================
+_TEXT_RENDER_CACHE = {}
+_TEXT_RENDER_CACHE_MAX = 384
+_TEXT_ALPHA_STEPS = 8
+
+
+def _render_damage_surface(text, color, scale):
+    key = (text, color, scale)
+    surf = _TEXT_RENDER_CACHE.get(key)
+    if surf is not None:
+        return surf
+    surf = assets.font_damage.render(text, True, color)
+    if scale != 1.0:
+        surf = pygame.transform.smoothscale(
+            surf, (max(1, int(surf.get_width() * scale)),
+                   max(1, int(surf.get_height() * scale))))
+    if len(_TEXT_RENDER_CACHE) >= _TEXT_RENDER_CACHE_MAX:
+        # dict 按插入顺序，丢掉最早的一条即可（不用完整 LRU，够用且便宜）
+        _TEXT_RENDER_CACHE.pop(next(iter(_TEXT_RENDER_CACHE)), None)
+    _TEXT_RENDER_CACHE[key] = surf
+    return surf
+
+
 class DamageText(pygame.sprite.Sprite):
     def __init__(self, text, x, y, color=RED, duration=45, speed_y=-2, scale=1.0, speed_x=0.0):
         super().__init__()
-        self.text = str(text)
+        self.value = text
         self.color = color
+        self.scale = scale
         self.duration = duration
         self.timer = 0
         self.speed_y = speed_y
         self.speed_x = speed_x
         self.pos_x = float(x)
         self.pos_y = float(y)
+        self.is_boss = False
+        self.born = 0
 
-        self.base_image = assets.font_damage.render(self.text, True, self.color)
-        new_w = int(self.base_image.get_width() * scale)
-        new_h = int(self.base_image.get_height() * scale)
-        self.base_image = pygame.transform.smoothscale(self.base_image, (new_w, new_h))
-
-        self.image = self.base_image.copy()
+        self.text = stats.format_damage(text) if (isinstance(text, int)
+                                                  and text >= 100_000_000) else str(text)
+        self.base_image = _render_damage_surface(self.text, color, scale)
+        # 满不透明时直接复用缓存表面（绝不修改它），省掉一次 copy
+        self.image = self.base_image
+        self._alpha_bucket = _TEXT_ALPHA_STEPS
         self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
+
+    def add_value(self, extra):
+        """把新的一笔伤害并入这条飘字（合并显示，保留总伤害数值）。"""
+        if not isinstance(self.value, (int, float)) or not isinstance(extra, (int, float)):
+            return False
+        total = self.value + extra
+        self.value = total
+        if isinstance(total, int) and total >= 100_000_000:
+            self.text = stats.format_damage(total)
+        else:
+            self.text = str(total)
+        self.base_image = _render_damage_surface(self.text, self.color, self.scale)
+        self._alpha_bucket = -1          # 强制下一次 update 重新套透明度
+        self.rect = self.base_image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
+        return True
 
     def update(self):
         self.timer += 1
@@ -607,9 +692,17 @@ class DamageText(pygame.sprite.Sprite):
             self.kill()
             return
 
+        # 透明度分档：只有跨档时才复制一次表面，不再是每帧复制
         alpha = max(0, 255 - int(255 * self.timer / self.duration))
-        self.image = self.base_image.copy()
-        self.image.set_alpha(alpha)
+        bucket = alpha * _TEXT_ALPHA_STEPS // 255
+        if bucket != self._alpha_bucket:
+            self._alpha_bucket = bucket
+            if bucket >= _TEXT_ALPHA_STEPS:
+                self.image = self.base_image
+            else:
+                img = self.base_image.copy()
+                img.set_alpha(int(255 * bucket / _TEXT_ALPHA_STEPS))
+                self.image = img
 
         if self.timer >= self.duration:
             self.kill()

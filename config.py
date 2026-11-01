@@ -115,7 +115,7 @@ class Enchantment(Enum):
     DENSE = 9
     WIND_BURST = 10
     POISON_CONTRACT = 11
-    BURN = 12
+    TIME_REWIND = 12   # 原 BURN（高温燃烧），已替换为「时光倒流」
     BLAZE_POWDER = 13
     FROZEN_DEEP = 14
     DRAGON_LEGEND = 15
@@ -147,7 +147,7 @@ ENCHANTMENT_DATA = {
     Enchantment.DENSE: {"name": "致密V", "desc": "重锤获得距离增伤，伤害+5/px", "cost": 300},
     Enchantment.WIND_BURST: {"name": "风爆", "desc": "蓄风印记爆炸伤害固定为5000点", "cost": 200},
     Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "同时存在剧毒环刃与九头蛇毒箭时，中毒敌人被击败有10%概率爆炸，对周围敌人造成(基础毒伤+中毒层数)×18的伤害并击晕5秒，基础毒伤永久+1", "cost": 400},
-    Enchantment.BURN: {"name": "高温燃烧", "desc": "燃烧伤害翻倍", "cost": 200},
+    Enchantment.TIME_REWIND: {"name": "时光倒流", "desc": "同时存在时间洪流怀表与时序僭越之钟时，每 60 秒全场敌人沿原路倒退 8 秒（最多退回起点）", "cost": 1600},
     Enchantment.BLAZE_POWDER: {"name": "烈焰粉", "desc": "敌人永远燃烧，燃烧伤害+30%", "cost": 400},
     Enchantment.FROZEN_DEEP: {"name": "冰封深渊", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹冻结时长+0.5秒，冰墙存在时间翻倍", "cost": 400},
     Enchantment.DRAGON_LEGEND: {"name": "龙族传说", "desc": "同时存在冰龙塔、火龙塔、电龙塔时，龙伤害与百分比真实伤害翻倍，且龙移动速度+75%", "cost": 1600},
@@ -157,14 +157,14 @@ ENCHANTMENT_DATA = {
     Enchantment.LAVA: {"name": "岩浆桶", "desc": "每5秒提高1温度，每波开始时重置", "cost": 200},
     Enchantment.TELESCOPE: {"name": "望远镜", "desc": "所有炮塔射程增加1格", "cost": 200},
     Enchantment.PULSE_SHIELD: {"name": "脉冲护盾", "desc": "护盾被击碎后进入脉冲状态8秒，期间免疫所有伤害", "cost": 800},
-    Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，雷神之锤每攻击140次，所有雷盾反击一次并引爆所有蓄风印记", "cost": 1600},
+    Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，雷神之锤每攻击200次，所有雷盾反击一次并引爆所有蓄风印记", "cost": 1600},
     Enchantment.EMBER_REBIRTH: {"name": "余烬重生", "desc": "同时存在满级龙息塔与8座满级核弹塔时，点击龙息塔按Q花费5万金币献祭：塔消失、全场核弹立即冷却齐射，巨型陨石从天而降、着地时对全场敌人造成1000000007伤害。献祭花费逐次翻倍", "cost": 3200},
     Enchantment.WAX: {"name": "蜜脾", "desc": "所有炮塔涂蜡，酸雨将无法破坏炮塔及护盾。酸雨开始后每0.5秒从终点扇形召唤5只蜜蜂，共召唤10次，蜜蜂随后寻敌，撞击敌人后死亡并造成其1%最大生命的毒系伤害", "cost": 400},
     Enchantment.INFINITY_GAUNTLET: {"name": "无限手套", "desc": "鼠标位置将始终附着无限手套，鼠标点击敌人可对其造成各种伤害，伤害 = 攻击力 * 波数 ** 2 * (1 + 对应元素强化 + 均衡强化)", "cost": 1600},
     Enchantment.UNSTABLE_CRYSTAL: {"name": "不稳定水晶", "desc": "TNT类炮塔子弹爆炸有10%概率在周围道路格生成不稳定水晶，敌人碰到后受到其1%最大生命伤害并引发爆炸；核弹/凋零核弹爆炸时全场每个道路格各有10%概率生成", "cost": 1600},
     Enchantment.POWER_V: {"name": "力量V", "desc": "物理伤害+150%；地狱升华之弩对BOSS的百分比伤害提升至6%", "cost": 400},
     Enchantment.LANTERN: {"name": "灯火通明", "desc": "场上存在3座满级星焰提灯时：燃烧伤害*1.5，火系伤害+80%，并永久驱散全场迷雾", "cost": 1000},
-    Enchantment.MASTERPIECE: {"name": "臻品呈现", "desc": "同时存在寒冰盾与神锅时：全局冰系伤害+240%；神锅每攻击140次释放大招，对全场敌人造成61803+500*|温度|伤害，并使其永久获得冰系破甲、冰冻4秒", "cost": 1600},
+    Enchantment.MASTERPIECE: {"name": "臻品呈现", "desc": "同时存在寒冰盾与神锅时：全局冰系伤害+240%；神锅每攻击200次释放大招，对全场敌人造成61803+500*|温度|伤害，并使其永久获得冰系破甲、冰冻4秒", "cost": 1600},
 }
 
 GAUNTLET_ATTACKS = [
@@ -180,7 +180,7 @@ ENCHANTMENT_ORDER = [
     Enchantment.BALANCED, Enchantment.PHYSICAL, Enchantment.ICE, Enchantment.MAGIC,
     Enchantment.FLAME, Enchantment.ELECTRIC,
     Enchantment.WIND, Enchantment.POISON, Enchantment.BOMB, Enchantment.DENSE, Enchantment.WIND_BURST,
-    Enchantment.POISON_CONTRACT, Enchantment.BURN, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
+    Enchantment.POISON_CONTRACT, Enchantment.TIME_REWIND, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
     Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.WITHER_ROSE,
     # 火矢删除后的 20 号空位由望远镜占用（原 19 → 20），21 号起编号不变
     Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.PULSE_SHIELD,
@@ -229,6 +229,9 @@ ICE_NUKE_TEMP_SCALE = 16            # 每点 |温度| 追加的伤害（高温�
 ICE_NUKE_PERCENT = 0.006            # × (等级 - 10) 最大生命，真实伤害
 ICE_NUKE_FREEZE_FRAMES = 4 * 60     # 全场冰冻 4 秒
 ICE_NUKE_TEMP_DROP = 40             # 临时气候修正：额外降温 40 度
+# 同屏核弹冲击波上限。核弹塔往往是一批一批建的，冷却同步 → 会一起开火；
+# 十几个整屏圆盘叠在一起既看不清也极耗性能（每个整屏填充约 1.2ms），这里只保留最新的 4 个。
+NUCLEAR_SHOCKWAVE_LIMIT = 4
 ICE_NUKE_TEMP_FRAMES = 8 * 60       # 降温持续 8 秒
 
 # ==========================================================================================
@@ -337,13 +340,33 @@ ICE_BROKEN_RESIST_DOWN = 1.0     # 冰系破甲：冰系抗性 -100 个百分点
 
 # 「臻品呈现」附魔
 MASTERPIECE_ICE_BONUS = 240      # 冰系伤害 +240%（加算，百分点）
-RESONANCE_ATTACKS = 140          # 雷神之锤每攻击 N 次触发一次共振风暴
-MASTERPIECE_ATTACKS = 140        # 神锅每攻击 N 次释放大招
+RESONANCE_ATTACKS = 200          # 雷神之锤每攻击 N 次触发一次共振风暴
+MASTERPIECE_ATTACKS = 200        # 神锅每攻击 N 次释放大招
 MASTERPIECE_DAMAGE = 61803       # 大招基础伤害
 MASTERPIECE_TEMP_MULT = 500      # 大招温度系数：伤害 = 61803 + 500 * |温度|
 MASTERPIECE_FREEZE_FRAMES = 4 * 60   # 大招冰冻 4 秒
 ULTIMATE_VIDEO_ZOOM = 1.15       # 大招动画放大倍数（>1 = 比全屏更大，裁掉右下角 UID）
 ULTIMATE_VIDEO_FPS = 30
+
+
+# ==========================================================================================
+#  时间塔（TowerType.TIME = 10）
+#  三阶两个分支：
+#    分支一 时间洪流怀表（10-3-1）：光环内攻速 +等级%（金矿产量同步 +等级%）
+#    分支二 时序僭越之钟（10-3-2）：光环内伤害 +等级%，不再提供攻速
+#  光环强度统一取「塔等级」，Lv11 = 11%、Lv15 = 15%
+# ==========================================================================================
+TIME_AURA_RANGE = {1: 192, 2: 320, 3: 448}   # 阶级 → 光环半边长（3x3 / 5x5 / 7x7）
+TIME_DAMAGE_BRANCH = 2                        # 提供伤害加成的三阶分支号
+
+# 「时光倒流」附魔（原「高温燃烧」位置，编号 12）
+# 条件：时间洪流怀表（分支一）+ 时序僭越之钟（分支二）同时在场。
+# 这两座都是三阶形态，所以两座都必须至少 Lv11（Lv11 以下叫时钟 / 加速火把，不算）
+TIME_REWIND_COST = 1600
+TIME_REWIND_MIN_LEVEL = 11       # 三阶门槛：两座都要 Lv11+
+TIME_REWIND_COOLDOWN = 60 * 60   # 每 60 秒触发一次
+TIME_REWIND_DURATION = 8 * 60    # 倒退持续 8 秒
+TIME_REWIND_CLOCK_Y = 300        # 时钟 UI 的中心 y（屏幕中间偏上）
 
 
 # ==========================================================================================
@@ -571,6 +594,19 @@ FINAL_BOSS_METEOR_DAMAGE = 1000000007
 UNSTABLE_CRYSTAL_SIZE = TILE_SIZE
 # 最终 BOSS 同屏伤害飘字上限（超出时移除最旧的，避免糊成一团）
 BOSS_DAMAGE_TEXT_LIMIT = 12
+
+# ------------------------------------------------------------------------------------------
+#  伤害飘字的性能约束
+#  后期子弹海时每秒可能产生上千条飘字，每条都要 render + 每帧 copy 一张表面，
+#  是掉帧的主要来源。这里做三档控制：
+#    1) 活跃数量超过 MERGE_THRESHOLD 后，同一格子内的飘字开始合并（数值累加）
+#    2) 合并后仍超过 HARD_LIMIT，就丢弃最旧的一条
+#    3) 渲染结果按 (文本, 颜色, 缩放) 缓存，重复数值不再重新排版
+# ------------------------------------------------------------------------------------------
+DAMAGE_TEXT_MERGE_THRESHOLD = 90   # 活跃飘字超过这个数才开始合并（前期完全不受影响）
+DAMAGE_TEXT_HARD_LIMIT = 260       # 同屏飘字硬上限
+DAMAGE_TEXT_MERGE_FRAMES = 8       # 同一格子内的飘字在这个帧数内视为同一批，可合并
+DAMAGE_TEXT_MERGE_CELL = 64        # 合并判定用的网格边长（像素）
 
 FINAL_BOSS_PHASE_NAMES = [
     "编译 COMPILE",

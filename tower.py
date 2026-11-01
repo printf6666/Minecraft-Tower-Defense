@@ -31,7 +31,7 @@ MAX_BRANCH = {
     TowerType.WIND:       {1: 1, 2: 1, 3: 2},
     TowerType.POISON:     {1: 2, 2: 2, 3: 3},
     TowerType.BOMB:       {1: 1, 2: 5, 3: 3},
-    TowerType.TIME:       {1: 1, 2: 1, 3: 1},
+    TowerType.TIME:       {1: 1, 2: 1, 3: 2},
 }
 
 
@@ -65,6 +65,9 @@ def tower_sprite_path(ttype, level, **br):
     elif ttype == TowerType.MAGIC:
         # 魔法塔三阶有 3 个分支
         b = br.get("teleport_branch", 1)
+    elif ttype == TowerType.TIME and stage == 3:
+        # 时间塔三阶有 2 个分支：怀表（攻速）/ 僭越之钟（伤害）
+        b = br.get("time_branch", 1)
     elif ttype == TowerType.BOMB:
         if stage == 2:
             sub = br.get("bomb_subtype", BombSubType.SNOW)
@@ -114,6 +117,7 @@ class Tower(pygame.sprite.Sprite):
         self.trident_branch = 1
         self.teleport_branch = 1
         self.shield_branch = 1
+        self.time_branch = 1            # 时间塔三阶：1 怀表（攻速）/ 2 僭越之钟（伤害）
         self.ice_explosion_visual = 0
         self.wind_storm_visual = 0      # 雷神之锤命中特效隔次播放计数器
         self.crouch_energy = 0          # 卧龙：八卦阵能量（满 100 放一座）
@@ -121,6 +125,7 @@ class Tower(pygame.sprite.Sprite):
 
         self.attack_speed_buff = 0
         self.production_buff = 0.0
+        self.damage_buff = 0            # 时序僭越之钟光环：本塔伤害 +N%
         self.disabled_timer = 0
         self.charm_timer = 0            # 被 BOSS 魅惑的剩余帧数：攻击变成等量治疗
         # 阿尔法「群系侵蚀-圣火」：没有时限，转阶段 / 换波 / BOSS 死亡时统一熄灭。
@@ -382,6 +387,7 @@ class Tower(pygame.sprite.Sprite):
             shield_branch=self.shield_branch,
             poison_branch=self.poison_branch,
             teleport_branch=self.teleport_branch,
+            time_branch=self.time_branch,
             bomb_branch=self.bomb_branch,
             bomb_subtype=getattr(self, "bomb_subtype", BombSubType.SNOW),
         )
@@ -598,10 +604,8 @@ class Tower(pygame.sprite.Sprite):
                 self.game.dragons.add(dragon)
 
         if self.type == TowerType.MAGIC and self.teleport_branch in (2, 3):
-            if self.level >= 11:
-                directions = [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1)]
-            else:
-                directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            # 三阶（无尽催化剂 / 金毒马铃薯）也只发射 4 发，不再八向散射
+            directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
             bullets = []
             for dx, dy in directions:
                 bullet = Bullet(
@@ -652,7 +656,7 @@ class Tower(pygame.sprite.Sprite):
                            self.holy_pot_damage(), self.game)
         # 「臻品呈现」：场上所有神锅共用同一个计数，凑满 MASTERPIECE_ATTACKS 次就放大招。
         # 这里刻意对齐雷神之锤的 resonance_counter —— 按塔各算各的话，
-        # 一座锅要自己打满 120 次（1 秒 1 发 = 2 分钟）才有反应，铺了 9 座也还是 2 分钟，
+        # 一座锅要自己打满 MASTERPIECE_ATTACKS 次（1 秒 1 发 ≈ 3 分钟）才有反应，铺了 9 座也还是 3 分钟，
         # 体感就是「打了半天无事发生」。
         if self.game.masterpiece_active():
             self.game.masterpiece_counter += 1
@@ -1204,8 +1208,15 @@ class NuclearMissile(pygame.sprite.Sprite):
                 self.game.damage_source_tower = prev_source
             self.game.damage_element = prev_element
             self.game.mushroom_explosions.append(explosion)
+            # 蘑菇云是 800×1000 的大图，一张就要 ~2.5ms；同步开火的核弹塔会叠好几张，
+            # 而且全都画在地图正中、互相完全遮挡，多留没有意义
+            while len(self.game.mushroom_explosions) > NUCLEAR_SHOCKWAVE_LIMIT:
+                self.game.mushroom_explosions.pop(0)
             shockwave = NuclearShockwave(MAP_CENTER_X, MAP_CENTER_Y, self.game, self.bomb_branch)
             self.game.shockwave_effects.append(shockwave)
+            # 冷却同步的核弹塔会同时开火，十几个整屏圆盘叠一起既糊又卡，只留最新的几个
+            while len(self.game.shockwave_effects) > NUCLEAR_SHOCKWAVE_LIMIT:
+                self.game.shockwave_effects.pop(0)
             self.game.spawn_crystals_fullmap()
             self.kill()
             return

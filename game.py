@@ -96,6 +96,8 @@ class Game:
         self.towers = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
         self.damage_texts = pygame.sprite.Group()
+        # 飘字合并用的「格子 → 最新一条」索引（只为性能存在，空了也无所谓）
+        self._text_merge_map = {}
         self.dragons = pygame.sprite.Group()
         self.damage_stats = stats.DamageStats()
         self.damage_element = None
@@ -144,6 +146,9 @@ class Game:
         self.thunderstorm_timer = 0
         self.resonance_counter = 0
         self.masterpiece_counter = 0     # 臻品呈现：场上所有神锅共用的攻击计数
+        # 时光倒流：倒计时（帧）与生效剩余帧数。只有「满级怀表 + 满级僭越之钟」同时在场才走表。
+        self.time_rewind_timer = TIME_REWIND_COOLDOWN
+        self.time_rewind_active = 0
         self.sacrifices = 0
         self.meteors = []
         self.bees = []
@@ -505,6 +510,10 @@ class Game:
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
                         self.selected_tower.shield_branch = self.selected_tower.shield_branch % 3 + 1
                         self.selected_tower.update_sprite()
+                    elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.TIME and self.selected_tower.level >= 11:
+                        # 三阶两个分支：时间洪流怀表（攻速）→ 时序僭越之钟（伤害）
+                        self.selected_tower.time_branch = self.selected_tower.time_branch % 2 + 1
+                        self.selected_tower.update_sprite()
                     elif event.key == pygame.K_q and self.selected_tower and self.ember_rebirth_active():
                         if self.selected_tower.type == TowerType.FLAME and self.selected_tower.level == 15 and self.selected_tower.flame_branch == 1:
                             self.sacrifice_tower()
@@ -678,24 +687,28 @@ class Game:
         for t in self.towers:
             t.attack_speed_buff = 0
             t.production_buff = 0.0
+            t.damage_buff = 0
         gold_ps = 0.0
         for tt in self.towers:
             if tt.type != TowerType.TIME:
                 continue
-            n = tt.level * ((tt.level + 4) // 5)
-            if tt.level <= 5:
-                half = 192
-            elif tt.level <= 10:
-                half = 320
-            else:
-                half = 448
+            # 光环强度 = 塔等级（Lv11 给 11%，Lv15 给 15%）。
+            # 分支一：攻速 + 金矿产量；分支二：伤害加成（不给攻速）。
+            n = tt.level
+            stage = 3 if tt.level >= 11 else (2 if tt.level >= 6 else 1)
+            half = TIME_AURA_RANGE[stage]
+            is_damage_aura = (stage == 3 and tt.time_branch == TIME_DAMAGE_BRANCH)
             cx, cy = tt.rect.center
             for other in self.towers:
                 if other is tt:
                     continue
                 ox, oy = other.rect.center
                 if abs(ox - cx) <= half and abs(oy - cy) <= half:
-                    other.attack_speed_buff += n
+                    if is_damage_aura:
+                        other.damage_buff += n
+                    else:
+                        other.attack_speed_buff += n
+                    # 金矿产量是时间塔的通用光环，两个分支都保留
                     if other.type == TowerType.PRODUCTION:
                         other.production_buff += n
         for t in self.towers:
@@ -711,13 +724,39 @@ class Game:
             if len(alive) >= BOSS_DAMAGE_TEXT_LIMIT:
                 oldest = max(alive, key=lambda t: t.timer)
                 oldest.kill()
-        # 超长数字（1 亿以上）压缩成「x.xx亿」，否则单条飘字能吃掉四分之一屏宽。
-        if isinstance(value, int) and value >= 100_000_000:
-            value = stats.format_damage(value)
+        else:
+            # —— 性能控制：后期子弹海时同屏飘字能到上千条 ——
+            count = len(self.damage_texts)
+            if count >= DAMAGE_TEXT_MERGE_THRESHOLD:
+                # 1) 同一格子、同一批次的飘字合并成一条（数值累加，总量不丢）
+                cell = (int(pos[0]) // DAMAGE_TEXT_MERGE_CELL,
+                        int(pos[1]) // DAMAGE_TEXT_MERGE_CELL)
+                key = (cell, color, scale)
+                merged = self._text_merge_map.get(key)
+                if merged is not None and merged.alive() \
+                        and self.game_time - merged.born <= DAMAGE_TEXT_MERGE_FRAMES:
+                    if merged.add_value(value):
+                        return
+            if count >= DAMAGE_TEXT_HARD_LIMIT:
+                # 2) 还是太多：丢最旧的一条。pygame 的 Group 内部是有序 dict，
+                #    第一个就是最早加进来的，不用遍历全部（每帧几十次调用，差很多）
+                oldest = next(iter(self.damage_texts.spritedict), None)
+                if oldest is not None:
+                    oldest.kill()
+        # 超长数字（1 亿以上）由 DamageText 内部压缩成「x.xx亿」，这里保留原始数值
+        # （合并飘字需要能对数值做加法，不能提前变成字符串）
         text = DamageText(value, pos[0], pos[1], color=color, scale=scale,
                           speed_x=speed_x, speed_y=speed_y)
         text.is_boss = boss
+        text.born = self.game_time
         self.damage_texts.add(text)
+        if not boss:
+            cell = (int(pos[0]) // DAMAGE_TEXT_MERGE_CELL,
+                    int(pos[1]) // DAMAGE_TEXT_MERGE_CELL)
+            if len(self._text_merge_map) > 2048:
+                # 长期运行后格子×颜色×缩放可能累积，定期清一次（丢了只是少合并几帧）
+                self._text_merge_map.clear()
+            self._text_merge_map[(cell, color, scale)] = text
 
     def save_game(self):
         try:
@@ -729,7 +768,7 @@ class Game:
                     "ice_branch": t.ice_branch, "flame_branch": t.flame_branch,
                     "poison_branch": t.poison_branch, "bomb_branch": t.bomb_branch,
                     "trident_branch": t.trident_branch, "teleport_branch": t.teleport_branch,
-                    "shield_branch": t.shield_branch,
+                    "shield_branch": t.shield_branch, "time_branch": t.time_branch,
                     "bomb_subtype": t.bomb_subtype.value if hasattr(t, 'bomb_subtype') and t.bomb_subtype else None,
                     "is_nuclear": getattr(t, 'is_nuclear', False),
                     "has_shield": getattr(t, 'has_shield', False),
@@ -771,6 +810,7 @@ class Game:
         self.towers.empty()
         self.bullets.empty()
         self.damage_texts.empty()
+        self._text_merge_map.clear()
         self.dragons.empty()
         if getattr(self, "damage_stats", None) is None:
             self.damage_stats = stats.DamageStats()
@@ -817,6 +857,9 @@ class Game:
         self.thunderstorm_timer = 0
         self.resonance_counter = 0
         self.masterpiece_counter = 0     # 臻品呈现：场上所有神锅共用的攻击计数
+        # 时光倒流：倒计时（帧）与生效剩余帧数。只有「满级怀表 + 满级僭越之钟」同时在场才走表。
+        self.time_rewind_timer = TIME_REWIND_COOLDOWN
+        self.time_rewind_active = 0
         self.sacrifices = 0
         self.meteors = []
         self.bees = []
@@ -1210,6 +1253,25 @@ class Game:
                              for t in self.towers)
         return has_pot and has_ice_shield
 
+    def time_rewind_available(self):
+        """「时光倒流」的生效条件：持有该附魔，且场上同时有怀表（分支一）与僭越之钟（分支二）。
+
+        这两个名字都是三阶形态，所以两座都必须至少 Lv11 —— Lv11 以下叫时钟 / 加速火把，不算。
+        """
+        if Enchantment.TIME_REWIND not in self.enchantments:
+            return False
+        has_watch = has_clock = False
+        for t in self.towers:
+            if t.type != TowerType.TIME or t.level < TIME_REWIND_MIN_LEVEL:
+                continue
+            if t.time_branch == 1:
+                has_watch = True
+            elif t.time_branch == 2:
+                has_clock = True
+            if has_watch and has_clock:
+                return True
+        return has_watch and has_clock
+
     def trigger_masterpiece_ultimate(self):
         """「臻品呈现」大招起手：先播动画，伤害等动画放完再结算。
 
@@ -1297,12 +1359,10 @@ class Game:
         return 1.0 + bonus / 100.0
 
     def burn_tick_damage(self, base):
-        """燃烧每跳的实际伤害 = 基础 × 烈焰粉 × 高温燃烧 × 灯火通明 × (1 + 火系伤害加成)。"""
+        """燃烧每跳的实际伤害 = 基础 × 烈焰粉 × 灯火通明 × (1 + 火系伤害加成)。"""
         dmg = base
         if Enchantment.BLAZE_POWDER in self.enchantments:
             dmg *= 1.3
-        if Enchantment.BURN in self.enchantments:
-            dmg *= 2
         if self.lantern_active():
             dmg *= LANTERN_BURN_MULT
         dmg *= self.get_element_damage_multiplier("fire")
@@ -1709,6 +1769,16 @@ class Game:
                 if self.climate_temp_timer <= 0:
                     self.temperature -= self.climate_temp_delta
                     self.climate_temp_delta = 0
+
+            # 「时光倒流」：满级怀表 + 满级僭越之钟同时在场的 60 秒循环
+            if self.time_rewind_active > 0:
+                self.time_rewind_active -= 1
+            elif self.time_rewind_available():
+                self.time_rewind_timer -= 1
+                if self.time_rewind_timer <= 0:
+                    self.time_rewind_timer = TIME_REWIND_COOLDOWN
+                    self.time_rewind_active = TIME_REWIND_DURATION
+                    audio.play_sound(assets.teleport_sound)
 
             for enemy in self.enemies:
                 reached_end = enemy.update()
@@ -2117,7 +2187,7 @@ class Game:
                 "ice_branch": t.ice_branch, "flame_branch": t.flame_branch,
                 "poison_branch": t.poison_branch, "bomb_branch": t.bomb_branch,
                 "trident_branch": t.trident_branch, "teleport_branch": t.teleport_branch,
-                "shield_branch": t.shield_branch,
+                "shield_branch": t.shield_branch, "time_branch": t.time_branch,
                 "bomb_subtype": t.bomb_subtype.value if getattr(t, "bomb_subtype", None) else None,
                 "is_nuclear": getattr(t, "is_nuclear", False),
                 "has_shield": getattr(t, "has_shield", False),
@@ -2138,16 +2208,18 @@ class Game:
             "damage_stats": self.damage_stats.to_dict(),
             "towers": towers_data,
             "wave": {
-                "current_wave": wm.current_wave,
-                "enemies_spawned": wm.enemies_spawned,
-                "enemies_to_spawn": wm.enemies_to_spawn,
-                "gold_armored_count": wm.gold_armored_count,
-                "gold_armored_spawned": wm.gold_armored_spawned,
-                "ghost_count": wm.ghost_count,
-                "ghost_spawned": wm.ghost_spawned,
-                "spawn_delay": wm.spawn_delay,
-                "spawn_timer": wm.spawn_timer,
-                "wave_timer": wm.wave_timer,
+                # 用 getattr 兜底：快照可能在任何时刻被要求（例如还没开波就点了重来），
+                # 少一个字段不应该把整个重来流程炸掉
+                "current_wave": getattr(wm, "current_wave", 1),
+                "enemies_spawned": getattr(wm, "enemies_spawned", 0),
+                "enemies_to_spawn": getattr(wm, "enemies_to_spawn", 0),
+                "gold_armored_count": getattr(wm, "gold_armored_count", 0),
+                "gold_armored_spawned": getattr(wm, "gold_armored_spawned", 0),
+                "ghost_count": getattr(wm, "ghost_count", 0),
+                "ghost_spawned": getattr(wm, "ghost_spawned", 0),
+                "spawn_delay": getattr(wm, "spawn_delay", 0),
+                "spawn_timer": getattr(wm, "spawn_timer", 0),
+                "wave_timer": getattr(wm, "wave_timer", 0),
             },
         }
 
@@ -2169,6 +2241,7 @@ class Game:
         t.trident_branch = td.get("trident_branch", 1)
         t.teleport_branch = td.get("teleport_branch", 1)
         t.shield_branch = td.get("shield_branch", 1)
+        t.time_branch = td.get("time_branch", 1)
         if hasattr(t, "bomb_subtype"):
             sv = td.get("bomb_subtype")
             t.bomb_subtype = BombSubType(sv) if sv is not None else BombSubType.SNOW
@@ -2325,6 +2398,7 @@ class Game:
         self.bullets.empty()
         self.dragons.empty()
         self.damage_texts.empty()
+        self._text_merge_map.clear()
         for attr in ("dragon_breath_pools", "lightning_effects", "wind_explosions",
                      "endless_greed_explosions", "ice_explosions", "hell_rays",
                      "resonance_storms", "poison_splashes", "wither_splashes",
@@ -2353,6 +2427,9 @@ class Game:
         self._lantern_towers = 0
         self.ultimate_video = None
         self.masterpiece_pending = False
+        # 时光倒流：重来本波时冷却与生效状态一并归零，避免带着「倒退中」重开
+        self.time_rewind_timer = TIME_REWIND_COOLDOWN
+        self.time_rewind_active = 0
 
         # 3) 炮塔按快照重建（本波新建 / 升级 / 出售的塔全部作废）
         self.towers.empty()
@@ -2416,6 +2493,7 @@ class Game:
         self.towers.empty()
         self.bullets.empty()
         self.damage_texts.empty()
+        self._text_merge_map.clear()
         self.damage_stats.reset()
         self.damage_element = None
         # 当前正在结算伤害的炮塔（供「魅惑 → 治疗」判定用，平时为 None）
@@ -2459,6 +2537,9 @@ class Game:
         self.thunderstorm_timer = 0
         self.resonance_counter = 0
         self.masterpiece_counter = 0     # 臻品呈现：场上所有神锅共用的攻击计数
+        # 时光倒流：倒计时（帧）与生效剩余帧数。只有「满级怀表 + 满级僭越之钟」同时在场才走表。
+        self.time_rewind_timer = TIME_REWIND_COOLDOWN
+        self.time_rewind_active = 0
         self.sacrifices = 0
         self.meteors = []
         self.bees = []

@@ -5,7 +5,9 @@ import stats
 from config import *
 from tower import TowerType
 from enemy import EnemyType
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash
+from effects import (WindExplosion, IceExplosion, DragonBreathPool, LightningEffect,
+                     HorizontalLightningEffect, PoisonSplash, TNTExplosion,
+                     MushroomExplosion, NuclearShockwave, WitherSplash, draw_shockwaves)
 
 
 # ==========================================================================================
@@ -21,6 +23,56 @@ SHOP_DESC_PAD = 24           # 最后一行到卡片底边的留白
 SHOP_PANEL_W = 1200
 
 _shop_desc_lines = None
+
+# ==========================================================================================
+#  全屏色调遮罩
+#  BOSS 闪屏 / 停时 / 酸雨 / 暂停都会用。每帧新建一张 1920x1080 的 SRCALPHA 表面再
+#  fill 要 3ms 以上，而且几种遮罩可能同时生效（叠 3 层就是 10ms）。这里按颜色缓存一张
+#  不透明表面，用 set_alpha 控制透明度，blit 一次约 1ms。
+# ==========================================================================================
+_tint_surfaces = {}
+
+
+def tint_surface(color):
+    surf = _tint_surfaces.get(color)
+    if surf is None:
+        # 一张整屏表面 8MB，最多缓存 4 种颜色（实际只用到黑 / 蓝 / 粉 / 绿）
+        if len(_tint_surfaces) >= 4:
+            _tint_surfaces.clear()
+        surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        surf.fill(color)
+        _tint_surfaces[color] = surf
+    return surf
+
+
+def blit_tint(screen, color, alpha):
+    surf = tint_surface(color)
+    surf.set_alpha(max(0, min(255, alpha)))
+    screen.blit(surf, (0, 0))
+
+# 炮塔等级数字缓存：每帧每塔 render 一次在塔多时是实打实的开销，等级只有 1~15 种
+_level_text_cache = {}
+
+
+def level_text(level):
+    surf = _level_text_cache.get(level)
+    if surf is None:
+        surf = assets.font_tower_level.render(str(level), True, YELLOW)
+        _level_text_cache[level] = surf
+    return surf
+
+
+# 命令方块只有「亮 / 暗」两档闪烁，预先做好两张图，避免每帧 copy + set_alpha
+_command_block_imgs = {}
+
+
+def _command_block_img(alpha):
+    img = _command_block_imgs.get(alpha)
+    if img is None:
+        img = assets.command_block_img.copy()
+        img.set_alpha(alpha)
+        _command_block_imgs[alpha] = img
+    return img
 
 
 def shop_desc_line_count():
@@ -130,7 +182,7 @@ def get_tower_info(game, tower):
         if tower.teleport_branch == 2:
             if tower.level >= 11:
                 info = [f"无尽催化剂 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
-                        f"八方向散射", f"必定施加随机永久debuff", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+                        f"四方向散射", f"必定施加随机永久debuff", f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
             elif tower.level >= 6:
                 poison_stacks = POTATO_POISON_STACKS
                 info = [f"毒马铃薯 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}",
@@ -140,7 +192,7 @@ def get_tower_info(game, tower):
                         f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
         elif tower.teleport_branch == 3:
             info = [f"金毒马铃薯 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}+金币1%",
-                    f"八方向散射", f"2%施加{GOLD_POTATO_POISON_STACKS.get(tower.level, 32000)}层中毒",
+                    f"四方向散射", f"2%施加{GOLD_POTATO_POISON_STACKS.get(tower.level, 32000)}层中毒",
                     f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
         else:
             if tower.level >= 11:
@@ -249,7 +301,12 @@ def get_tower_info(game, tower):
                     f"中毒层数:{tower.level}层/次", "按 R 切换分支", f"攻击间隔:{tower.fire_rate / 60}s"]
     elif tower.type == TowerType.TIME:
         if tower.level >= 11:
-            info = [f"时间洪流怀表 Lv{tower.level}", f"攻速加成:{tower.level}%", f"范围:7x7"]
+            if tower.time_branch == 2:
+                info = [f"时序僭越之钟 Lv{tower.level}", f"伤害加成:{tower.level}%",
+                        f"范围:7x7", "按 R 切换分支"]
+            else:
+                info = [f"时间洪流怀表 Lv{tower.level}", f"攻速加成:{tower.level}%",
+                        f"范围:7x7", "按 R 切换分支"]
         elif tower.level >= 6:
             info = [f"加速火把 Lv{tower.level}", f"攻速加成:{tower.level}%", f"范围:5x5"]
         else:
@@ -363,9 +420,7 @@ class UIManager:
             wall.draw(self.game.screen)
         for cb in self.game.command_blocks:
             alpha = 255 if (cb['timer'] // 30) % 2 == 0 else 128
-            img = assets.command_block_img.copy()
-            img.set_alpha(alpha)
-            self.game.screen.blit(img, (cb['x'] * TILE_SIZE, cb['y'] * TILE_SIZE))
+            self.game.screen.blit(_command_block_img(alpha), (cb['x'] * TILE_SIZE, cb['y'] * TILE_SIZE))
         self.game.enemies.draw(self.game.screen)
         # 不稳定水晶压在子弹下层，避免挡住弹道
         for crystal in self.game.crystals:
@@ -375,7 +430,7 @@ class UIManager:
             dragon.draw(self.game.screen)
         self.draw_boss_effects()
         for tower in self.game.towers:
-            self.game.screen.blit(assets.font_tower_level.render(str(tower.level), True, YELLOW),
+            self.game.screen.blit(level_text(tower.level),
                                  (tower.x * TILE_SIZE + 85, tower.y * TILE_SIZE + 90))
             if getattr(tower, 'has_shield', False):
                 self.game.screen.blit(assets.shield_img,
@@ -416,7 +471,11 @@ class UIManager:
         if self.game.fog_visible:
             gw = GRID_WIDTH * TILE_SIZE
             gh = GRID_HEIGHT * TILE_SIZE
-            s = pygame.Surface((gw, gh), pygame.SRCALPHA)
+            # 复用同一张雾层表面（每帧新建 8MB 表面 + 全量 fill 是实打实的 3ms）
+            s = getattr(self, "_fog_surface", None)
+            if s is None or s.get_size() != (gw, gh):
+                s = pygame.Surface((gw, gh), pygame.SRCALPHA)
+                self._fog_surface = s
             if self.game.weather == Weather.ENDLESS_NIGHT:
                 s.fill((0, 0, 0, 255))
             else:
@@ -452,8 +511,7 @@ class UIManager:
             explosion.draw(self.game.screen)
         for explosion in self.game.creeper_explosions:
             explosion.draw(self.game.screen)
-        for sw in self.game.shockwave_effects:
-            sw.draw(self.game.screen)
+        draw_shockwaves(self.game.screen, self.game.shockwave_effects)
         for meteor in self.game.meteors:
             meteor.draw(self.game.screen)
         for explosion in self.game.mushroom_explosions:
@@ -468,6 +526,7 @@ class UIManager:
 
         self.draw_boss_screen_fx()
         self.draw_ui()
+        self.draw_time_rewind()
         self.draw_boss_hud()
         self.draw_herobrine_health_bar()
 
@@ -657,62 +716,78 @@ class UIManager:
         return pygame.Rect(panel.x + 40, panel.bottom - 90, 320, 60)
 
     def draw_shop(self):
+        """商店界面整屏缓存。
+
+        原来每帧都要重排 80 多段文字 + 铺一张全屏半透明遮罩，纯站着不动也要
+        9~30ms。这里把「遮罩 + 面板 + 所有卡片」画进一张离屏表面，只在内容
+        （商品列表 / 绿宝石数 / 已购附魔）变化时重建，其余帧只做一次 blit。
+        """
         pygame.mouse.set_visible(True)
+        sig = (tuple(self.game.shop_offers), self.game.emeralds,
+               tuple(sorted(e.value for e in self.game.enchantments)))
+        cache = getattr(self, "_shop_cache", None)
+        if cache is None or cache[0] != sig:
+            surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            self._draw_shop_to(surf)
+            cache = (sig, surf)
+            self._shop_cache = cache
+        self.game.screen.blit(cache[1], (0, 0))
+
+    def _draw_shop_to(self, screen):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
-        self.game.screen.blit(overlay, (0, 0))
+        screen.blit(overlay, (0, 0))
         panel = self.get_shop_panel_rect()
-        pygame.draw.rect(self.game.screen, (45, 45, 45), panel)
-        pygame.draw.rect(self.game.screen, WHITE, panel, 4)
+        pygame.draw.rect(screen, (45, 45, 45), panel)
+        pygame.draw.rect(screen, WHITE, panel, 4)
         title = assets.font_large.render("流浪商人商店", True, WHITE)
-        self.game.screen.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 20))
+        screen.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 20))
         emerald_text = assets.font_medium.render(f"绿宝石:{self.game.emeralds}", True, GREEN)
-        self.game.screen.blit(emerald_text, (panel.right - emerald_text.get_width() - 30, panel.y + 30))
+        screen.blit(emerald_text, (panel.right - emerald_text.get_width() - 30, panel.y + 30))
 
         if assets.trader_img:
             tw, th = assets.trader_img.get_size()
             tx = panel.right + 40
             ty = panel.y + (panel.height - th) // 2
-            pygame.draw.rect(self.game.screen, WHITE, (tx - 6, ty - 6, tw + 12, th + 12), 3)
-            self.game.screen.blit(assets.trader_img, (tx, ty))
+            pygame.draw.rect(screen, WHITE, (tx - 6, ty - 6, tw + 12, th + 12), 3)
+            screen.blit(assets.trader_img, (tx, ty))
 
         for rect, ench in self.get_shop_slots():
             ench_data = ENCHANTMENT_DATA[ench]
-            cnt = self.game.enchantments.count(ench)
             affordable = self.game.emeralds >= ench_data["cost"]
-            pygame.draw.rect(self.game.screen, (70, 70, 70) if affordable else (45, 45, 45), rect)
-            pygame.draw.rect(self.game.screen, (255, 215, 0) if affordable else (100, 100, 100), rect, 2)
+            pygame.draw.rect(screen, (70, 70, 70) if affordable else (45, 45, 45), rect)
+            pygame.draw.rect(screen, (255, 215, 0) if affordable else (100, 100, 100), rect, 2)
             icon = assets.enchantment_icons_raw[ench]
             if icon:
-                self.game.screen.blit(icon, (rect.centerx - icon.get_width() // 2, rect.y + 20))
+                screen.blit(icon, (rect.centerx - icon.get_width() // 2, rect.y + 20))
             else:
                 icon = assets.enchantment_icons[ench]
-                self.game.screen.blit(icon, (rect.centerx - icon.get_width() // 2, rect.y + 34))
+                screen.blit(icon, (rect.centerx - icon.get_width() // 2, rect.y + 34))
             name_surf = assets.font_tower_level.render(ench_data["name"], True, WHITE)
-            self.game.screen.blit(name_surf, (rect.centerx - name_surf.get_width() // 2, rect.y + 155))
+            screen.blit(name_surf, (rect.centerx - name_surf.get_width() // 2, rect.y + 155))
             status = assets.font_tower_level.render(f"{ench_data['cost']} 绿宝石", True, GREEN if affordable else (200, 80, 80))
-            self.game.screen.blit(status, (rect.centerx - status.get_width() // 2, rect.y + 200))
+            screen.blit(status, (rect.centerx - status.get_width() // 2, rect.y + 200))
             desc_lines = self.wrap_text(ench_data["desc"], assets.font_tower_level, rect.width - 40)
             for li, line in enumerate(desc_lines):
                 desc_surf = assets.font_tower_level.render(line, True, (180, 180, 180))
-                self.game.screen.blit(desc_surf, (rect.centerx - desc_surf.get_width() // 2, rect.y + SHOP_DESC_TOP + li * SHOP_LINE_H))
+                screen.blit(desc_surf, (rect.centerx - desc_surf.get_width() // 2, rect.y + SHOP_DESC_TOP + li * SHOP_LINE_H))
 
         if not self.game.shop_offers:
             empty_text = assets.font_medium.render("已拥有全部附魔", True, (200, 200, 200))
-            self.game.screen.blit(empty_text, (panel.centerx - empty_text.get_width() // 2, panel.y + 280))
+            screen.blit(empty_text, (panel.centerx - empty_text.get_width() // 2, panel.y + 280))
 
         refresh_rect = self.get_shop_refresh_rect()
         can_refresh = self.game.emeralds >= 20
-        pygame.draw.rect(self.game.screen, (130, 110, 40) if can_refresh else (60, 60, 60), refresh_rect)
+        pygame.draw.rect(screen, (130, 110, 40) if can_refresh else (60, 60, 60), refresh_rect)
         refresh_text = assets.font_small.render(f"刷新 (20绿宝石)", True, WHITE if can_refresh else (140, 140, 140))
-        self.game.screen.blit(refresh_text, (refresh_rect.centerx - refresh_text.get_width() // 2,
-                                             refresh_rect.y + (refresh_rect.height - refresh_text.get_height()) // 2))
+        screen.blit(refresh_text, (refresh_rect.centerx - refresh_text.get_width() // 2,
+                                   refresh_rect.y + (refresh_rect.height - refresh_text.get_height()) // 2))
 
         cont_rect = self.get_shop_continue_rect()
-        pygame.draw.rect(self.game.screen, (60, 130, 60), cont_rect)
+        pygame.draw.rect(screen, (60, 130, 60), cont_rect)
         cont_text = assets.font_small.render("继续", True, WHITE)
-        self.game.screen.blit(cont_text, (cont_rect.centerx - cont_text.get_width() // 2,
-                                          cont_rect.y + (cont_rect.height - cont_text.get_height()) // 2))
+        screen.blit(cont_text, (cont_rect.centerx - cont_text.get_width() // 2,
+                                cont_rect.y + (cont_rect.height - cont_text.get_height()) // 2))
 
     def _lantern_light(self, radius):
         """缓存的路灯光斑：中心完全透明、向外渐变，用于从迷雾里挖出可视区域。"""
@@ -742,6 +817,59 @@ class UIManager:
             fog_surface.blit(light,
                              (tower.rect.centerx - radius, tower.rect.centery - TILE_SIZE - radius),
                              special_flags=pygame.BLEND_RGBA_SUB)
+
+    def draw_time_rewind(self):
+        """「时光倒流」的 UI：屏幕中间偏上的白色透明钟表，指针逆时针转 8 秒。"""
+        active = getattr(self.game, "time_rewind_active", 0)
+        if active <= 0:
+            return
+        total = TIME_REWIND_DURATION
+        elapsed = total - active
+        alpha = 235
+        if elapsed < 20:
+            alpha = int(235 * elapsed / 20)
+        left = total - elapsed
+        if left < 40:
+            alpha = min(alpha, int(235 * max(0, left) / 40))
+        if alpha <= 0:
+            return
+
+        cx = SCREEN_WIDTH // 2
+        cy = TIME_REWIND_CLOCK_Y
+        radius = 140
+        pad = 8
+        surf = pygame.Surface(((radius + pad) * 2, (radius + pad) * 2), pygame.SRCALPHA)
+        c = radius + pad
+        white = (255, 255, 255, alpha)
+
+        # 极淡的白色底，让钟面在花哨的地图上也能看清（仍然是"白色透明"）
+        pygame.draw.circle(surf, (255, 255, 255, max(0, alpha // 8)), (c, c), radius)
+        pygame.draw.circle(surf, white, (c, c), radius, 7)
+        for i in range(12):
+            ang = math.radians(i * 30 - 90)
+            r1 = radius - 10
+            r2 = radius - (34 if i % 3 == 0 else 22)
+            pygame.draw.line(surf, white,
+                             (c + r1 * math.cos(ang), c + r1 * math.sin(ang)),
+                             (c + r2 * math.cos(ang), c + r2 * math.sin(ang)),
+                             7 if i % 3 == 0 else 4)
+
+        def hand(angle_deg, length, width):
+            a = math.radians(angle_deg - 90)
+            pygame.draw.line(surf, white, (c, c),
+                             (c + length * math.cos(a), c + length * math.sin(a)), width)
+
+        # 逆时针：角度取负。分针 8 秒转两圈，时针转四分之一圈
+        minute_deg = -elapsed * 720.0 / total
+        hour_deg = -elapsed * 90.0 / total
+        hand(hour_deg, radius * 0.45, 11)
+        hand(minute_deg, radius * 0.72, 7)
+        pygame.draw.circle(surf, white, (c, c), 9)
+
+        self.game.screen.blit(surf, (cx - c, cy - c))
+        label = assets.font_medium.render("时光倒流", True, (255, 255, 255))
+        label.set_alpha(alpha)
+        self.game.screen.blit(label, (cx - label.get_width() // 2, cy + radius + 12))
 
     def draw_weather_particles(self):
         for p in self.game.weather_particles:
@@ -800,9 +928,7 @@ class UIManager:
         self.game.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, banner_y + 10))
 
     def draw_pause_overlay(self):
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 128))
-        self.game.screen.blit(overlay, (0, 0))
+        blit_tint(self.game.screen, (0, 0, 0), 128)
         pause_text = assets.font_large.render("已暂停", True, WHITE)
         continue_text = assets.font_small.render("按 ESC 继续", True, WHITE)
         self.game.screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
@@ -868,19 +994,13 @@ class UIManager:
     def draw_boss_screen_fx(self):
         game = self.game
         if game.boss_time_frozen > 0:
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            overlay.fill((40, 90, 200, 56))
-            game.screen.blit(overlay, (0, 0))
+            blit_tint(game.screen, (40, 90, 200), 56)
             text = assets.font_large.render("TICK FREEZE", True, (170, 225, 255))
             game.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 250))
         if game.boss_flash > 0:
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            overlay.fill((255, 120, 235, min(80, game.boss_flash)))
-            game.screen.blit(overlay, (0, 0))
+            blit_tint(game.screen, (255, 120, 235), min(80, game.boss_flash))
         if game.boss_acid_timer > 0:
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            overlay.fill((90, 220, 50, min(66, game.boss_acid_timer)))
-            game.screen.blit(overlay, (0, 0))
+            blit_tint(game.screen, (90, 220, 50), min(66, game.boss_acid_timer))
             text = assets.font_large.render("ACID RAIN", True, (170, 255, 130))
             text.set_alpha(min(255, game.boss_acid_timer * 5))
             game.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 310))
@@ -980,8 +1100,23 @@ class UIManager:
         return pygame.Rect(panel.right - 76, panel.y + 18, 56, 56)
 
     def draw_damage_stats(self):
+        """伤害统计面板：打开时游戏是暂停的，内容不会变，整屏缓存即可。
+
+        原来每帧重排 8 行文字 + 铺全屏遮罩，在后期数据量大时也要十几毫秒。
+        """
         game = self.game
-        screen = game.screen
+        data = game.damage_stats
+        sig = (data.total, tuple(sorted(data.damage.items())))
+        cache = getattr(self, "_stats_cache", None)
+        if cache is None or cache[0] != sig:
+            surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            self._draw_damage_stats_to(surf)
+            cache = (sig, surf)
+            self._stats_cache = cache
+        game.screen.blit(cache[1], (0, 0))
+
+    def _draw_damage_stats_to(self, screen):
+        game = self.game
         panel = self.get_stats_panel_rect()
 
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
