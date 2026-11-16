@@ -100,6 +100,11 @@ ice_dragon_img = None
 fire_dragon_img = None
 electric_dragon_img = None
 
+# 巫师魅惑出来的召唤物（绵羊 / 山羊 / 粉色绵羊）
+sheep_img = None
+goat_img = None
+pink_sheep_img = None
+
 explode_sound = None
 level_up_sound = None
 teleport_sound = None
@@ -252,6 +257,7 @@ def init_assets():
     buff_icons["slow"] = load_image("debuff/slow.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["broken"] = load_image("debuff/broken.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["ice_broken"] = load_image("debuff/ice_broken.png", (BUFF_SIZE, BUFF_SIZE))
+    buff_icons["poison_broken"] = load_image("debuff/poison_broken.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["poison"] = load_image("debuff/poison.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["wind"] = load_image("debuff/wind.png", (BUFF_SIZE, BUFF_SIZE))
     buff_icons["speed"] = load_image("debuff/speed.png", (BUFF_SIZE, BUFF_SIZE))
@@ -514,3 +520,26 @@ def init_assets():
     except:
         electric_dragon_img = pygame.Surface((256, 256))
         electric_dragon_img.fill((255, 255, 0))
+
+    # 绵羊 / 山羊：贴图本身就是 128x128（和 TILE_SIZE 一致），不缩放
+    global sheep_img, goat_img, pink_sheep_img
+    sheep_img = _load_beast("tower/sheep.png", (238, 238, 238))
+    goat_img = _load_beast("tower/goat.png", (236, 232, 224))
+    # 粉色绵羊缺素材时直接把白羊染粉，不至于变成一块纯色方块
+    try:
+        pink_sheep_img = load_image("tower/pink_sheep.png")
+    except Exception:
+        pink_sheep_img = sheep_img.copy()
+        pink_sheep_img.fill((255, 120, 190, 255), special_flags=pygame.BLEND_RGBA_MULT)
+
+
+def _load_beast(path, fallback_color):
+    """召唤物贴图：缺文件时退化成同尺寸色块，保证游戏不崩。"""
+    try:
+        return load_image(path)
+    except Exception:
+        surf = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+        pygame.draw.rect(surf, fallback_color, (8, 32, TILE_SIZE - 16, TILE_SIZE - 56))
+        pygame.draw.rect(surf, fallback_color, (16, TILE_SIZE - 32, 24, 28))
+        pygame.draw.rect(surf, fallback_color, (TILE_SIZE - 40, TILE_SIZE - 32, 24, 28))
+        return surf

@@ -11,12 +11,13 @@ import audio
 from config import *
 from enemy import Enemy, DamageText
 from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet, MAP_CENTER_X, MAP_CENTER_Y
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, PlagueBurst, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal, LanternShockwave, IceStarBurst, MasterpieceShockwave, BaguaArray
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal, LanternShockwave, IceStarBurst, MasterpieceShockwave, BaguaArray
 from video_player import UltimateVideo
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
 from codex import Codex
 from dragons import Dragon
+from charm_beasts import CharmBeast
 import stats
 from final_boss import (FinalBoss, WorldSeedBoss, BossShockwave, BossRune, BossPortal,
                         BossStrike, DeleteBeam)
@@ -99,6 +100,8 @@ class Game:
         # 飘字合并用的「格子 → 最新一条」索引（只为性能存在，空了也无所谓）
         self._text_merge_map = {}
         self.dragons = pygame.sprite.Group()
+        # 巫师魅惑出来的绵羊 / 山羊 / 粉色绵羊
+        self.charm_beasts = pygame.sprite.Group()
         self.damage_stats = stats.DamageStats()
         self.damage_element = None
         # 当前正在结算伤害的炮塔（供「魅惑 → 治疗」判定用，平时为 None）
@@ -137,7 +140,6 @@ class Game:
         self.hell_rays = []
         self.resonance_storms = []
         self.poison_splashes = []
-        self.plague_bursts = []      # 「瘟疫」的扩散绿环（纯视觉）
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []
@@ -503,10 +505,11 @@ class Game:
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.MAGIC:
                         tw = self.selected_tower
                         if tw.level >= 11:
-                            # 三阶三分支：终望珍珠 → 无尽催化剂 → 金毒马铃薯
-                            tw.teleport_branch = tw.teleport_branch % 3 + 1
+                            # 三阶四分支：终望珍珠 → 无尽催化剂 → 金毒马铃薯 → 巫师
+                            tw.teleport_branch = tw.teleport_branch % 4 + 1
                         else:
-                            tw.teleport_branch = 3 - tw.teleport_branch
+                            # 一/二阶只有两个形态：终望珍珠 ↔ 幸运四叶草 / 毒马铃薯
+                            tw.teleport_branch = 2 if tw.teleport_branch == 1 else 1
                         tw.recalculate_stats()
                         tw.update_sprite()
                     elif event.key == pygame.K_r and self.selected_tower and self.selected_tower.type == TowerType.SHIELD and self.selected_tower.level >= 11:
@@ -825,6 +828,7 @@ class Game:
         self.damage_texts.empty()
         self._text_merge_map.clear()
         self.dragons.empty()
+        self.charm_beasts.empty()
         if getattr(self, "damage_stats", None) is None:
             self.damage_stats = stats.DamageStats()
         self.damage_stats.reset()
@@ -862,7 +866,6 @@ class Game:
         self.hell_rays = []
         self.resonance_storms = []
         self.poison_splashes = []
-        self.plague_bursts = []      # 「瘟疫」的扩散绿环（纯视觉）
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []
@@ -1474,6 +1477,10 @@ class Game:
         # 臻品呈现：神锅在场就给全局冰系 +240%（加算），已不再要求寒冰盾
         if tower_type == TowerType.ICE and self.masterpiece_active():
             bonus += MASTERPIECE_ICE_BONUS * self.enchantments.count(Enchantment.MASTERPIECE)
+        # 巫术学 / 附魔金毒马铃薯：全局魔法系 +100%（各自加算，两张都买就是 +200%）
+        if tower_type == TowerType.MAGIC:
+            bonus += WITCHCRAFT_MAGIC_BONUS * self.enchantments.count(Enchantment.WITCHCRAFT)
+            bonus += GOLD_POTATO_MAGIC_BONUS * self.enchantments.count(Enchantment.GOLD_POTATO)
         return 1.0 + bonus / 100.0
 
     def burn_tick_damage(self, base):
@@ -1551,6 +1558,34 @@ class Game:
         self.coins += 500
         exp = EndlessGreedExplosion(x, y, self)
         self.endless_greed_explosions.append(exp)
+
+    # --------------------------------------------------------------------------------------
+    #  魅惑：巫师 / 粉色绵羊把敌人就地变成绵羊 / 山羊 / 粉色绵羊
+    # --------------------------------------------------------------------------------------
+    def charm_enemy(self, enemy, kind, tower_level):
+        """把敌人变成召唤物。
+
+        · 被魅惑的怪直接消失：不给金币、不走死亡特效（分裂 / 试毒合约 / 蓄风印记都不触发）；
+        · 召唤物从它「原地」出发，沿道路往起点走，走完自动消失（和龙镜像）；
+        · 空中单位与 BOSS 免疫，粉色绵羊同屏数量有上限（PINK_SHEEP_CAP）。
+        """
+        if enemy is None or not enemy.alive() or enemy.health <= 0:
+            return None
+        if not is_charmable(enemy.enemy_type):
+            return None
+        if kind == "pink_sheep" and self.count_pink_sheep() >= PINK_SHEEP_CAP:
+            return None
+
+        beast = CharmBeast(self.path, kind,
+                           enemy.rect.centerx, enemy.rect.centery,
+                           getattr(enemy, "path_index", 0), tower_level, self)
+        self.charm_beasts.add(beast)
+        self.spawn_damage_text("魅惑", enemy.rect.center, color=MAGIC_PINK, scale=1.0)
+        enemy.kill()
+        return beast
+
+    def count_pink_sheep(self):
+        return sum(1 for b in self.charm_beasts if b.kind == "pink_sheep")
 
     def _crystal_cell_taken(self, col, row):
         return any(c.col == col and c.row == row for c in self.crystals)
@@ -1664,17 +1699,9 @@ class Game:
                 # 降到 Lv10 以下时也要顺手退回普通冰塔形态，所以整体重算一次。
                 t.recalculate_stats()
             elif t.type == TowerType.MAGIC:
-                if t.teleport_branch == 2:
-                    t.damage -= 100
-                    t.range -= TILE_SIZE // 2
-                    t.fire_rate = min(60, t.fire_rate + 6)
-                else:
-                    t.damage -= 5
-                    t.teleport_chance = max(0, t.teleport_chance - 0.01)
-                    t.range -= TILE_SIZE // 4
-                    t.fire_rate = min(60, t.fire_rate + 6)
-                    if old_level >= 6:
-                        t.oneshot_chance = max(0, t.oneshot_chance - 0.01)
+                # 魔法塔四个分支数值差异大（巫师走独立数值表），逐项加减会算歪，
+                # 末尾统一 recalculate_stats() 重算，这里不再手工增减。
+                pass
             elif t.type == TowerType.FLAME:
                 t.damage -= 15
                 t.range -= TILE_SIZE // 4
@@ -1718,8 +1745,8 @@ class Game:
                 if old_level >= 11:
                     self.emerald_per_wave -= EMERALD_PER_WAVE_BY_LEVEL.get(old_level, 3) - EMERALD_PER_WAVE_BY_LEVEL.get(t.level, 0)
             t.update_sprite()
-            if t.type == TowerType.FLAME:
-                # 火系各分支数值差异较大（提灯走独立表），统一按等级重算
+            if t.type in (TowerType.FLAME, TowerType.MAGIC):
+                # 火系 / 魔法系各分支数值差异较大（提灯、巫师走独立表），统一按等级重算
                 t.recalculate_stats()
 
     def apply_sacred_fire(self, tower):
@@ -1907,6 +1934,12 @@ class Game:
                 if dragon.done:
                     dragon.kill()
 
+            # 绵羊 / 山羊 / 粉色绵羊：沿路往起点走，走完自动消失
+            self.charm_beasts.update()
+            for beast in list(self.charm_beasts):
+                if beast.done:
+                    beast.kill()
+
             self.update_weather_particles()
             if self.weather_banner_timer > 0:
                 self.weather_banner_timer -= 1
@@ -2070,9 +2103,6 @@ class Game:
             for splash in self.poison_splashes[:]:
                 if not splash.update():
                     self.poison_splashes.remove(splash)
-            for burst in self.plague_bursts[:]:
-                if not burst.update():
-                    self.plague_bursts.remove(burst)
 
             for splash in self.wither_splashes[:]:
                 if not splash.update():
@@ -2491,11 +2521,12 @@ class Game:
         self.enemies.empty()
         self.bullets.empty()
         self.dragons.empty()
+        self.charm_beasts.empty()
         self.damage_texts.empty()
         self._text_merge_map.clear()
         for attr in ("dragon_breath_pools", "lightning_effects", "wind_explosions",
                      "endless_greed_explosions", "ice_explosions", "hell_rays",
-                     "resonance_storms", "poison_splashes", "plague_bursts", "wither_splashes",
+                     "resonance_storms", "poison_splashes", "wither_splashes",
                      "horizontal_lightning_effects", "tnt_explosions",
                      "mushroom_explosions", "shockwave_effects", "meteors", "bees",
                      "crystals", "lantern_shockwaves", "stars", "ice_star_bursts",
@@ -2626,7 +2657,6 @@ class Game:
         self.hell_rays = []
         self.resonance_storms = []
         self.poison_splashes = []
-        self.plague_bursts = []      # 「瘟疫」的扩散绿环（纯视觉）
         self.wither_splashes = []
         self.horizontal_lightning_effects = []
         self.tnt_explosions = []

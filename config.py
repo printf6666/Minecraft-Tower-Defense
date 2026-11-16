@@ -100,7 +100,7 @@ class Enchantment(Enum):
     DENSE = 9
     WIND_BURST = 10
     POISON_CONTRACT = 11
-    PLAGUE = 12        # 瘟疫（原「高温燃烧」→「时光倒流」的位置）
+    GOLD_POTATO = 12   # 附魔金毒马铃薯（原「瘟疫」的位置，瘟疫已整体删除）
     BLAZE_POWDER = 13
     FROZEN_DEEP = 14
     DRAGON_LEGEND = 15
@@ -113,7 +113,8 @@ class Enchantment(Enum):
     RESONANCE_STORM = 22
     EMBER_REBIRTH = 23
     WAX = 24
-    # 25 号空位：原「无限手套」已删除，预留给后续新附魔（枚举值 25 不要占用）
+    # 25 号空位：原「无限手套」已删除，现由「巫术学」占用
+    WITCHCRAFT = 25
     UNSTABLE_CRYSTAL = 26
     POWER_V = 27
     LANTERN = 28
@@ -132,7 +133,7 @@ ENCHANTMENT_DATA = {
     Enchantment.DENSE: {"name": "致密V", "desc": "重锤获得距离增伤，伤害+5/px", "cost": 400},
     Enchantment.WIND_BURST: {"name": "风爆", "desc": "蓄风印记爆炸伤害固定为5000点", "cost": 400},
     Enchantment.POISON_CONTRACT: {"name": "试毒合约", "desc": "同时存在剧毒环刃与九头蛇毒箭时，中毒敌人被击败有10%概率爆炸，对周围敌人造成(基础毒伤+中毒层数)×18的伤害并击晕5秒，基础毒伤永久+1", "cost": 400},
-    Enchantment.PLAGUE: {"name": "瘟疫", "desc": "中毒的敌人死亡后，将其中毒层数的 5% 转移给周围敌人", "cost": 400},
+    Enchantment.GOLD_POTATO: {"name": "附魔金毒马铃薯", "desc": "全局魔法系伤害+100%；金毒马铃薯施加中毒的概率翻倍，且每次攻击必定使敌人获得毒系破甲", "cost": 1600},
     Enchantment.BLAZE_POWDER: {"name": "烈焰粉", "desc": "敌人永远燃烧，燃烧伤害+30%", "cost": 400},
     Enchantment.FROZEN_DEEP: {"name": "冰封深渊", "desc": "同时存在冰霜炸弹与冰墙塔时，冰霜炸弹冻结时长+0.5秒，冰墙存在时间翻倍", "cost": 400},
     Enchantment.DRAGON_LEGEND: {"name": "龙族传说", "desc": "同时存在冰龙塔、火龙塔、电龙塔时，龙伤害与百分比真实伤害翻倍，且龙移动速度+75%", "cost": 1600},
@@ -145,6 +146,7 @@ ENCHANTMENT_DATA = {
     Enchantment.RESONANCE_STORM: {"name": "共振风暴", "desc": "同时存在雷神之锤和雷盾时，锤子累计攻击70次可手动释放：所有雷盾反击一次并引爆所有蓄风印记，冷却16.5秒", "cost": 1600},
     Enchantment.EMBER_REBIRTH: {"name": "余烬重生", "desc": "同时存在满级龙息塔与8座满级核弹塔时，龙息塔累计攻击200次可手动释放：全场核弹立即齐射，巨型陨石从天而降、着地时对全场敌人造成1000000007伤害，冷却60秒", "cost": 6400},
     Enchantment.WAX: {"name": "蜜脾", "desc": "所有炮塔涂蜡，酸雨将无法破坏炮塔及护盾。酸雨开始后每0.5秒从终点扇形召唤5只蜜蜂，共召唤10次，蜜蜂随后寻敌，撞击敌人后死亡并造成其1%最大生命的毒系伤害", "cost": 400},
+    Enchantment.WITCHCRAFT: {"name": "巫术学", "desc": "全局魔法系伤害+100%；巫师攻击有1%概率把敌人变成粉色绵羊（额外造成魅惑，并可无限套娃）", "cost": 1600},
     Enchantment.UNSTABLE_CRYSTAL: {"name": "不稳定水晶", "desc": "TNT类炮塔子弹爆炸有10%概率在周围道路格生成不稳定水晶，敌人碰到后受到其1%最大生命伤害并引发爆炸；核弹/凋零核弹爆炸时全场每个道路格各有10%概率生成", "cost": 1600},
     Enchantment.POWER_V: {"name": "力量V", "desc": "物理伤害+150%；地狱升华之弩对BOSS的百分比伤害提升至6%", "cost": 400},
     Enchantment.LANTERN: {"name": "灯火通明", "desc": "场上存在3座满级星焰提灯时：火系伤害+120%，并永久驱散全场迷雾", "cost": 1600},
@@ -155,14 +157,14 @@ ENCHANTMENT_ORDER = [
     Enchantment.BALANCED, Enchantment.PHYSICAL, Enchantment.ICE, Enchantment.MAGIC,
     Enchantment.FLAME, Enchantment.ELECTRIC,
     Enchantment.WIND, Enchantment.POISON, Enchantment.BOMB, Enchantment.DENSE, Enchantment.WIND_BURST,
-    Enchantment.POISON_CONTRACT, Enchantment.PLAGUE, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
+    Enchantment.POISON_CONTRACT, Enchantment.GOLD_POTATO, Enchantment.BLAZE_POWDER, Enchantment.FROZEN_DEEP,
     Enchantment.DRAGON_LEGEND, Enchantment.ENDLESS_GREED, Enchantment.RAIN_FIRE, Enchantment.WITHER_ROSE,
     # 火矢删除后的 20 号空位由望远镜占用（原 19 → 20），21 号起编号不变
     Enchantment.LAVA, Enchantment.TELESCOPE, Enchantment.PULSE_SHIELD,
     Enchantment.RESONANCE_STORM,
     Enchantment.EMBER_REBIRTH,
     Enchantment.WAX,
-    # 25 号空位（原无限手套）
+    Enchantment.WITCHCRAFT,
     Enchantment.UNSTABLE_CRYSTAL,
     Enchantment.POWER_V,
     Enchantment.LANTERN,
@@ -239,6 +241,30 @@ GOLD_POTATO_POISON_CHANCE = 0.02    # 中毒触发概率
 GOLD_POTATO_POISON_STACKS = {11: 32000, 12: 64000, 13: 96000, 14: 128000, 15: 160000}
 # 毒马铃薯（二阶分支 2，Lv6-10）中毒层数
 POTATO_POISON_STACKS = {6: 400, 7: 800, 8: 1200, 9: 1600, 10: 2000}
+
+# ==========================================================================================
+#  巫师 —— 魔法塔（MAGIC）第 4 分支，Lv11 起解锁，贴图 4-3-4
+#  固定攻击力（不再走 0~2 倍随机），攻击带魅惑：把地面小怪变成绵羊 / 山羊。
+#  魅惑对空中单位与 BOSS 无效（见 FLYING_ENEMY_TYPES / BOSS_ENEMY_TYPES）。
+# ==========================================================================================
+WITCH_BRANCH = 4
+WITCH_DAMAGE = {11: 1100, 12: 1375, 13: 1650, 14: 1925, 15: 2200}
+WITCH_SHEEP_CHANCE = {11: 0.02, 12: 0.025, 13: 0.03, 14: 0.035, 15: 0.04}
+WITCH_GOAT_CHANCE = {11: 0.02, 12: 0.025, 13: 0.03, 14: 0.035, 15: 0.04}
+# 「巫术学」：巫师 1% 概率把目标变成粉色绵羊
+WITCH_PINK_CHANCE = 0.01
+WITCHCRAFT_MAGIC_BONUS = 100        # 巫术学：全局魔法系伤害 +100%（加算，百分点）
+GOLD_POTATO_MAGIC_BONUS = 100       # 附魔金毒马铃薯：全局魔法系伤害 +100%
+GOLD_POTATO_POISON_MULT = 2         # 附魔金毒马铃薯：中毒概率翻倍
+
+# 绵羊 / 山羊：和龙一样沿道路往起点走，撞到的敌人各结算一次
+SHEEP_HP_PCT = 0.01                 # 绵羊：1% 最大生命真实伤害
+GOAT_DAMAGE = 8000                  # 山羊：8000 点魔法伤害
+GOAT_KNOCKBACK = 60                 # 山羊：撞到的地面单位击退 60px
+SHEEP_SPEED = 7                     # 像素/帧
+GOAT_SPEED = 6
+PINK_SHEEP_CHARM_CHANCE = 0.04      # 粉色绵羊的魅惑概率 = 15 级巫师（4%）
+PINK_SHEEP_CAP = 48                 # 套娃上限：同屏粉色绵羊超过这个数就不再分裂（防炸帧）
 
 EMERALD_PER_WAVE_BY_LEVEL = {11: 1, 12: 2, 13: 3, 14: 4, 15: 5}
 
@@ -332,6 +358,7 @@ HOLY_POT_BOLT_SPEED = 26         # 四芒星飞行速度（像素/帧）
 HOLY_POT_BOLT_SIZE = 96          # 四芒星绘制边长（32 像素素材的 3 倍整数放大）
 HOLY_POT_BOLT_SPIN = 7.0         # 四芒星自转速度（度/帧）
 ICE_BROKEN_RESIST_DOWN = 1.0     # 冰系破甲：冰系抗性 -100 个百分点（走抗性乘区）
+POISON_BROKEN_RESIST_DOWN = 1.0  # 毒系破甲：毒系抗性 -100 个百分点（与冰系破甲同机制）
 
 # 「臻品呈现」附魔
 MASTERPIECE_ICE_BONUS = 240      # 冰系伤害 +240%（加算，百分点）
@@ -339,9 +366,6 @@ RESONANCE_ATTACKS = SKILL_DATA["resonance"]["need"]     # 雷神之锤攒够 N �
 MASTERPIECE_ATTACKS = SKILL_DATA["masterpiece"]["need"]  # 神锅攒够 N 次攻击 = 臻品呈现可用
 EMBER_ATTACKS = SKILL_DATA["ember"]["need"]              # 龙息塔攒够 N 次攻击 = 余烬重生可用
 
-# 「瘟疫」：中毒敌人死亡时，把 5% 的层数扩散给周围敌人
-PLAGUE_TRANSFER_RATE = 0.05
-PLAGUE_RADIUS = TILE_SIZE          # 以尸体为中心 1 格
 MASTERPIECE_DAMAGE = 61803       # 大招基础伤害
 MASTERPIECE_TEMP_MULT = 500      # 大招温度系数：伤害 = 61803 + 500 * |温度|
 MASTERPIECE_FREEZE_FRAMES = 4 * 60   # 大招冰冻 4 秒
@@ -408,6 +432,21 @@ class EnemyType(Enum):
     FINAL_BOSS = 19
     WORLD_SEED = 20      # 第 150 波真·最终 BOSS：原初·阿尔法（世界种子）
     END_CRYSTAL = 21     # 阿尔法第 3 阶段召唤的末影水晶（可攻击，站着回层）
+
+
+# ==========================================================================================
+#  魅惑（巫师把敌人变成绵羊 / 山羊）的免疫表
+#  - 空中单位：没有地面路径，变成羊也没法沿路走，直接免疫
+#  - BOSS：分层血量的单位一旦被变羊就等于白嫖一层，必须免疫
+# ==========================================================================================
+FLYING_ENEMY_TYPES = (EnemyType.GHOST, EnemyType.WITHER, EnemyType.BLAZE)
+BOSS_ENEMY_TYPES = (EnemyType.HEROBRINE, EnemyType.FINAL_BOSS,
+                    EnemyType.WORLD_SEED, EnemyType.END_CRYSTAL)
+
+
+def is_charmable(enemy_type):
+    """这个敌人能不能被巫师变成绵羊 / 山羊。"""
+    return enemy_type not in FLYING_ENEMY_TYPES and enemy_type not in BOSS_ENEMY_TYPES
 
 
 # ==========================================================================================

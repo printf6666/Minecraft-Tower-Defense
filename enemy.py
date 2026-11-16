@@ -4,7 +4,7 @@ import random
 import assets
 import stats
 from config import *
-from effects import CreeperExplosion, PoisonContractExplosion, PlagueBurst
+from effects import CreeperExplosion, PoisonContractExplosion
 from tower import WindExplosion
 
 
@@ -47,6 +47,7 @@ class Enemy(pygame.sprite.Sprite):
         self.burn_damage = 0
         self.broken = False
         self.ice_broken = False
+        self.poison_broken = False
         # 远古守卫者：出场倒计时，归零时锁一座塔
         self.elite_lock_timer = (ELITE_LOCK_DELAY
                                  if self.enemy_type == EnemyType.ELITE else -1)
@@ -159,34 +160,42 @@ class Enemy(pygame.sprite.Sprite):
 
         两层结构，和原神一致：
           · 全抗：盔甲基础值，「抗性降低」(broken) 只减 20 个百分点 —— 90 全抗变 70，不会变 -10。
-          · 元素专属：冰系破甲只动冰抗（-100 点），其它元素不受影响；
-            烈焰人火抗 +500、冰抗 -100 / 破甲后 -200，同样是元素层。
+          · 元素专属：冰系破甲只动冰抗（-100 点），毒系破甲只动毒抗（-100 点），
+            其它元素不受影响；烈焰人火抗 +500、冰抗 -100 / 破甲后 -200，同样是元素层。
         所以「90 全抗 + 破甲 + 冰系破甲」= 全抗 70、冰抗 -30，两者互不覆盖。
         """
         all_res = ARMOR_RESISTANCE.get(self.enemy_type, 0.0)
         if self.broken:
             all_res -= BROKEN_RESIST_DOWN
 
-        # 烈焰人的元素抗性属于元素层，叠在全抗之上
+        # 烈焰人的元素抗性属于元素层，叠在全抗之上（其它属性继续走下面的通用分支）
         if self.enemy_type == EnemyType.BLAZE:
             if element == "fire":
                 return all_res + BLAZE_FIRE_RESIST
             if element == "ice":
                 ice = BLAZE_ICE_RESIST_BROKEN if self.ice_broken else BLAZE_ICE_RESIST
                 return all_res + ice
-            return all_res
 
         if self.ice_broken and element == "ice":
-            return all_res - ICE_BROKEN_RESIST_DOWN   # 常量是正的，减下去
+            all_res -= ICE_BROKEN_RESIST_DOWN      # 常量是正的，减下去
+        if self.poison_broken and element == "poison":
+            all_res -= POISON_BROKEN_RESIST_DOWN
         return all_res
 
     def apply_ice_broken(self):
         """冰系破甲：永久生效，冰系抗性 -100 个百分点。
 
-        和「抗性降低」(broken) 不同：这条不碰抗性，而是往增伤乘区里加 +100%，
+        和「抗性降低」(broken) 不同：这条不碰全抗，只把冰系抗性减 100 点，
         且只对冰系伤害生效。
         """
         self.ice_broken = True
+
+    def apply_poison_broken(self):
+        """毒系破甲：永久生效，毒系抗性 -100 个百分点。
+
+        和冰系破甲完全同机制，只是作用的属性从冰换成毒（图标也换成绿色）。
+        """
+        self.poison_broken = True
 
     def on_lightning_hit(self):
         if self.enemy_type == EnemyType.CREEPER and not self.charged:
@@ -389,6 +398,8 @@ class Enemy(pygame.sprite.Sprite):
             buff_list.append("broken")
         if self.ice_broken:
             buff_list.append("ice_broken")
+        if self.poison_broken:
+            buff_list.append("poison_broken")
         if self.slow_time > 0 or self.weather_slowed:
             buff_list.append("slow")
         if self.burn_time > 0:
@@ -553,19 +564,7 @@ class Enemy(pygame.sprite.Sprite):
                     exp = PoisonContractExplosion(self.rect.centerx, self.rect.centery,
                                                   self.game, self.poison_stacks)
                     self.game.poison_splashes.append(exp)
-            # 「瘟疫」：中毒敌人死亡时，把 5% 的层数扩散给周围敌人（不足 1 层则不扩散）
-            if self.poison_stacks > 0 and Enchantment.PLAGUE in self.game.enchantments:
-                transfer = int(self.poison_stacks * PLAGUE_TRANSFER_RATE)
-                if transfer > 0:
-                    cx, cy = self.rect.centerx, self.rect.centery
-                    for other in self.game.enemies:
-                        if other is self or other.health <= 0:
-                            continue
-                        dx = other.rect.centerx - cx
-                        dy = other.rect.centery - cy
-                        if dx * dx + dy * dy <= PLAGUE_RADIUS * PLAGUE_RADIUS:
-                            other.apply_poison(transfer)
-                    self.game.plague_bursts.append(PlagueBurst(cx, cy, PLAGUE_RADIUS))
+            # 「瘟疫」已删除（12 号附魔位改为附魔金毒马铃薯），这里不再做层数扩散
             self.kill()
             return self.reward
         return 0

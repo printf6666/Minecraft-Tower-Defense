@@ -25,7 +25,7 @@ MAX_BRANCH = {
     TowerType.PHYSICAL:   {1: 1, 2: 1, 3: 3},
     TowerType.PRODUCTION: {1: 1, 2: 1, 3: 1},
     TowerType.ICE:        {1: 1, 2: 1, 3: 4},
-    TowerType.MAGIC:   {1: 2, 2: 2, 3: 3},
+    TowerType.MAGIC:   {1: 2, 2: 2, 3: 4},
     TowerType.FLAME:      {1: 1, 2: 1, 3: 3},
     TowerType.ELECTRIC:    {1: 1, 2: 1, 3: 3},
     TowerType.WIND:       {1: 1, 2: 1, 3: 2},
@@ -63,7 +63,7 @@ def tower_sprite_path(ttype, level, **br):
         pb = br.get("poison_branch", 1)
         b = pb if stage == 3 else min(pb, 2)
     elif ttype == TowerType.MAGIC:
-        # 魔法塔三阶有 3 个分支
+        # 魔法塔三阶有 4 个分支（终望珍珠 / 无尽催化剂 / 金毒马铃薯 / 巫师）
         b = br.get("teleport_branch", 1)
     elif ttype == TowerType.TIME and stage == 3:
         # 时间塔三阶有 2 个分支：怀表（攻速）/ 僭越之钟（伤害）
@@ -161,7 +161,11 @@ class Tower(pygame.sprite.Sprite):
             self.cost = 150
             self.upgrade_cost = 225
         elif self.type == TowerType.MAGIC:
-            if self.teleport_branch == 2:
+            if self.teleport_branch == WITCH_BRANCH:
+                # 巫师：三阶才存在的分支，1 级时按三阶最弱的数值兜底
+                self.range = TILE_SIZE * 3
+                self.damage = WITCH_DAMAGE.get(11, 1100)
+            elif self.teleport_branch == 2:
                 self.range = TILE_SIZE * 3
                 self.damage = 100
             else:
@@ -291,7 +295,7 @@ class Tower(pygame.sprite.Sprite):
                 self.range = 0
                 self.fire_rate = self._nuclear_fire_rate()
 
-        if self.type in (TowerType.FLAME, TowerType.ICE):
+        if self.type in (TowerType.FLAME, TowerType.ICE, TowerType.MAGIC):
             self.recalculate_stats()
 
         self.update_sprite()
@@ -307,6 +311,12 @@ class Tower(pygame.sprite.Sprite):
             return
         self.teleport_chance = 0.01
         self.oneshot_chance = 0
+        if self.teleport_branch == WITCH_BRANCH and self.level >= 11:
+            # 巫师：固定攻击力 1100/1375/1650/1925/2200，不走 0~2 倍随机
+            self.damage = WITCH_DAMAGE.get(self.level, 2200)
+            self.range = TILE_SIZE * 3 + (self.level - 11) * (TILE_SIZE // 2)
+            self.fire_rate = max(30, 60 - (self.level - 1) * 6)
+            return
         if self.teleport_branch in (2, 3):
             # 毒马铃薯 / 金毒马铃薯：攻击力同无尽催化剂
             self.damage = 100 + (self.level - 1) * 100
@@ -609,8 +619,8 @@ class Tower(pygame.sprite.Sprite):
                 dragon = Dragon(self.game.path, "fire", self.level, self.game)
                 self.game.dragons.add(dragon)
 
-        if self.type == TowerType.MAGIC and self.teleport_branch in (2, 3):
-            # 三阶（无尽催化剂 / 金毒马铃薯）也只发射 4 发，不再八向散射
+        if self.type == TowerType.MAGIC and self.teleport_branch in (2, 3, WITCH_BRANCH):
+            # 三阶（无尽催化剂 / 金毒马铃薯 / 巫师）也只发射 4 发，不再八向散射
             directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
             bullets = []
             for dx, dy in directions:
@@ -954,6 +964,15 @@ class Bullet(pygame.sprite.Sprite):
             self.game.damage_element = prev_element
             self.game.damage_source_tower = prev_source
             return
+        # 巫师：魅惑判定放在伤害之前 —— 目标是「变成」绵羊 / 山羊，这一发不再结算伤害。
+        # 放到 take_damage 之后的话，一发秒掉的小怪永远等不到魅惑判定，
+        # 而巫师 1100~2200 的固定伤害在前期基本必定秒杀。
+        if self.tower_type == TowerType.MAGIC and self.teleport_branch == WITCH_BRANCH:
+            if self._try_charm(enemy):
+                self.kill()
+                self.game.damage_element = prev_element
+                self.game.damage_source_tower = prev_source
+                return
         reward = enemy.take_damage(final_dmg, color=color)
         self.game.coins += reward
         self.apply_effects(enemy)
@@ -1003,6 +1022,9 @@ class Bullet(pygame.sprite.Sprite):
                     reward = enemy.take_damage(max(1, int(enemy.health)), color=RED, scale=1.2,
                                                ignore_armor=True)
                     self.game.coins += reward
+            elif self.teleport_branch == WITCH_BRANCH:
+                # 巫师的魅惑在 on_hit 里先于伤害判定，这里不再重复
+                pass
             else:
                 if self.tower_level >= 6 and self.tower_level < 11:
                     # 毒马铃薯：2% 概率施加 400 / 800 / 1200 / 1600 / 2000 层中毒
@@ -1011,10 +1033,18 @@ class Bullet(pygame.sprite.Sprite):
                 elif self.tower_level >= 11:
                     if self.teleport_branch == 3:
                         # 金毒马铃薯：2% 概率施加海量中毒
-                        if random.random() < GOLD_POTATO_POISON_CHANCE:
+                        # 「附魔金毒马铃薯」：概率翻倍 + 每次攻击必定毒系破甲
+                        gold_potato = Enchantment.GOLD_POTATO in self.game.enchantments
+                        chance = GOLD_POTATO_POISON_CHANCE
+                        if gold_potato:
+                            chance *= GOLD_POTATO_POISON_MULT
+                        if random.random() < chance:
                             enemy.apply_poison(GOLD_POTATO_POISON_STACKS.get(self.tower_level, 32000))
+                        if gold_potato:
+                            enemy.apply_poison_broken()
                     else:
-                        debuffs = ['burn', 'slow', 'speed', 'poison', 'wither', 'broken']
+                        debuffs = ['burn', 'slow', 'speed', 'poison', 'wither', 'broken',
+                                   'ice_broken', 'poison_broken']
                         debuff = random.choice(debuffs)
                         if debuff == 'burn':
                             if self.game.temperature > 0:
@@ -1031,6 +1061,10 @@ class Bullet(pygame.sprite.Sprite):
                             enemy.apply_wither(999999)
                         elif debuff == 'broken':
                             enemy.broken = True
+                        elif debuff == 'ice_broken':
+                            enemy.apply_ice_broken()
+                        elif debuff == 'poison_broken':
+                            enemy.apply_poison_broken()
         if self.tower_type == TowerType.FLAME:
             burn_dmg = self.game.temperature
             enemy.apply_burn(burn_dmg, 240)
@@ -1106,6 +1140,30 @@ class Bullet(pygame.sprite.Sprite):
             if self.tower_level >= 6 and (not self.source_tower or self.source_tower.poison_branch != 3):
                 splash = PoisonSplash(enemy.rect.centerx, enemy.rect.centery, self.damage, self.poison_stacks, self.game)
                 self.game.poison_splashes.append(splash)
+            # 九头蛇毒箭（三阶分支 3）：每次攻击必定使目标毒系破甲
+            src = self.source_tower
+            if (src is not None and src.type == TowerType.POISON
+                    and src.poison_branch == 3 and self.tower_level >= 11):
+                enemy.apply_poison_broken()
+
+    def _try_charm(self, enemy):
+        """巫师的魅惑：把命中的地面小怪变成绵羊 / 山羊 / 粉色绵羊。
+
+        空中单位与 BOSS 免疫（见 config.is_charmable）。
+        判定顺序：巫术学粉色绵羊 → 绵羊 → 山羊，三者互斥，一发最多变一只。
+        返回 True 表示这一发已经被魅惑消耗掉（不再结算伤害）。
+        """
+        if enemy.health <= 0 or not is_charmable(enemy.enemy_type):
+            return False
+        lv = self.tower_level
+        if (Enchantment.WITCHCRAFT in self.game.enchantments
+                and random.random() < WITCH_PINK_CHANCE):
+            return self.game.charm_enemy(enemy, "pink_sheep", lv) is not None
+        if random.random() < WITCH_SHEEP_CHANCE.get(lv, 0.02):
+            return self.game.charm_enemy(enemy, "sheep", lv) is not None
+        if random.random() < WITCH_GOAT_CHANCE.get(lv, 0.02):
+            return self.game.charm_enemy(enemy, "goat", lv) is not None
+        return False
 
 
 class BombBullet(pygame.sprite.Sprite):

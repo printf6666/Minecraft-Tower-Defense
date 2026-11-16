@@ -327,6 +327,14 @@ def get_tower_info(game, tower):
             info = [f"金毒马铃薯 Lv{tower.level}", f"随机伤害:0~{tower.damage * 2}+金币1%",
                     f"四方向散射", f"2%施加{GOLD_POTATO_POISON_STACKS.get(tower.level, 32000)}层中毒",
                     f"攻击间隔:{tower.fire_rate / 60}s", "按R切换形态"]
+        elif tower.teleport_branch == WITCH_BRANCH:
+            lv = tower.level
+            info = [f"巫师 Lv{lv}", f"伤害:{tower.damage}", f"四方向散射",
+                    f"攻击间隔:{tower.fire_rate / 60}s",
+                    f"魅惑绵羊:{WITCH_SHEEP_CHANCE.get(lv, 0.02) * 100:g}%",
+                    f"魅惑山羊:{WITCH_GOAT_CHANCE.get(lv, 0.02) * 100:g}%",
+                    "绵羊:1%最大生命 山羊:8000魔法+击退60",
+                    "对空中单位及BOSS无效", "按R切换形态"]
         else:
             if tower.level >= 11:
                 info = [f"终望珍珠 Lv{tower.level}", f"秒杀概率:{int(tower.oneshot_chance * 100)}%",
@@ -643,6 +651,9 @@ class UIManager:
         self.game.bullets.draw(self.game.screen)
         for dragon in self.game.dragons:
             dragon.draw(self.game.screen)
+        # 绵羊 / 山羊 / 粉色绵羊：和龙同一层，压在子弹之上
+        for beast in self.game.charm_beasts:
+            beast.draw(self.game.screen)
         self.draw_boss_effects()
         for tower in self.game.towers:
             self.game.screen.blit(level_text(tower.level),
@@ -718,8 +729,6 @@ class UIManager:
             storm.draw(self.game.screen)
         for splash in self.game.poison_splashes:
             splash.draw(self.game.screen)
-        for burst in self.game.plague_bursts:
-            burst.draw(self.game.screen)
         for splash in self.game.wither_splashes:
             splash.draw(self.game.screen)
         for effect in self.game.horizontal_lightning_effects:
