@@ -1553,7 +1553,7 @@ class WorldSeedBoss(FinalBoss):
         self._announce(f"指令-天候  /weather {weather.name.lower()}  [{info['name']}]", 200)
 
     def _skill_sacred_fire(self):
-        """群系侵蚀-圣火：随机两座炮塔附着圣火（40% miss / 每 16s 降级 / 四向蔓延）。
+        """群系侵蚀-圣火：随机两座炮塔附着圣火（伤害 -50% / 每 16s 降级 / 四向蔓延）。
 
         护盾可以挡下附着（破盾不被点燃）；已经着火的塔再套盾无济于事。
         圣火没有时限，转阶段（世界重生成）时全部熄灭。

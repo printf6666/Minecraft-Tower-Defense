@@ -60,6 +60,7 @@ bagua_img_fx = None
 charm_img = None        # 魅惑标记：粉色半透明底 + 空心爱心（预渲染，直接 blit）
 lock_img = None         # 锁定标记：紫色半透明底 + 紫色 X（预渲染，直接 blit）
 sacred_fire_img = None  # 圣火标记：橙色半透明底 + 火焰标志（阿尔法下界技能，预渲染）
+sandstorm_img = None    # 沙尘暴标记：棕底金框 + 沙金漩涡（沙暴天气附着，预渲染）
 shield_img = None
 
 white_lightning_frames = []
@@ -283,6 +284,10 @@ def init_assets():
         sacred_fire_img = load_image("fx/sacred_fire.png")
     except Exception:
         sacred_fire_img = None
+    try:
+        sandstorm_img = load_image("fx/sandstorm.png")
+    except Exception:
+        sandstorm_img = None
 
     global bagua_img, bagua_img_fx
     try:

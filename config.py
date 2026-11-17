@@ -480,7 +480,7 @@ BOSS_CHARM_FRAMES = 12 * 60
 
 # ==========================================================================================
 #  阿尔法的「群系侵蚀-圣火 /effect @e[type=Tower] sacred_fire」（第 2 阶段下界技能）
-#  - 随机一座炮塔附着圣火：每次攻击有 40% 概率落空（MISS，仍消耗冷却）；
+#  - 随机炮塔附着圣火：该塔造成的伤害 **-50%**（走增伤乘区，对所有伤害路径生效）；
 #  - 每隔 SACRED_FIRE_TICK_FRAMES：炮塔等级 -1（最低降到 1 级，不删除），
 #    并向上下左右四格的炮塔蔓延；
 #  - 护盾可以挡下「附着 / 蔓延」（破盾不被点燃）；已经着火的塔再套盾无济于事；
@@ -488,12 +488,12 @@ BOSS_CHARM_FRAMES = 12 * 60
 #  - 圣火没有时限：奥米伽式的「转阶段净化」——阿尔法进入下一阶段（世界重生成）时全部熄灭，
 #    波次推进（select_weather）与 BOSS 死亡时同样清空。
 # ==========================================================================================
-SACRED_FIRE_MISS_CHANCE = 0.4
+SACRED_FIRE_DAMAGE_REDUCTION = 0.5   # 圣火：伤害 -50%（增伤乘区，per-tower）
 SACRED_FIRE_TICK_FRAMES = 16 * 60
 SACRED_FIRE_TARGETS = 2            # 每次施放附着的炮塔数量
 
-# 沙暴天气：每次攻击的落空概率（仿圣火 MISS，消耗冷却但不造成伤害）
-SANDSTORM_MISS_CHANCE = 0.2
+# 沙暴天气：开波时给随机 N 座塔附着沙尘暴（射程压到 1 格，持续到本波结束，护盾可挡）
+SANDSTORM_TOWER_COUNT = 4          # 每波被沙尘暴附着的炮塔数量
 
 
 class Weather(Enum):
@@ -515,7 +515,7 @@ class Weather(Enum):
     ENDLESS_NIGHT = 15
     RAINBOW = 16          # 彩虹：全塔伤害+50%，波末金币+30%
     BLOOD_MOON = 17       # 血月：敌人移速×1.5/血量×2/击杀金币×2，额外生成凋灵
-    SANDSTORM = 18        # 沙暴：炮塔攻击 20% 落空
+    SANDSTORM = 18        # 沙暴：随机4塔射程压到1格（护盾可挡），持续本波
 
 
 WEATHER_CONFIG = {
@@ -537,7 +537,7 @@ WEATHER_CONFIG = {
     Weather.ENDLESS_NIGHT: {"name": "永夜", "temp": 12, "desc": "永夜：黑暗降临，最终Boss战", "color": (148, 0, 211)},
     Weather.RAINBOW: {"name": "彩虹", "temp": 20, "desc": "彩虹：所有炮塔伤害+50%，本波结束金币+30%", "color": (255, 255, 255)},
     Weather.BLOOD_MOON: {"name": "血月", "temp": 35, "desc": "血月：敌人移速×1.5、血量×2、击杀金币×2，额外降临凋灵", "color": (220, 30, 50)},
-    Weather.SANDSTORM: {"name": "沙暴", "temp": 40, "desc": "沙暴：炮塔攻击有20%概率落空", "color": (210, 170, 60)},
+    Weather.SANDSTORM: {"name": "沙暴", "temp": 40, "desc": "沙暴：随机4座炮塔被沙尘暴附着，射程降至1格至本波结束（护盾可抵挡）", "color": (210, 170, 60)},
 }
 
 

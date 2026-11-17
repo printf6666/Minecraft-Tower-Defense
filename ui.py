@@ -529,7 +529,9 @@ def get_tower_info(game, tower):
     if getattr(tower, "charm_timer", 0) > 0:
         info.append(f"魅惑中 {tower.charm_timer / 60:.0f}s：攻击变治疗")
     if getattr(tower, "sacred_fire", False):
-        info.append("圣火附着：40% 攻击落空，每16秒降1级并蔓延")
+        info.append("圣火附着：伤害 -50%，每16秒降1级并蔓延")
+    if getattr(tower, "sandstorm_timer", 0) > 0:
+        info.append("沙尘暴附着：射程降至1格，至本波结束")
 
     return info
 
@@ -683,6 +685,12 @@ class UIManager:
                 # 圣火：橙色半透明底 + 火焰标志（阿尔法下界阶段），与锁定/魅惑同层
                 bob = int(3 * math.sin(self.game.game_time * 0.13))
                 self.game.screen.blit(assets.sacred_fire_img, assets.sacred_fire_img.get_rect(center=(
+                    tower.x * TILE_SIZE + TILE_SIZE // 2,
+                    tower.y * TILE_SIZE + TILE_SIZE // 2 + bob)))
+            if getattr(tower, "sandstorm_timer", 0) > 0 and assets.sandstorm_img is not None:
+                # 沙尘暴：沙金漩涡（沙暴天气附着），与圣火同层浮动
+                bob = int(3 * math.sin(self.game.game_time * 0.11))
+                self.game.screen.blit(assets.sandstorm_img, assets.sandstorm_img.get_rect(center=(
                     tower.x * TILE_SIZE + TILE_SIZE // 2,
                     tower.y * TILE_SIZE + TILE_SIZE // 2 + bob)))
         for enemy in self.game.enemies:
@@ -1168,8 +1176,9 @@ class UIManager:
                 x, y, _, length, phase = p[0], p[1], p[2], p[3], p[4]
                 s = assets.sand_cache.get(length)
                 if s is None:
-                    s = pygame.Surface((length, 3), pygame.SRCALPHA)
-                    s.fill((210, 170, 60, 120))
+                    # 45° 斜线段：从左上到右下的短划线
+                    s = pygame.Surface((length + 2, length + 2), pygame.SRCALPHA)
+                    pygame.draw.line(s, (210, 170, 60, 150), (0, 0), (length, length), 2)
                     assets.sand_cache[length] = s
                 alpha = int(90 + 60 * (0.5 + 0.5 * math.sin(phase)))
                 s.set_alpha(alpha)

@@ -128,6 +128,8 @@ class Tower(pygame.sprite.Sprite):
         self.damage_buff = 0            # 时序僭越之钟光环：本塔伤害 +N%
         self.disabled_timer = 0
         self.charm_timer = 0            # 被 BOSS 魅惑的剩余帧数：攻击变成等量治疗
+        # 沙暴天气：被沙尘暴附着的剩余帧数（>0 时射程强制压到 1 格），换波时清零
+        self.sandstorm_timer = 0
         # 阿尔法「群系侵蚀-圣火」：没有时限，转阶段 / 换波 / BOSS 死亡时统一熄灭。
         # sacred_fire_tick 到 0 时等级 -1 并向上下左右四格蔓延。
         self.sacred_fire = False
@@ -431,26 +433,16 @@ class Tower(pygame.sprite.Sprite):
             r -= int(self.range * 0.5)
         if self.game.boss_rule and self.game.boss_rule.get("type") == "range":
             r = int(r * 0.7)
+        # 沙尘暴附着：无条件把射程压到 1 格（覆盖天气/附魔/规则的所有修正）
+        if self.sandstorm_timer > 0:
+            return TILE_SIZE
         return r
 
     def attack(self, current_time):
         if not self.can_attack(current_time):
             return []
-        # 阿尔法的「圣火」：着火的炮塔有 40% 概率这一发直接落空（MISS），
-        # 冷却照常消耗 —— 是对输出的持续压制，而不是简单的攻速减免。
-        if (getattr(self, "sacred_fire", False)
-                and self.type not in (TowerType.PRODUCTION, TowerType.TIME)
-                and random.random() < SACRED_FIRE_MISS_CHANCE):
-            self.last_shot = current_time
-            self.game.spawn_damage_text("MISS", self.rect.center, color=(255, 170, 60), scale=1.1)
-            return []
-        # 沙暴天气：炮塔 20% 概率落空（同样消耗冷却；生产/时间塔不受影响）
-        if (self.game.weather == Weather.SANDSTORM
-                and self.type not in (TowerType.PRODUCTION, TowerType.TIME)
-                and random.random() < SANDSTORM_MISS_CHANCE):
-            self.last_shot = current_time
-            self.game.spawn_damage_text("MISS", self.rect.center, color=(210, 170, 60), scale=1.1)
-            return []
+        # 圣火 / 沙暴都不再走 MISS：圣火的 -50% 伤害挂在增伤乘区
+        # （get_enchant_damage_multiplier），沙暴改为射程压制（get_effective_range）。
         # 整个攻击流程（含直接结算的地狱射线、闪电、爆炸）都归属该塔的属性
         prev_element = self.game.damage_element
         prev_source = getattr(self.game, "damage_source_tower", None)

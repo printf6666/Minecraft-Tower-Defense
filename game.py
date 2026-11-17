@@ -1488,6 +1488,10 @@ class Game:
         # 彩虹：所有炮塔伤害 +50%（与附魔同乘区加算，DoT/BOSS 经此函数自动继承）
         if self.weather == Weather.RAINBOW:
             bonus += 50
+        # 圣火：来源炮塔着火时伤害 -50%（增伤乘区加算；按塔实例生效，覆盖子弹/直伤/DoT）
+        src = getattr(self, "damage_source_tower", None)
+        if src is not None and getattr(src, "sacred_fire", False):
+            bonus -= SACRED_FIRE_DAMAGE_REDUCTION * 100
         return 1.0 + bonus / 100.0
 
     def burn_tick_damage(self, base):
@@ -1756,6 +1760,26 @@ class Game:
                 # 火系 / 魔法系各分支数值差异较大（提灯、巫师走独立表），统一按等级重算
                 t.recalculate_stats()
 
+    def apply_sandstorm(self):
+        """沙暴开波附着：随机 SANDSTORM_TOWER_COUNT 座塔射程压到 1 格，持续到本波结束。
+
+        护盾抵挡（破盾 + 特效）、脉冲护盾/卧龙免疫，与圣火/魅惑同口径。
+        timer 设一个整波都用不完的大值，换波时由 select_weather 统一清零。
+        """
+        towers = [t for t in self.towers if not t.in_pulse() and getattr(t, "sandstorm_timer", 0) <= 0]
+        picked = random.sample(towers, min(SANDSTORM_TOWER_COUNT, len(towers)))
+        for tower in picked:
+            if getattr(tower, "has_shield", False):
+                tower.break_shield()
+                self.trigger_shield_burst(tower)
+                self.notify_tower_hit(tower)
+                continue
+            if tower.is_invincible():
+                self.notify_tower_hit(tower)
+                continue
+            tower.sandstorm_timer = 999999
+            self.notify_tower_hit(tower)
+
     def apply_sacred_fire(self, tower):
         """阿尔法「圣火」附着：护盾挡下（破盾）、脉冲/卧龙免疫、已着火的塔跳过。
 
@@ -1779,7 +1803,7 @@ class Game:
         tower.sacred_fire = True
         tower.sacred_fire_tick = SACRED_FIRE_TICK_FRAMES
         self.notify_tower_hit(tower)
-        self.set_boss_banner("圣火附着！命中 -40%，每 16 秒降 1 级并向四邻蔓延", 180)
+        self.set_boss_banner("圣火附着！该塔伤害 -50%，每 16 秒降 1 级并向四邻蔓延", 180)
 
     def _update_sacred_fire(self):
         """圣火 tick：每 16 秒降 1 级（最低 1 级），并向上下左右四格蔓延。
@@ -2256,10 +2280,12 @@ class Game:
         self.lava_timer = 0
         # 天气切换：清掉上一波残留的粒子，避免彩虹光点/沙尘串到别的天气里
         self.weather_particles.clear()
-        # 新的一波开始：阿尔法的圣火不会跨波延续（世界重生成 / 换图清洗）
+        # 新的一波开始：阿尔法的圣火、沙暴附着都不跨波延续（世界重生成 / 换图清洗）
         for t in self.towers:
             if getattr(t, "sacred_fire", False):
                 t.sacred_fire = False
+            if getattr(t, "sandstorm_timer", 0) > 0:
+                t.sandstorm_timer = 0
         self.weather = self._roll_weather(self.wave_manager.current_wave)
         self._build_background(night_mode=(self.weather == Weather.ENDLESS_NIGHT),
                                gold_ore_positions=self.gold_ore_positions)
@@ -2297,6 +2323,8 @@ class Game:
             # 血月开局额外降临一只凋灵，从路径起点出发；在血月天气下构造，
             # 会自动吃敌人移速×1.5 / 血量×2。放在快照之前以便整波回滚一致。
             self.enemies.add(Enemy(self.path, EnemyType.WITHER, self))
+        if self.weather == Weather.SANDSTORM:
+            self.apply_sandstorm()
 
         # 开波状态定稿：记一份内存快照，供「重新开始本波」整波回滚
         self._take_wave_snapshot()
@@ -2320,6 +2348,7 @@ class Game:
                 "bomb_subtype": t.bomb_subtype.value if getattr(t, "bomb_subtype", None) else None,
                 "is_nuclear": getattr(t, "is_nuclear", False),
                 "has_shield": getattr(t, "has_shield", False),
+                "sandstorm_timer": getattr(t, "sandstorm_timer", 0),
             })
         wm = self.wave_manager
         self.wave_snapshot = {
@@ -2385,6 +2414,7 @@ class Game:
         if hasattr(t, "is_nuclear"):
             t.is_nuclear = td.get("is_nuclear", False)
         t.has_shield = td.get("has_shield", False)
+        t.sandstorm_timer = td.get("sandstorm_timer", 0)
         # 分支是在升级之后才套用的，带分支数值的塔必须整体重算一次
         if ttype in (TowerType.MAGIC, TowerType.FLAME, TowerType.ICE):
             t.recalculate_stats()
@@ -2433,9 +2463,10 @@ class Game:
                 self.weather_particles.append([x, y, speed, drift, size, phase, "fire"])
         elif self.weather == Weather.SANDSTORM:
             if random.random() < 0.5:
+                # 45° 斜向：从左上往右下吹（x、y 同步推进）
                 x = random.randint(-60, SCREEN_WIDTH)
-                y = random.randint(0, SCREEN_HEIGHT)
-                speed = random.uniform(4, 9)      # 横向风速
+                y = random.randint(-60, SCREEN_HEIGHT)
+                speed = random.uniform(4, 9)
                 length = random.randint(10, 26)
                 phase = random.uniform(0, 6.28)
                 self.weather_particles.append([x, y, speed, length, phase, "sand"])
@@ -2461,6 +2492,7 @@ class Game:
                 p[5] += 0.1
             elif p[-1] == "sand":
                 p[0] += p[2]
+                p[1] += p[2]        # 45°：纵向与横向同速
                 p[4] += 0.08
             elif p[-1] == "rainbow":
                 p[1] += p[2]
@@ -2472,7 +2504,7 @@ class Game:
             if not ((p[-1] in ("rain", "acid_rain") and p[1] > SCREEN_HEIGHT) or
                     (p[-1] == "snow" and (p[1] > SCREEN_HEIGHT or p[0] < 0 or p[0] > SCREEN_WIDTH)) or
                     (p[-1] == "fire" and p[1] < -40) or
-                    (p[-1] == "sand" and p[0] > SCREEN_WIDTH + 60) or
+                    (p[-1] == "sand" and (p[0] > SCREEN_WIDTH + 60 or p[1] > SCREEN_HEIGHT + 60)) or
                     (p[-1] == "rainbow" and p[1] > SCREEN_HEIGHT))
         ]
 
