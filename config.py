@@ -492,6 +492,9 @@ SACRED_FIRE_MISS_CHANCE = 0.4
 SACRED_FIRE_TICK_FRAMES = 16 * 60
 SACRED_FIRE_TARGETS = 2            # 每次施放附着的炮塔数量
 
+# 沙暴天气：每次攻击的落空概率（仿圣火 MISS，消耗冷却但不造成伤害）
+SANDSTORM_MISS_CHANCE = 0.2
+
 
 class Weather(Enum):
     EXTREME_HEAT = 0
@@ -510,6 +513,9 @@ class Weather(Enum):
     FIRE_RAIN = 13
     AURORA = 14
     ENDLESS_NIGHT = 15
+    RAINBOW = 16          # 彩虹：全塔伤害+50%，波末金币+30%
+    BLOOD_MOON = 17       # 血月：敌人移速×1.5/血量×2/击杀金币×2，额外生成凋灵
+    SANDSTORM = 18        # 沙暴：炮塔攻击 20% 落空
 
 
 WEATHER_CONFIG = {
@@ -529,6 +535,9 @@ WEATHER_CONFIG = {
     Weather.FIRE_RAIN: {"name": "火雨", "temp": 100, "desc": "火雨：敌人持续燃烧，无法冻结", "color": (255, 69, 0)},
     Weather.AURORA: {"name": "极光", "temp": -10, "desc": "极光：温度较低，炮塔攻速随零下温度提升", "color": (0, 255, 255)},
     Weather.ENDLESS_NIGHT: {"name": "永夜", "temp": 12, "desc": "永夜：黑暗降临，最终Boss战", "color": (148, 0, 211)},
+    Weather.RAINBOW: {"name": "彩虹", "temp": 20, "desc": "彩虹：所有炮塔伤害+50%，本波结束金币+30%", "color": (255, 140, 200)},
+    Weather.BLOOD_MOON: {"name": "血月", "temp": 35, "desc": "血月：敌人移速×1.5、血量×2、击杀金币×2，额外降临凋灵", "color": (220, 30, 50)},
+    Weather.SANDSTORM: {"name": "沙暴", "temp": 40, "desc": "沙暴：炮塔攻击有20%概率落空", "color": (210, 170, 60)},
 }
 
 
@@ -557,6 +566,7 @@ EPOCH_WEATHER_WAVE_BAND = (120, 129)
 EPOCH_WEATHER_POOLS = [
     Weather.ACID_RAIN, Weather.FIRE_RAIN, Weather.MAGNETIC_STORM,
     Weather.FOG, Weather.HEADWIND, Weather.EXTREME_HEAT, Weather.EXTREME_COLD,
+    Weather.BLOOD_MOON, Weather.SANDSTORM,
 ]
 
 ENEMY_TYPES = {

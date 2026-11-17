@@ -584,6 +584,7 @@ WEATHER_ORDER = [
     Weather.SNOWY, Weather.EXTREME_COLD, Weather.EXTREME_HEAT, Weather.SCORCHING_SUN,
     Weather.FIRE_RAIN, Weather.ACID_RAIN, Weather.FOG, Weather.TAILWIND,
     Weather.HEADWIND, Weather.MAGNETIC_STORM, Weather.AURORA, Weather.ENDLESS_NIGHT,
+    Weather.RAINBOW, Weather.BLOOD_MOON, Weather.SANDSTORM,
 ]
 
 
@@ -707,7 +708,7 @@ class Codex:
         if self.tab == self.TAB_ENEMY:
             return 5, 5, 470, 190, 16       # 5 列 x 5 行，装 22 种敌人
         if self.tab == self.TAB_WEATHER:
-            return 4, 4, 560, 236, 24       # 4 列 x 4 行，正好装 16 种天气
+            return 5, 4, 448, 236, 24       # 5 列 x 4 行，装 19 种天气
         return 5, 6, 396, 196, 16           # 6 列 x 5 行，共 30 格装 29 个（火矢删除后原位空缺）
 
     def node_rects(self):

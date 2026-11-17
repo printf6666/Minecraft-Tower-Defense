@@ -38,7 +38,7 @@ WEATHER_POOL = [
     Weather.ACID_RAIN, Weather.EXTREME_HEAT, Weather.SUNNY, Weather.CLOUDY, Weather.RAINY, Weather.SNOWY,
     Weather.THUNDERSTORM, Weather.TAILWIND, Weather.HEADWIND,
     Weather.SCORCHING_SUN, Weather.FOG, Weather.EXTREME_COLD, Weather.MAGNETIC_STORM,
-    Weather.FIRE_RAIN, Weather.AURORA,
+    Weather.FIRE_RAIN, Weather.AURORA, Weather.RAINBOW,
 ]
 
 
@@ -1445,7 +1445,11 @@ class Game:
             self.damage_element = prev_element
 
     def apply_production_bonus(self):
-        self.coins += 5 * self.gold_per_wave * self.wave_manager.current_wave
+        # 彩虹：本波结束金币 +30%
+        wave_income = 5 * self.gold_per_wave * self.wave_manager.current_wave
+        if self.weather == Weather.RAINBOW:
+            wave_income = int(wave_income * 1.3)
+        self.coins += wave_income
         self.emeralds += self.emerald_per_wave
 
     def get_enchant_damage_multiplier(self, tower_type):
@@ -1481,6 +1485,9 @@ class Game:
         if tower_type == TowerType.MAGIC:
             bonus += WITCHCRAFT_MAGIC_BONUS * self.enchantments.count(Enchantment.WITCHCRAFT)
             bonus += GOLD_POTATO_MAGIC_BONUS * self.enchantments.count(Enchantment.GOLD_POTATO)
+        # 彩虹：所有炮塔伤害 +50%（与附魔同乘区加算，DoT/BOSS 经此函数自动继承）
+        if self.weather == Weather.RAINBOW:
+            bonus += 50
         return 1.0 + bonus / 100.0
 
     def burn_tick_damage(self, base):
@@ -2247,6 +2254,8 @@ class Game:
     def select_weather(self):
         self.fog_visible = False
         self.lava_timer = 0
+        # 天气切换：清掉上一波残留的粒子，避免彩虹光点/沙尘串到别的天气里
+        self.weather_particles.clear()
         # 新的一波开始：阿尔法的圣火不会跨波延续（世界重生成 / 换图清洗）
         for t in self.towers:
             if getattr(t, "sacred_fire", False):
@@ -2284,6 +2293,10 @@ class Game:
             for enemy in self.enemies:
                 if enemy.enemy_type in (EnemyType.IRON_ARMORED, EnemyType.GOLD_ARMORED, EnemyType.DIAMOND_ARMORED, EnemyType.NETHERITE_ARMORED):
                     enemy.broken = True
+        if self.weather == Weather.BLOOD_MOON:
+            # 血月开局额外降临一只凋灵，从路径起点出发；在血月天气下构造，
+            # 会自动吃敌人移速×1.5 / 血量×2。放在快照之前以便整波回滚一致。
+            self.enemies.add(Enemy(self.path, EnemyType.WITHER, self))
 
         # 开波状态定稿：记一份内存快照，供「重新开始本波」整波回滚
         self._take_wave_snapshot()
@@ -2418,6 +2431,23 @@ class Game:
                 size = random.randint(4, 10)
                 phase = random.uniform(0, 6.28)
                 self.weather_particles.append([x, y, speed, drift, size, phase, "fire"])
+        elif self.weather == Weather.SANDSTORM:
+            if random.random() < 0.5:
+                x = random.randint(-60, SCREEN_WIDTH)
+                y = random.randint(0, SCREEN_HEIGHT)
+                speed = random.uniform(4, 9)      # 横向风速
+                length = random.randint(10, 26)
+                phase = random.uniform(0, 6.28)
+                self.weather_particles.append([x, y, speed, length, phase, "sand"])
+        elif self.weather == Weather.RAINBOW:
+            if random.random() < 0.08:
+                x = random.randint(0, SCREEN_WIDTH)
+                y = random.randint(-20, 0)
+                speed = random.uniform(0.5, 1.5)
+                drift = random.uniform(-0.6, 0.6)
+                size = random.randint(3, 6)
+                phase = random.uniform(0, 6.28)
+                self.weather_particles.append([x, y, speed, drift, size, phase, "rainbow"])
 
         for p in self.weather_particles:
             if p[-1] in ("rain", "acid_rain"):
@@ -2429,12 +2459,21 @@ class Game:
                 p[1] -= p[2]
                 p[0] += p[3]
                 p[5] += 0.1
+            elif p[-1] == "sand":
+                p[0] += p[2]
+                p[4] += 0.08
+            elif p[-1] == "rainbow":
+                p[1] += p[2]
+                p[0] += p[3]
+                p[5] += 0.05
 
         self.weather_particles = [
             p for p in self.weather_particles
             if not ((p[-1] in ("rain", "acid_rain") and p[1] > SCREEN_HEIGHT) or
                     (p[-1] == "snow" and (p[1] > SCREEN_HEIGHT or p[0] < 0 or p[0] > SCREEN_WIDTH)) or
-                    (p[-1] == "fire" and p[1] < -40))
+                    (p[-1] == "fire" and p[1] < -40) or
+                    (p[-1] == "sand" and p[0] > SCREEN_WIDTH + 60) or
+                    (p[-1] == "rainbow" and p[1] > SCREEN_HEIGHT))
         ]
 
     def draw(self):

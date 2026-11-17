@@ -74,6 +74,9 @@ rain_cache = {}
 acid_rain_cache = {}
 snow_cache = {}
 fire_cache = {}
+sand_cache = {}          # 沙暴：横向沙尘条缓存（key = length）
+rainbow_dot_cache = {}   # 彩虹：七彩光点缓存（key = (size, hue_bucket)）
+rainbow_img = None       # 彩虹弧带（屏幕顶部叠加）
 
 stone_img = None
 dirt_img = None
@@ -520,6 +523,13 @@ def init_assets():
     except:
         electric_dragon_img = pygame.Surface((256, 256))
         electric_dragon_img.fill((255, 255, 0))
+
+    # 彩虹弧带：素材 520x243 透明底，按屏幕宽度等比放大
+    global rainbow_img
+    try:
+        rainbow_img = load_image("fx/rainbow.png")
+    except Exception:
+        rainbow_img = None
 
     # 绵羊 / 山羊：贴图本身就是 128x128（和 TILE_SIZE 一致），不缩放
     global sheep_img, goat_img, pink_sheep_img

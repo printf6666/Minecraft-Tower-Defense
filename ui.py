@@ -751,6 +751,7 @@ class UIManager:
         self.game.damage_texts.draw(self.game.screen)
 
         self.draw_boss_screen_fx()
+        self.draw_weather_overlay()
         self.draw_ui()
         self.draw_boss_hud()
         self.draw_herobrine_health_bar()
@@ -1158,6 +1159,68 @@ class UIManager:
                     pygame.draw.circle(s, (255, 255, 100, alpha // 2), (size, size), size // 2)
                     assets.fire_cache[(size, color_key)] = s
                 self.game.screen.blit(s, (int(x) - size, int(y) - size))
+            elif p[-1] == "sand":
+                x, y, _, length, phase = p[0], p[1], p[2], p[3], p[4]
+                s = assets.sand_cache.get(length)
+                if s is None:
+                    s = pygame.Surface((length, 3), pygame.SRCALPHA)
+                    s.fill((210, 170, 60, 120))
+                    assets.sand_cache[length] = s
+                alpha = int(90 + 60 * (0.5 + 0.5 * math.sin(phase)))
+                s.set_alpha(alpha)
+                self.game.screen.blit(s, (int(x), int(y)))
+            elif p[-1] == "rainbow":
+                x, y, _, _, size, phase = p[0], p[1], p[2], p[3], p[4], p[5]
+                # 七色循环：随相位在红→紫之间流动
+                hue = (phase * 30) % 360
+                col = pygame.Color(0, 0, 0)
+                col.hsva = (hue, 80, 100, 100)
+                key = (size, int(hue) // 20)
+                s = assets.rainbow_dot_cache.get(key)
+                if s is None:
+                    s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+                    pygame.draw.circle(s, (col.r, col.g, col.b, 190), (size, size), size)
+                    assets.rainbow_dot_cache[key] = s
+                self.game.screen.blit(s, (int(x) - size, int(y) - size))
+
+    def draw_weather_overlay(self):
+        """天气叠加：彩虹弧带 / 血月暗红 / 沙暴暖黄。
+
+        只覆盖左侧地图区（宽 2048），右侧 UI 面板保持原色不被染色。
+        画在特效之上、UI 之下。
+        """
+        w = self.game.weather
+        screen = self.game.screen
+        map_w = INFO_BORDER_X
+
+        if w == Weather.RAINBOW and assets.rainbow_img is not None:
+            img = assets.rainbow_img
+            # 按地图宽度放大到 ~78%，顶端略微出屏，弧线横跨地图上半部
+            target_w = int(map_w * 0.78)
+            target_h = int(img.get_height() * target_w / img.get_width())
+            key = (target_w, target_h)
+            scaled = getattr(self, "_rainbow_scaled", None)
+            if scaled is None or getattr(self, "_rainbow_key", None) != key:
+                scaled = pygame.transform.smoothscale(img, (target_w, target_h))
+                scaled.set_alpha(170)
+                self._rainbow_scaled = scaled
+                self._rainbow_key = key
+            screen.blit(scaled, (map_w // 2 - target_w // 2, -40))
+
+        if w in (Weather.BLOOD_MOON, Weather.SANDSTORM):
+            # 复用一张地图区大小的表面，避免每帧新建大表面
+            s = getattr(self, "_weather_tint_surface", None)
+            if s is None or s.get_size() != (map_w, SCREEN_HEIGHT):
+                s = pygame.Surface((map_w, SCREEN_HEIGHT), pygame.SRCALPHA)
+                self._weather_tint_surface = s
+            if w == Weather.BLOOD_MOON:
+                s.fill((140, 10, 20, 55))
+                # 血月：地图区右上角一轮暗红月盘
+                pygame.draw.circle(s, (200, 30, 40, 170), (map_w - 230, 200), 105)
+                pygame.draw.circle(s, (120, 10, 20, 100), (map_w - 230, 200), 124, 6)
+            else:
+                s.fill((210, 170, 60, 42))
+            screen.blit(s, (0, 0))
 
     def draw_weather_banner(self):
         if self.game.weather_banner_timer <= 0:

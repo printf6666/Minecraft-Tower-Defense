@@ -444,6 +444,13 @@ class Tower(pygame.sprite.Sprite):
             self.last_shot = current_time
             self.game.spawn_damage_text("MISS", self.rect.center, color=(255, 170, 60), scale=1.1)
             return []
+        # 沙暴天气：炮塔 20% 概率落空（同样消耗冷却；生产/时间塔不受影响）
+        if (self.game.weather == Weather.SANDSTORM
+                and self.type not in (TowerType.PRODUCTION, TowerType.TIME)
+                and random.random() < SANDSTORM_MISS_CHANCE):
+            self.last_shot = current_time
+            self.game.spawn_damage_text("MISS", self.rect.center, color=(210, 170, 60), scale=1.1)
+            return []
         # 整个攻击流程（含直接结算的地狱射线、闪电、爆炸）都归属该塔的属性
         prev_element = self.game.damage_element
         prev_source = getattr(self.game, "damage_source_tower", None)

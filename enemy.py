@@ -74,6 +74,14 @@ class Enemy(pygame.sprite.Sprite):
             self.base_speed = self.speed
             self.weather_slowed = True
 
+        if game.weather == Weather.BLOOD_MOON:
+            # 血月：移速 ×1.5、血量 ×2（放在血量初始化之后；血月不进 BOSS 波，
+            # 不影响 HEROBRINE 的多层血量结构）
+            self.speed *= 1.5
+            self.base_speed = self.speed
+            self.max_health *= 2
+            self.health = self.max_health
+
         # 永夜只保留「黑暗 + 需要提灯照明」，不再降低敌人移速
 
         if game.weather == Weather.SCORCHING_SUN:
@@ -566,7 +574,8 @@ class Enemy(pygame.sprite.Sprite):
                     self.game.poison_splashes.append(exp)
             # 「瘟疫」已删除（12 号附魔位改为附魔金毒马铃薯），这里不再做层数扩散
             self.kill()
-            return self.reward
+            # 血月：击杀金币 ×2（所有调用点统一是 coins += reward，一处覆盖）
+            return self.reward * (2 if self.game.weather == Weather.BLOOD_MOON else 1)
         return 0
 
     def draw_health_bar(self, screen):
