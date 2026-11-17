@@ -780,7 +780,12 @@ class UIManager:
             (560, 16))
         weather_name = WEATHER_CONFIG[self.game.weather]["name"]
         weather_color = WEATHER_CONFIG[self.game.weather]["color"]
-        self.game.screen.blit(assets.font_medium.render(f"天气:{weather_name}  温度:{self.game.temperature}", True, weather_color), (1570, 16))
+        weather_text = f"天气:{weather_name}  温度:{self.game.temperature}"
+        if self.game.weather == Weather.RAINBOW:
+            # 彩虹：逐字七色，不再是单一粉色
+            self.game.screen.blit(assets.render_rainbow_text(weather_text, assets.font_medium), (1570, 16))
+        else:
+            self.game.screen.blit(assets.font_medium.render(weather_text, True, weather_color), (1570, 16))
 
         pygame.draw.rect(self.game.screen, BLACK, (0, SCREEN_HEIGHT - 128, SCREEN_WIDTH, 128))
         pygame.draw.line(self.game.screen, WHITE, (0, SCREEN_HEIGHT - 128), (SCREEN_WIDTH, SCREEN_HEIGHT - 128), 4)

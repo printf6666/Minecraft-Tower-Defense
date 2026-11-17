@@ -708,7 +708,7 @@ class Codex:
         if self.tab == self.TAB_ENEMY:
             return 5, 5, 470, 190, 16       # 5 列 x 5 行，装 22 种敌人
         if self.tab == self.TAB_WEATHER:
-            return 5, 4, 448, 236, 24       # 5 列 x 4 行，装 19 种天气
+            return 4, 5, 448, 236, 24       # 4 行 x 5 列，装 19 种天气
         return 5, 6, 396, 196, 16           # 6 列 x 5 行，共 30 格装 29 个（火矢删除后原位空缺）
 
     def node_rects(self):
@@ -1064,10 +1064,14 @@ class Codex:
         # 色块：中心一个实心圆 + 外圈描边，颜色就是天气主色
         r = min(box.width, box.height) // 2 - 18
         cx, cy = box.centerx, box.centery
-        glow = tuple(max(0, int(c * 0.35)) for c in color)
-        pygame.draw.circle(screen, glow, (cx, cy), r + 10)
-        pygame.draw.circle(screen, color, (cx, cy), r)
-        pygame.draw.circle(screen, (245, 248, 255), (cx, cy), r, 2)
+        if weather == Weather.RAINBOW:
+            # 彩虹：七色扇形盘，不用单色
+            assets.draw_rainbow_disc(screen, (cx, cy), r, outline=(245, 248, 255))
+        else:
+            glow = tuple(max(0, int(c * 0.35)) for c in color)
+            pygame.draw.circle(screen, glow, (cx, cy), r + 10)
+            pygame.draw.circle(screen, color, (cx, cy), r)
+            pygame.draw.circle(screen, (245, 248, 255), (cx, cy), r, 2)
 
         name = _font(34).render(cfg["name"], True, SELECT if is_sel else TEXT)
         screen.blit(name, (rect.centerx - name.get_width() // 2, box.bottom + 12))
@@ -1077,8 +1081,11 @@ class Codex:
     def _info_weather(self, screen, weather):
         cfg = WEATHER_CONFIG[weather]
         swatch = pygame.Surface((128, 128), pygame.SRCALPHA)
-        pygame.draw.circle(swatch, cfg["color"], (64, 64), 60)
-        pygame.draw.circle(swatch, (245, 248, 255), (64, 64), 60, 3)
+        if weather == Weather.RAINBOW:
+            assets.draw_rainbow_disc(swatch, (64, 64), 60, outline=(245, 248, 255))
+        else:
+            pygame.draw.circle(swatch, cfg["color"], (64, 64), 60)
+            pygame.draw.circle(swatch, (245, 248, 255), (64, 64), 60, 3)
         self._info_head(screen, swatch, cfg["name"], f"温度 {cfg['temp']}°C", "")
 
         body_x = INFO_RECT.x + 480

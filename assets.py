@@ -1,6 +1,7 @@
 import pygame
 import sys
 import os
+import math
 from config import (TowerType, Enchantment, ENCHANT_ICON_SIZE, TILE_SIZE,
                     BAGUA_SIZE, BAGUA_ALPHA)
 
@@ -553,3 +554,48 @@ def _load_beast(path, fallback_color):
         pygame.draw.rect(surf, fallback_color, (16, TILE_SIZE - 32, 24, 28))
         pygame.draw.rect(surf, fallback_color, (TILE_SIZE - 40, TILE_SIZE - 32, 24, 28))
         return surf
+
+
+# ==========================================================================================
+#  彩虹色工具：天气「彩虹」的顶栏文字 / 图鉴色块 / 详情色卡共用
+# ==========================================================================================
+RAINBOW_COLORS = [
+    (255, 64, 64),     # 红
+    (255, 150, 40),    # 橙
+    (255, 224, 60),    # 黄
+    (96, 224, 96),     # 绿
+    (64, 196, 255),    # 青
+    (96, 112, 255),    # 蓝
+    (196, 96, 255),    # 紫
+]
+
+
+def draw_rainbow_disc(surface, center, radius, outline=None):
+    """画一个七色扇形圆盘（扇形用多边形近似，避免锯齿）。"""
+    cx, cy = center
+    n = len(RAINBOW_COLORS)
+    step = 2 * math.pi / n
+    for i, col in enumerate(RAINBOW_COLORS):
+        a0 = -math.pi / 2 + i * step
+        a1 = a0 + step
+        pts = [(cx, cy)]
+        for k in range(9):
+            a = a0 + (a1 - a0) * k / 8
+            pts.append((cx + radius * math.cos(a), cy + radius * math.sin(a)))
+        pygame.draw.polygon(surface, col, pts)
+    if outline:
+        pygame.draw.circle(surface, outline, (cx, cy), radius, 2)
+
+
+def render_rainbow_text(text, font):
+    """逐字循环七色渲染文字，返回带透明通道的 Surface。"""
+    surfaces = []
+    x = 0
+    for i, ch in enumerate(text):
+        s = font.render(ch, True, RAINBOW_COLORS[i % len(RAINBOW_COLORS)])
+        surfaces.append((s, x))
+        x += s.get_width()
+    out = pygame.Surface((x, surfaces[0][0].get_height()) if surfaces else (1, 1), pygame.SRCALPHA)
+    for s, sx in surfaces:
+        out.blit(s, (sx, 0))
+    return out
