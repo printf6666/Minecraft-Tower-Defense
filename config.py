@@ -629,7 +629,7 @@ POISON_CONTRACT_BURST_MULT = 18
 
 # BOSS 核心画面尺寸（比最初版本放大 50%：256 -> 384）
 FINAL_BOSS_CORE_SIZE = 384
-# 余烬重生的陨石（1,000,000,007）只打穿当前这一层，溢出伤害不再带到下一层
+# 余烬重生的陨石（1,000,000,007）：OMEGA 固定穿 5 层、Herobrine 一次秒杀、ALPHA 按实际伤害结算
 FINAL_BOSS_METEOR_DAMAGE = 1000000007
 # 不稳定水晶的绘制尺寸
 UNSTABLE_CRYSTAL_SIZE = TILE_SIZE
@@ -791,4 +791,4 @@ ALPHA_PHASE_TERRAIN_DESC = {
     5: "永夜深处",
 }
 
-# 余烬重生的陨石对阿尔法依旧只打穿 1 层（吃火系加成后单发 50-70 亿 > 15 亿，无需调整）
+# 余烬重生的陨石对阿尔法按实际伤害结算（不穿层）；吃火系加成后单发 50-70 亿 > 15 亿，一发一层

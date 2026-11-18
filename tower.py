@@ -1127,9 +1127,9 @@ class Bullet(pygame.sprite.Sprite):
                     # （不要用 ELECTRIC_PURPLE，那是电系塔的颜色）
                     reward = e.take_damage(lightning_dmg, color=MINT, element="wind")
                     self.game.coins += reward
-                # 雷神之锤的命中特效固定用 resonance_storm 原尺寸帧，不缩放。
-                # 隔次播放（和冰霜炸弹同一个套路）：这套 12 帧 × 282px 的爆裂
-                # 每次都放会明显掉帧，一半频率肉眼几乎看不出差别。
+                # 雷神之锤的命中特效固定用电球序列（electric_ball1~8），居中播放。
+                # 隔次播放（和冰霜炸弹同一个套路）：这套 8 帧电球爆裂
+                # 每次都放会掉帧，一半频率肉眼几乎看不出差别。
                 self.source_tower.wind_storm_visual += 1
                 # 每 N 次命中播一次：取余落在 1..N 中的首个周期时触发
                 if (self.source_tower.wind_storm_visual - 1) % WIND_STORM_VISUAL_EVERY == 0:

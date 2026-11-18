@@ -477,7 +477,7 @@ class Enemy(pygame.sprite.Sprite):
             self.game.spawn_damage_text(f"+{gained}", self.rect.center, color=color, scale=scale)
 
     def take_damage(self, damage, color=RED, scale=1.0, ignore_armor=False, element=None,
-                    text_speed_x=0.0, dot=False):
+                    text_speed_x=0.0, dot=False, layers=1):
         if self.health <= 0:
             return 0
 
@@ -523,24 +523,31 @@ class Enemy(pygame.sprite.Sprite):
 
         if self.health <= 0:
             if self.enemy_type == EnemyType.HEROBRINE:
-                self.current_layer -= 1
+                # 陨石：layers>1 一次打穿全部剩余层（秒杀），跳过逐层的召唤小怪。
+                pierce = max(1, int(layers))
+                self.current_layer -= pierce
                 if self.current_layer > 0:
-                    self.health = self.max_health
-                    phase_group = (self.total_layers - self.current_layer) % 3 + 1
-                    self.game.herobrine_phase = phase_group
-                    if phase_group == 1:
-                        for _ in range(5):
-                            self.game.herobrine_summon_queue.append(EnemyType.SLIME)
-                        for _ in range(5):
-                            self.game.herobrine_summon_queue.append(EnemyType.MAGMA_CUBE)
-                    elif phase_group == 2:
-                        for _ in range(5):
-                            self.game.herobrine_summon_queue.append(EnemyType.NETHERITE_ARMORED)
-                    elif phase_group == 3:
-                        for _ in range(15):
-                            self.game.herobrine_summon_queue.append(EnemyType.GHOST)
-                        for _ in range(5):
-                            self.game.herobrine_summon_queue.append(EnemyType.WITHER)
+                    if pierce == 1:
+                        # 普通单层击破：照常推进阶段 + 召唤小弟
+                        self.health = self.max_health
+                        phase_group = (self.total_layers - self.current_layer) % 3 + 1
+                        self.game.herobrine_phase = phase_group
+                        if phase_group == 1:
+                            for _ in range(5):
+                                self.game.herobrine_summon_queue.append(EnemyType.SLIME)
+                            for _ in range(5):
+                                self.game.herobrine_summon_queue.append(EnemyType.MAGMA_CUBE)
+                        elif phase_group == 2:
+                            for _ in range(5):
+                                self.game.herobrine_summon_queue.append(EnemyType.NETHERITE_ARMORED)
+                        elif phase_group == 3:
+                            for _ in range(15):
+                                self.game.herobrine_summon_queue.append(EnemyType.GHOST)
+                            for _ in range(5):
+                                self.game.herobrine_summon_queue.append(EnemyType.WITHER)
+                    else:
+                        # 陨石式多层穿击但未打穿全部：不召唤，仅回满当前层
+                        self.health = self.max_health
                     return 0
             if self.enemy_type == EnemyType.SLIME:
                 for _ in range(3):

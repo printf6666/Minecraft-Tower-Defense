@@ -748,6 +748,8 @@ class UIManager:
         draw_shockwaves(self.game.screen, self.game.shockwave_effects)
         for meteor in self.game.meteors:
             meteor.draw(self.game.screen)
+        for explosion in self.game.fireball_explosions:
+            explosion.draw(self.game.screen)
         for explosion in self.game.mushroom_explosions:
             explosion.draw(self.game.screen)
         for bee in self.game.bees:

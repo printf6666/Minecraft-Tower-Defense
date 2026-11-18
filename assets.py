@@ -44,6 +44,8 @@ ice_explosion_frames = []
 # frames 是放大 4 倍的版本，给全屏规模的共振风暴用。
 resonance_storm_raw_frames = []
 resonance_storm_frames = []
+fireball_explosion_frames = []   # 火球爆炸序列：余烬重生陨石着地，最近邻放大 8 倍
+electric_ball_frames = []        # 电球序列：雷神之锤子弹命中爆裂，最近邻放大 2 倍
 
 gold_img = None
 emerald_img = None
@@ -143,6 +145,7 @@ def init_assets():
     global gold_img, clock_img, emerald_img
     global white_lightning_frames, golden_lightning_frames
     global white_lightning_h_frames, golden_lightning_h_frames
+    global fireball_explosion_frames, electric_ball_frames
     global bgm_files, bgm_index
     global stone_img, dirt_img, start_img, house_img, gold_ore_img
     global tnt_explosion_frames, mushroom_cloud_frames, contaminated_img
@@ -195,6 +198,25 @@ def init_assets():
         resonance_storm_frames.append(
             pygame.transform.scale(img, (img.get_width() * 4, img.get_height() * 4)))
 
+    # 火球爆炸序列（余烬重生陨石着地）：手绘光效，最近邻放大 8 倍铺满落点（保留像素硬边）
+    fireball_explosion_frames.clear()
+    for i in range(1, 17):
+        try:
+            img = load_image(f"fx/fireball_explosion{i}.png")
+            fireball_explosion_frames.append(pygame.transform.scale(
+                img, (img.get_width() * 8, img.get_height() * 8)))
+        except Exception:
+            break
+
+    # 电球序列（雷神之锤子弹命中爆裂）：最近邻放大 2 倍，居中对齐
+    electric_ball_frames.clear()
+    for i in range(1, 9):
+        try:
+            img = load_image(f"fx/electric_ball{i}.png")
+            electric_ball_frames.append(pygame.transform.scale(
+                img, (img.get_width() * 2, img.get_height() * 2)))
+        except Exception:
+            break
 
     global mushroom_cloud_frames, endless_greed_frames
     global mushroom_cloud_wither_frames, mushroom_cloud_ice_frames

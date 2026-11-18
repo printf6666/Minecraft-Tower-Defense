@@ -11,7 +11,7 @@ import audio
 from config import *
 from enemy import Enemy, DamageText
 from tower import Tower, Bullet, BombBullet, NuclearMissile, WitherBullet, MAP_CENTER_X, MAP_CENTER_Y
-from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, Bee, UnstableCrystal, LanternShockwave, IceStarBurst, MasterpieceShockwave, BaguaArray
+from effects import WindExplosion, IceExplosion, DragonBreathPool, LightningEffect, HorizontalLightningEffect, PoisonSplash, TNTExplosion, MushroomExplosion, NuclearShockwave, WitherSplash, EndlessGreedExplosion, ResonanceStorm, Meteor, FireballExplosion, Bee, UnstableCrystal, LanternShockwave, IceStarBurst, MasterpieceShockwave, BaguaArray
 from video_player import UltimateVideo
 from wave_manager import WaveManager
 from ui import UIManager, get_tower_info
@@ -156,6 +156,7 @@ class Game:
         self.ember_counter = 0           # 余烬重生：龙息塔攻击充能（0 ~ 200）
         self.ember_cd = 0                # 余烬重生：释放后的冷却剩余帧
         self.meteors = []
+        self.fireball_explosions = []    # 陨石着地的火球爆炸特效
         self.bees = []
         self.bee_spawn_remaining = 0
         self.bee_spawn_timer = 0
@@ -662,12 +663,26 @@ class Game:
         audio.play_sound(assets.explode_sound)
 
     def add_meteor_hit(self, x, y):
-        # 陨石吃火系伤害加成；打 BOSS 只打穿当前这一层，溢出伤害不带到下一层
+        # 着地火球爆炸特效（居中、最近邻放大 8 倍）
+        self.fireball_explosions.append(FireballExplosion(x, y))
+        # 陨石吃火系伤害加成
         damage = int(FINAL_BOSS_METEOR_DAMAGE * self.get_element_damage_multiplier("fire"))
         for enemy in list(self.enemies):
-            if enemy.health > 0:
-                reward = enemy.take_damage(damage, color=(255, 120, 40), scale=1.6, element="fire")
-                self.coins += reward
+            if enemy.health <= 0:
+                continue
+            # 陨石强化后的穿层规则：
+            #  · Herobrine(18层)：一次打穿全部剩余层，直接秒杀
+            #  · OMEGA(100层)：固定打穿 5 层
+            #  · ALPHA / 普通敌人：只按实际伤害结算当前层，不额外穿层
+            if enemy.enemy_type == EnemyType.HEROBRINE:
+                layers = max(1, getattr(enemy, "current_layer", 1))
+            elif isinstance(enemy, FinalBoss) and not isinstance(enemy, WorldSeedBoss):
+                layers = 5
+            else:
+                layers = 1
+            reward = enemy.take_damage(damage, color=(255, 120, 40), scale=1.6,
+                                       layers=layers, element="fire")
+            self.coins += reward
 
     def global_production(self):
         if self.boss_rule and self.boss_rule.get("type") == "gold":
@@ -881,6 +896,7 @@ class Game:
         self.ember_counter = 0           # 余烬重生：龙息塔攻击充能（0 ~ 200）
         self.ember_cd = 0                # 余烬重生：释放后的冷却剩余帧
         self.meteors = []
+        self.fireball_explosions = []    # 陨石着地的火球爆炸特效
         self.bees = []
         self.bee_spawn_remaining = 0
         self.bee_spawn_timer = 0
@@ -1205,8 +1221,8 @@ class Game:
         audio.play_sound_cool(assets.thunder_sound, 400)
 
     def add_resonance_burst(self, x, y):
-        """雷神之锤子弹命中爆裂：用 resonance_storm 原尺寸帧，不缩放。"""
-        burst = ResonanceStorm(x, y, frames=assets.resonance_storm_raw_frames)
+        """雷神之锤子弹命中爆裂：用电球序列（electric_ball1~8），居中播放。"""
+        burst = ResonanceStorm(x, y, frames=assets.electric_ball_frames, anchor_y=0.5)
         self.resonance_storms.append(burst)
 
     def add_lantern_shockwave(self, x, y, radius):
@@ -2131,6 +2147,10 @@ class Game:
                 else:
                     meteor.update()
 
+            for explosion in self.fireball_explosions[:]:
+                if not explosion.update():
+                    self.fireball_explosions.remove(explosion)
+
             for splash in self.poison_splashes[:]:
                 if not splash.update():
                     self.poison_splashes.remove(splash)
@@ -2599,7 +2619,7 @@ class Game:
                      "endless_greed_explosions", "ice_explosions", "hell_rays",
                      "resonance_storms", "poison_splashes", "wither_splashes",
                      "horizontal_lightning_effects", "tnt_explosions",
-                     "mushroom_explosions", "shockwave_effects", "meteors", "bees",
+                     "mushroom_explosions", "shockwave_effects", "meteors", "fireball_explosions", "bees",
                      "crystals", "lantern_shockwaves", "stars", "ice_star_bursts",
                      "masterpiece_shockwaves", "weather_particles", "creeper_explosions",
                      "command_blocks", "ice_walls"):
@@ -2743,6 +2763,7 @@ class Game:
         self.ember_counter = 0           # 余烬重生：龙息塔攻击充能（0 ~ 200）
         self.ember_cd = 0                # 余烬重生：释放后的冷却剩余帧
         self.meteors = []
+        self.fireball_explosions = []    # 陨石着地的火球爆炸特效
         self.bees = []
         self.bee_spawn_remaining = 0
         self.bee_spawn_timer = 0

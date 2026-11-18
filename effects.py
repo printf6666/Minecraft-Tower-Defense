@@ -71,10 +71,10 @@ class EndlessGreedExplosion:
 
 
 class ResonanceStorm:
-    """共振风暴 / 雷神之锤命中爆裂共用的闪电序列（resonance_storm01~12）。
+    """共振风暴的闪电序列（resonance_storm01~12）；雷神之锤命中爆裂改用电球序列。
 
     frames 可配：共振风暴触发用放大 4 倍的全屏版本；
-    雷神之锤子弹命中爆裂用原尺寸帧（282x282），不缩放。
+    雷神之锤子弹命中爆裂用电球帧（electric_ball1~8），通过 anchor_y=0.5 居中。
 
     对齐方式：这套素材是「雷从天上劈下来」，闪电落点不在图片正中，
     而在 y≈0.88H 处（第 3~7 帧的爆裂底部）。所以默认按「底边对齐命中点」
@@ -485,6 +485,30 @@ class MushroomExplosion:
         img = frames[self.frame]
         rect = img.get_rect(center=(self.x, self.y))
         screen.blit(img, rect)
+
+
+class FireballExplosion:
+    """余烬重生陨石着地的火球爆炸：fireball_explosion1~16 序列，最近邻放大 8 倍居中播放。"""
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.frame_index = 0
+        self.frame_accum = 0
+        self.frame_duration = 4
+
+    def update(self):
+        self.frame_accum += 1
+        if self.frame_accum >= self.frame_duration:
+            self.frame_accum = 0
+            self.frame_index += 1
+        return self.frame_index < len(assets.fireball_explosion_frames)
+
+    def draw(self, surface):
+        if self.frame_index >= len(assets.fireball_explosion_frames):
+            return
+        img = assets.fireball_explosion_frames[self.frame_index]
+        surface.blit(img, img.get_rect(center=(self.x, self.y)))
 
 
 class Meteor:
